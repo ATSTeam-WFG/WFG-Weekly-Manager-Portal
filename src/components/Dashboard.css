@@ -1,0 +1,241 @@
+.dashboard {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+.dashboard-heading h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.dashboard-week {
+  font-size: 14px;
+  color: var(--muted-gray);
+  margin: 0 0 28px;
+}
+
+.reminder-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.reminder-banner-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.reminder-banner-subtitle {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0;
+}
+
+.reminder-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.reminder-banner-btn {
+  white-space: nowrap;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.reminder-dismiss-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted-gray);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.reminder-dismiss-btn:hover {
+  background: rgba(217, 119, 6, 0.15);
+  color: var(--amber);
+}
+
+.hero-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-top: 4px solid var(--terracotta);
+  border-radius: 16px;
+  padding: 32px;
+  margin-bottom: 24px;
+  box-shadow: 0 20px 40px -28px rgba(48, 42, 39, 0.35);
+}
+
+.hero-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.hero-week-label {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-gray);
+}
+
+.hero-deadline-block {
+  margin-bottom: 24px;
+}
+
+.hero-deadline {
+  font-size: 16px;
+  color: var(--espresso);
+  margin: 0 0 8px;
+}
+
+.hero-deadline strong {
+  color: var(--dark-charcoal);
+}
+
+.hero-days-left {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--terracotta);
+  background: var(--soft-sand);
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+.btn-large {
+  display: block;
+  width: 100%;
+  padding: 14px 24px;
+  font-size: 15px;
+}
+
+.hero-tip {
+  margin: 16px 0 0;
+  font-size: 13px;
+  color: var(--muted-gray);
+  font-style: italic;
+  text-align: center;
+}
+
+.hero-lock-message {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px dashed var(--soft-sand);
+  border-radius: 10px;
+  background: var(--warm-cream);
+  color: var(--dark-charcoal);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.hero-late-window-notice {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--terracotta);
+  text-align: center;
+}
+
+.history-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.history-card h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 16px;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  margin: 0 -12px;
+  border-top: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.history-row:first-child {
+  border-top: none;
+}
+
+.history-row:hover,
+.history-row:focus-visible {
+  background: var(--warm-cream);
+  outline: none;
+}
+
+.history-week {
+  flex: 1;
+  font-size: 14px;
+  color: var(--espresso);
+}
+
+.history-empty {
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+  padding: 24px 0;
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .dashboard {
+    padding: 24px 16px 60px;
+  }
+
+  .dashboard-heading h1 {
+    font-size: 22px;
+  }
+
+  .reminder-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .reminder-banner-actions {
+    justify-content: space-between;
+  }
+
+  .hero-card,
+  .history-card {
+    padding: 20px 16px;
+  }
+}

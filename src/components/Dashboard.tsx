@@ -1,0 +1,172 @@
+import { useEffect, useState } from 'react'
+import StatusBadge from './StatusBadge'
+import { fetchReportHistory, type ManagerReportHistoryEntry } from '../lib/reportsService'
+import { getCurrentReportingWeek, getDaysUntilDeadline } from '../utils/week'
+import { getManagerWriteLockReason, MANAGER_WRITE_LOCK_MESSAGES } from '../lib/managerEditLock'
+import { isPastEasternCutoff } from '../utils/easternTime'
+import type { ReportStatus } from '../types'
+import './Dashboard.css'
+
+interface DashboardProps {
+  status: ReportStatus
+  managerId: string
+  statusLoaded: boolean
+  reminderDismissed: boolean
+  onDismissReminder: () => void
+  onStart: () => void
+  onContinue: () => void
+  onEditSubmitted: () => void
+  onViewHistoryEntry: (entry: ManagerReportHistoryEntry) => void
+}
+
+export default function Dashboard({
+  status,
+  managerId,
+  statusLoaded,
+  reminderDismissed,
+  onDismissReminder,
+  onStart,
+  onContinue,
+  onEditSubmitted,
+  onViewHistoryEntry,
+}: DashboardProps) {
+  const week = getCurrentReportingWeek()
+  const daysLeft = getDaysUntilDeadline(week.fridayDate)
+
+  const [history, setHistory] = useState<ManagerReportHistoryEntry[]>([])
+  const [historyLoading, setHistoryLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    setHistoryLoading(true)
+
+    fetchReportHistory(managerId, week.weekStartDate).then((result) => {
+      if (!active) return
+      setHistory(result)
+      setHistoryLoading(false)
+    })
+
+    return () => {
+      active = false
+    }
+  }, [managerId, week.weekStartDate])
+
+  // A report row already exists once status is 'draft' or 'submitted' —
+  // only 'not_started' means "no row yet", i.e. a genuinely new report.
+  const isNewReport = status === 'not_started'
+  // null = fully open; 'new_report_locked' = past 3:00 PM with no report yet
+  // (stays Not Submitted, no Start button); 'edit_locked' = past 3:30 PM,
+  // nothing can be written regardless of status. See
+  // src/lib/managerEditLock.ts for the shared decision logic — the same
+  // function the service-layer guard and (independently) the database
+  // trigger use, so all three layers agree on the same instant.
+  const lockReason = getManagerWriteLockReason(isNewReport)
+  const inLateEditWindow = lockReason === null && !isNewReport && isPastEasternCutoff(15, 0)
+
+  const actionLabel =
+    status === 'not_started' ? 'Start Report' : status === 'draft' ? 'Continue Draft' : 'Edit Submitted Report'
+  const onAction = status === 'not_started' ? onStart : status === 'draft' ? onContinue : onEditSubmitted
+
+  const showReminder = lockReason === null && statusLoaded && !reminderDismissed && status !== 'submitted'
+
+  return (
+    <div className="dashboard">
+      <div className="dashboard-heading">
+        <h1>Dashboard</h1>
+        <p className="dashboard-week">Week of {week.label}</p>
+      </div>
+
+      {showReminder && (
+        <div className="reminder-banner" role="status">
+          <div className="reminder-banner-text">
+            <p className="reminder-banner-title">
+              {status === 'draft'
+                ? 'Weekly Manager Report not yet submitted'
+                : 'Weekly Manager Report not started'}
+            </p>
+            <p className="reminder-banner-subtitle">
+              {status === 'draft'
+                ? 'You have a draft saved, but it hasn’t been submitted yet'
+                : 'This week’s report hasn’t been started yet'}{' '}
+              &mdash; it&apos;s due Friday at 3:00 PM ET.
+            </p>
+          </div>
+          <div className="reminder-banner-actions">
+            <button
+              type="button"
+              className="btn btn-secondary reminder-banner-btn"
+              onClick={status === 'draft' ? onContinue : onStart}
+            >
+              {status === 'draft' ? 'Continue Report' : 'Start Report'}
+            </button>
+            <button
+              type="button"
+              className="reminder-dismiss-btn"
+              onClick={onDismissReminder}
+              aria-label="Dismiss reminder"
+              title="Dismiss reminder"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="hero-card">
+        <div className="hero-card-top">
+          <span className="hero-week-label">This Week&apos;s Report</span>
+          <StatusBadge status={status} />
+        </div>
+
+        <div className="hero-deadline-block">
+          <p className="hero-deadline">
+            Due <strong>{week.deadlineLabel}</strong>
+          </p>
+          <span className="hero-days-left">
+            {daysLeft > 0 ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining` : 'Deadline passed'}
+          </span>
+        </div>
+
+        {lockReason ? (
+          <p className="hero-lock-message">{MANAGER_WRITE_LOCK_MESSAGES[lockReason]}</p>
+        ) : (
+          <>
+            <button className="btn btn-primary btn-large" onClick={onAction}>
+              {actionLabel}
+            </button>
+            {inLateEditWindow && <p className="hero-late-window-notice">You can still edit this report until 3:30 PM ET.</p>}
+          </>
+        )}
+
+        {!lockReason && <p className="hero-tip">Tip: Check in with your team before submitting this report.</p>}
+      </div>
+
+      <div className="history-card">
+        <h2>Report History</h2>
+        {historyLoading ? (
+          <p className="history-empty">Loading…</p>
+        ) : history.length === 0 ? (
+          <p className="history-empty">No previous reports yet.</p>
+        ) : (
+          <ul className="history-list">
+            {history.map((entry) => (
+              <li
+                key={entry.weekStartDate}
+                className="history-row"
+                role="button"
+                tabIndex={0}
+                onClick={() => onViewHistoryEntry(entry)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') onViewHistoryEntry(entry)
+                }}
+              >
+                <span className="history-week">{entry.weekLabel}</span>
+                <StatusBadge status={entry.status} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}

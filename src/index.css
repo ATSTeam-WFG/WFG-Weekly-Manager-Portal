@@ -1,0 +1,34 @@
+:root {
+  --espresso: #302a27;
+  --terracotta: #b7654a;
+  --soft-sand: #e9ddd2;
+  --warm-cream: #f8f5ef;
+  --white: #ffffff;
+  --dark-charcoal: #292524;
+  --muted-gray: #78716c;
+  --green: #16834b;
+  --amber: #d97706;
+
+  color-scheme: light;
+  color: var(--espresso);
+  background: var(--warm-cream);
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}

@@ -1,0 +1,33 @@
+.manager-view-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 6px;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.manager-view-top h1 {
+  margin: 0;
+}
+
+.submission-source-tag {
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.manager-empty-state {
+  background: var(--white);
+  border: 1px dashed var(--soft-sand);
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+}
+
+@media (max-width: 480px) {
+  .manager-empty-state {
+    padding: 24px 16px;
+  }
+}

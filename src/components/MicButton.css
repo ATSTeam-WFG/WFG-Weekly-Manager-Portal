@@ -1,0 +1,60 @@
+.mic-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--soft-sand);
+  background: var(--white);
+  color: var(--muted-gray);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.mic-button:hover {
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+
+.mic-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.mic-button.listening {
+  background: rgba(183, 101, 74, 0.1);
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+
+.mic-button.listening .mic-icon {
+  animation: mic-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (max-width: 640px) {
+  .mic-button {
+    padding: 12px 16px;
+    font-size: 13px;
+    min-height: 44px;
+  }
+
+  .mic-icon {
+    width: 18px;
+    height: 18px;
+  }
+}

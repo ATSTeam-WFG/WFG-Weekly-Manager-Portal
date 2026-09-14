@@ -1,0 +1,245 @@
+.report-period-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.report-period-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--soft-sand);
+  background: var(--white);
+  color: var(--muted-gray);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.report-period-btn:hover {
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+
+.report-period-btn.active {
+  background: var(--terracotta);
+  border-color: var(--terracotta);
+  color: var(--white);
+}
+
+.reports-week-selector {
+  margin-bottom: 20px;
+}
+
+.period-stats-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.ra-eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-gray);
+  margin: 0 0 10px;
+}
+
+.ra-pending-complete {
+  background: rgba(22, 131, 75, 0.08);
+  border: 1px solid rgba(22, 131, 75, 0.25);
+  border-radius: 12px;
+  padding: 14px 18px;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 24px;
+}
+
+.ra-pending-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-left: 4px solid var(--amber);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 24px;
+}
+
+.ra-pending-intro {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dark-charcoal);
+  margin: 0 0 12px;
+}
+
+.ra-pending-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ra-pending-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--warm-cream);
+  border-radius: 999px;
+  padding: 6px 12px 6px 14px;
+  font-size: 13px;
+}
+
+.ra-pending-name {
+  color: var(--espresso);
+  font-weight: 600;
+}
+
+.ra-pending-tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.ra-pending-tag-draft {
+  color: var(--amber);
+  background: rgba(217, 119, 6, 0.14);
+}
+
+.ra-pending-tag-not_started {
+  color: var(--muted-gray);
+  background: var(--soft-sand);
+}
+
+.period-manager-block {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.period-manager-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.period-week-block {
+  padding-left: 14px;
+  border-left: 3px solid var(--terracotta);
+  margin-bottom: 20px;
+}
+
+.period-week-block:last-child {
+  margin-bottom: 0;
+}
+
+.period-week-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--terracotta);
+  margin: 0 0 12px;
+}
+
+.period-week-section {
+  margin-bottom: 12px;
+}
+
+.period-week-section:last-child {
+  margin-bottom: 0;
+}
+
+.period-week-section h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.print-generated {
+  font-size: 12px;
+  color: var(--muted-gray);
+  margin: 2px 0 0;
+}
+
+/* Screen-only: the print letterhead (.print-header, from WeeklySummary.css)
+   stays hidden until @media print below. Scoped to .reports-analytics-page
+   (not the shared .admin-dashboard class this page also carries) so nothing
+   here can ever affect Admin Dashboard's own printing. */
+.reports-analytics-page .print-header {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .period-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .period-manager-block {
+    padding: 16px;
+  }
+
+  .ra-pending-card {
+    padding: 14px 16px;
+  }
+}
+
+@media print {
+  .reports-analytics-page {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  .reports-analytics-page .print-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--terracotta);
+  }
+
+  .reports-analytics-page .admin-heading {
+    display: none;
+  }
+
+  .reports-analytics-page .week-selector-label {
+    font-size: 14px;
+  }
+
+  .reports-analytics-page .admin-stat-card,
+  .reports-analytics-page .period-manager-block,
+  .reports-analytics-page .period-week-block,
+  .reports-analytics-page .executive-summary-block,
+  .reports-analytics-page .ra-pending-card,
+  .reports-analytics-page .ra-pending-complete {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .reports-analytics-page .period-manager-name,
+  .reports-analytics-page .ra-eyebrow {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .reports-analytics-page .executive-summary-content {
+    box-shadow: none;
+  }
+}

@@ -1,0 +1,98 @@
+.executive-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.executive-summary-provenance {
+  font-size: 12px;
+  color: var(--muted-gray);
+  margin: -8px 0 16px;
+}
+
+.executive-summary-stale-notice {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--amber);
+  background: rgba(217, 119, 6, 0.1);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 0 0 16px;
+}
+
+.executive-summary-confirm {
+  background: rgba(183, 101, 74, 0.06);
+  border: 1px solid rgba(183, 101, 74, 0.3);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 0 0 16px;
+}
+
+.executive-summary-confirm p {
+  font-size: 13px;
+  color: var(--espresso);
+  margin: 0 0 12px;
+}
+
+.executive-summary-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.executive-summary-edit-textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--espresso);
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  padding: 10px 14px;
+  resize: vertical;
+}
+
+.executive-summary-edit-textarea:focus {
+  outline: none;
+  border-color: var(--terracotta);
+  background: var(--white);
+}
+
+.executive-summary-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Printed output must always reflect the last-saved analysis, never an
+   in-progress unsaved edit — this class hides the read-only block on screen
+   while the edit form is open, but forces it back on for print (where the
+   edit form itself is already suppressed via .no-print). */
+.executive-summary-content--print-only {
+  display: none;
+}
+
+@media print {
+  .executive-summary-content--print-only {
+    display: block;
+  }
+}
+
+@media (max-width: 480px) {
+  .executive-summary-actions {
+    width: 100%;
+  }
+
+  .executive-summary-actions .btn {
+    flex: 1;
+  }
+
+  .executive-summary-confirm-actions {
+    flex-direction: column;
+  }
+
+  .executive-summary-confirm-actions .btn {
+    width: 100%;
+  }
+}

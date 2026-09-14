@@ -1,0 +1,14 @@
+.app-shell {
+  min-height: 100vh;
+  background: var(--warm-cream);
+}
+
+.app-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--warm-cream);
+  color: var(--muted-gray);
+  font-size: 14px;
+}

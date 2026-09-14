@@ -1,0 +1,24 @@
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+.status-not_started {
+  background: rgba(120, 113, 108, 0.12);
+  color: var(--muted-gray);
+}
+
+.status-draft {
+  background: rgba(217, 119, 6, 0.12);
+  color: var(--amber);
+}
+
+.status-submitted {
+  background: rgba(22, 131, 75, 0.12);
+  color: var(--green);
+}

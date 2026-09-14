@@ -1,0 +1,232 @@
+.weekly-summary {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 32px 24px 100px;
+}
+
+.weekly-summary-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.weekly-summary-heading h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.weekly-summary-week {
+  font-size: 14px;
+  color: var(--muted-gray);
+  margin: 0 0 24px;
+}
+
+.print-header {
+  display: none;
+}
+
+.weekly-summary-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.weekly-summary-manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.weekly-summary-manager-block {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-left: 3px solid var(--terracotta);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.weekly-summary-entry-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.weekly-summary-empty {
+  background: var(--white);
+  border: 1px dashed var(--soft-sand);
+  border-radius: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+}
+
+.executive-summary-section {
+  margin-bottom: 28px;
+}
+
+.executive-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.executive-summary-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0;
+}
+
+.executive-summary-status {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0 0 16px;
+}
+
+.executive-summary-error {
+  color: var(--terracotta);
+  font-weight: 600;
+}
+
+.executive-summary-content {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-top: 4px solid var(--terracotta);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.ai-generated-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--terracotta);
+  background: rgba(183, 101, 74, 0.1);
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin-bottom: 16px;
+}
+
+.executive-summary-block {
+  margin-bottom: 16px;
+}
+
+.executive-summary-block:last-child {
+  margin-bottom: 0;
+}
+
+.executive-summary-block h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+@media (max-width: 640px) {
+  .weekly-summary-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .weekly-summary {
+    padding: 20px 16px 80px;
+  }
+
+  .weekly-summary-heading {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .weekly-summary-heading h1 {
+    font-size: 22px;
+  }
+
+  .weekly-summary-manager-block,
+  .executive-summary-content {
+    padding: 16px;
+  }
+
+  .executive-summary-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+}
+
+@media print {
+  .weekly-summary {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  .print-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--terracotta);
+  }
+
+  .print-logo {
+    height: 40px;
+  }
+
+  .print-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--dark-charcoal);
+    margin: 0 0 2px;
+  }
+
+  .print-week {
+    font-size: 13px;
+    color: var(--muted-gray);
+    margin: 0;
+  }
+
+  /* The on-screen heading (title, week line, Print button) is redundant next
+     to the letterhead above once printed; the stats/sections below still
+     print in full. */
+  .weekly-summary-heading {
+    display: none;
+  }
+
+  .weekly-summary-manager-block,
+  .weekly-summary-empty {
+    border-color: var(--soft-sand);
+  }
+
+  .weekly-summary-manager-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .weekly-summary-entry-name {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .executive-summary-content {
+    box-shadow: none;
+  }
+
+  .executive-summary-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

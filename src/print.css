@@ -1,0 +1,16 @@
+@media print {
+  @page {
+    size: letter;
+    margin: 0.6in;
+  }
+
+  body,
+  .app-shell {
+    background: var(--white) !important;
+  }
+
+  .header,
+  .no-print {
+    display: none !important;
+  }
+}

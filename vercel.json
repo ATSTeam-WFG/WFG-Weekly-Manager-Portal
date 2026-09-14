@@ -1,0 +1,13 @@
+{
+  "framework": "vite",
+  "devCommand": "npx vite --port $PORT",
+  "functions": {
+    "api/*.ts": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    { "path": "/api/reminders", "schedule": "*/5 * * * 5" },
+    { "path": "/api/auto-submit", "schedule": "*/5 * * * 5" }
+  ]
+}

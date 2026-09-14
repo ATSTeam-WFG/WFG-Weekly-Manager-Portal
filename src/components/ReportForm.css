@@ -1,0 +1,238 @@
+.report-form {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 24px 100px;
+}
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 20px;
+}
+
+.report-form-heading h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.report-form-week {
+  font-size: 14px;
+  color: var(--muted-gray);
+  margin: 0 0 4px;
+}
+
+.report-form-subtitle {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--terracotta);
+  margin: 0 0 24px;
+}
+
+.report-guidance-card {
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.report-guidance-title {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--dark-charcoal);
+  margin: 0 0 8px;
+}
+
+.report-guidance-list {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--espresso);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.report-leadership-expectations {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-gray);
+  text-align: center;
+  margin: 0 0 24px;
+}
+
+.report-section-context {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--terracotta);
+  background: var(--warm-cream);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.legacy-reference-block {
+  border: 1px dashed var(--soft-sand);
+  border-radius: 12px;
+  padding: 16px 20px 4px;
+  margin-bottom: 24px;
+  background: var(--warm-cream);
+}
+
+.legacy-reference-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legacy-reference-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--white);
+  background: var(--muted-gray);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.legacy-reference-helper {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0 0 12px;
+}
+
+.legacy-reference-section {
+  background: var(--white);
+}
+
+.report-lock-message {
+  padding: 12px 16px;
+  border: 1px dashed var(--terracotta);
+  border-radius: 10px;
+  background: var(--warm-cream);
+  text-align: center;
+}
+
+.report-section {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+
+.report-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.report-section-header .report-section-label {
+  margin-bottom: 0;
+}
+
+.report-section-label {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin-bottom: 4px;
+}
+
+.voice-unsupported-notice {
+  font-size: 12px;
+  color: var(--muted-gray);
+  background: var(--warm-cream);
+  border: 1px dashed var(--soft-sand);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 0 0 20px;
+}
+
+.voice-error-message {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--terracotta);
+  margin: 0 0 10px;
+}
+
+.report-section-helper {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0 0 12px;
+}
+
+.report-textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--espresso);
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  padding: 12px 14px;
+  resize: vertical;
+  min-height: 90px;
+}
+
+.report-textarea:focus {
+  outline: none;
+  border-color: var(--terracotta);
+  background: var(--white);
+}
+
+.report-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.saved-message {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  margin-right: auto;
+}
+
+@media (max-width: 480px) {
+  .report-form {
+    padding: 20px 16px 80px;
+  }
+
+  .report-form-heading h1 {
+    font-size: 22px;
+  }
+
+  .report-section {
+    padding: 16px;
+  }
+
+  .report-section-header {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .report-form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .report-form-actions .btn {
+    width: 100%;
+  }
+
+  .saved-message {
+    margin-right: 0;
+    text-align: center;
+    order: -1;
+  }
+}
