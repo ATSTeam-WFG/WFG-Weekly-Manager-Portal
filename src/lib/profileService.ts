@@ -4,7 +4,7 @@ import type { Profile } from '../types'
 export async function fetchProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, role, is_active')
+    .select('id, full_name, role, is_active, submits_weekly_report')
     .eq('id', userId)
     .maybeSingle()
 
@@ -19,5 +19,6 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
     fullName: data.full_name,
     role: data.role,
     isActive: data.is_active,
+    submitsWeeklyReport: data.submits_weekly_report,
   }
 }

@@ -84,6 +84,11 @@ function App() {
   const [weeklySummaryOpen, setWeeklySummaryOpen] = useState(false)
   const [reportsAnalyticsOpen, setReportsAnalyticsOpen] = useState(false)
   const [userManagementOpen, setUserManagementOpen] = useState(false)
+  // Dual-role admin submitter only: true while that Admin is viewing their
+  // own Manager report entry point rather than the Admin Dashboard. Never
+  // set for a plain Admin — see onOpenMyReport below, only ever passed to
+  // AdminDashboard when profile.submitsWeeklyReport is true.
+  const [myReportOpen, setMyReportOpen] = useState(false)
 
   const [view, setView] = useState<View>('dashboard')
   const [status, setStatus] = useState<ReportStatus>('not_started')
@@ -478,6 +483,10 @@ function App() {
   }
 
   const isAdmin = profile?.role === 'admin'
+  // Explicit, additive flag — never inferred from role. True for every
+  // Manager and for a dual-role admin submitter — an Admin explicitly
+  // designated as also submitting their own weekly report. See src/types.ts.
+  const isSubmitter = profile?.submitsWeeklyReport === true
   const displayName = profile?.fullName || userEmail || 'Manager'
   const roleLabel = isAdmin ? 'Admin' : 'Manager'
   const adminWeek = getReportingWeekByOffset(adminWeekOffset)
@@ -486,7 +495,7 @@ function App() {
     <div className="app-shell">
       <Header displayName={displayName} roleLabel={roleLabel} onSignOut={handleSignOut} />
 
-      {isAdmin ? (
+      {isAdmin && !myReportOpen ? (
         selectedManager ? (
           <ManagerReportView
             manager={selectedManager}
@@ -510,10 +519,16 @@ function App() {
             onOpenWeeklySummary={() => setWeeklySummaryOpen(true)}
             onOpenReportsAnalytics={() => setReportsAnalyticsOpen(true)}
             onOpenUserManagement={() => setUserManagementOpen(true)}
+            onOpenMyReport={isSubmitter ? () => setMyReportOpen(true) : undefined}
           />
         )
       ) : (
         <>
+          {isAdmin && myReportOpen && (
+            <button type="button" className="link-btn back-link" onClick={() => setMyReportOpen(false)}>
+              ← Back to Admin Dashboard
+            </button>
+          )}
           {view === 'dashboard' && (
             <Dashboard
               status={status}

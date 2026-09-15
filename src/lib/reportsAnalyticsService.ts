@@ -65,7 +65,7 @@ export async function fetchPeriodReportStats(
   const { data: profiles, error: profilesError } = await supabaseClient
     .from('profiles')
     .select('id, full_name')
-    .eq('role', 'manager')
+    .eq('submits_weekly_report', true)
     .order('full_name', { ascending: true })
 
   if (profilesError) {
@@ -86,11 +86,12 @@ export async function fetchPeriodReportStats(
 
   const profileList = profiles ?? []
   const nameById = new Map(profileList.map((p) => [p.id, p.full_name ?? 'Unnamed Manager']))
-  // Only count rows belonging to a current manager-role profile — a report
-  // row can exist for an account that isn't (or no longer is) a manager
-  // (e.g. an admin's own test submission), and that must not be counted as
-  // a manager's expected/submitted/draft report, exactly as fetchWeeklySummary
-  // already avoids this by iterating profiles rather than raw report rows.
+  // Only count rows belonging to a current weekly-report submitter
+  // (submits_weekly_report = true) — a report row can exist for an account
+  // that isn't (or no longer is) a submitter, and that must not be counted
+  // as a submitter's expected/submitted/draft report, exactly as
+  // fetchWeeklySummary already avoids this by iterating profiles rather
+  // than raw report rows.
   const reportRows = (reports ?? []).filter((r) => nameById.has(r.manager_id))
 
   const uniqueManagers = profileList.length

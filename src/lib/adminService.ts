@@ -22,7 +22,7 @@ export async function fetchManagersForWeek(
   const { data: profiles, error: profilesError } = await supabaseClient
     .from('profiles')
     .select('id, full_name, email')
-    .eq('role', 'manager')
+    .eq('submits_weekly_report', true)
     .order('full_name', { ascending: true })
 
   if (profilesError) {
@@ -74,7 +74,7 @@ export async function fetchWeeklySummary(
   const { data: profiles, error: profilesError } = await supabaseClient
     .from('profiles')
     .select('id, full_name')
-    .eq('role', 'manager')
+    .eq('submits_weekly_report', true)
     .order('full_name', { ascending: true })
 
   if (profilesError) {

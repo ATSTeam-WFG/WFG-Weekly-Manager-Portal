@@ -56,6 +56,11 @@ export interface ApprovedEmployee {
   portalRole: 'manager' | 'admin'
   isActive: boolean
   accountCreated: boolean
+  // Explicit, never inferred — see submits_weekly_report on both
+  // approved_employees and profiles. True for every Manager (backfilled)
+  // and for an Admin explicitly designated as also submitting their own
+  // weekly report. Never derived from portalRole alone.
+  submitsWeeklyReport: boolean
 }
 
 interface ApprovedEmployeeRow {
@@ -67,6 +72,7 @@ interface ApprovedEmployeeRow {
   portal_role: string | null
   is_active: boolean
   account_created_at: string | null
+  submits_weekly_report: boolean
 }
 
 function toApprovedEmployee(row: ApprovedEmployeeRow): ApprovedEmployee | null {
@@ -82,6 +88,7 @@ function toApprovedEmployee(row: ApprovedEmployeeRow): ApprovedEmployee | null {
     portalRole: row.portal_role,
     isActive: row.is_active,
     accountCreated: row.account_created_at !== null,
+    submitsWeeklyReport: row.submits_weekly_report,
   }
 }
 
@@ -90,7 +97,7 @@ function toApprovedEmployee(row: ApprovedEmployeeRow): ApprovedEmployee | null {
 export async function lookupApprovedEmployeeByNormalizedEmail(emailNormalized: string): Promise<ApprovedEmployee | null> {
   const { data, error } = await getServiceClient()
     .from('approved_employees')
-    .select('id, full_name, title, email, email_normalized, portal_role, is_active, account_created_at')
+    .select('id, full_name, title, email, email_normalized, portal_role, is_active, account_created_at, submits_weekly_report')
     .eq('email_normalized', emailNormalized)
     .maybeSingle()
 
@@ -362,6 +369,7 @@ export interface ProfileRow {
   fullName: string | null
   role: 'manager' | 'admin'
   isActive: boolean
+  submitsWeeklyReport: boolean
 }
 
 export type ProfileLookupResult =
@@ -383,7 +391,7 @@ export type ProfileLookupResult =
 export async function findProfileByUserId(userId: string): Promise<ProfileLookupResult> {
   const { data, error } = await getServiceClient()
     .from('profiles')
-    .select('id, full_name, role, is_active')
+    .select('id, full_name, role, is_active, submits_weekly_report')
     .eq('id', userId)
     .maybeSingle()
 
@@ -401,7 +409,13 @@ export async function findProfileByUserId(userId: string): Promise<ProfileLookup
   if (!data) return { status: 'not-found' }
   return {
     status: 'found',
-    profile: { id: data.id, fullName: data.full_name, role: data.role, isActive: data.is_active },
+    profile: {
+      id: data.id,
+      fullName: data.full_name,
+      role: data.role,
+      isActive: data.is_active,
+      submitsWeeklyReport: data.submits_weekly_report,
+    },
   }
 }
 
@@ -413,7 +427,7 @@ export async function findProfileByUserId(userId: string): Promise<ProfileLookup
 export async function findProfileByEmail(emailNormalized: string): Promise<ProfileLookupResult> {
   const { data, error } = await getServiceClient()
     .from('profiles')
-    .select('id, full_name, role, is_active')
+    .select('id, full_name, role, is_active, submits_weekly_report')
     .eq('email', emailNormalized)
     .maybeSingle()
 
@@ -429,7 +443,13 @@ export async function findProfileByEmail(emailNormalized: string): Promise<Profi
   if (!data) return { status: 'not-found' }
   return {
     status: 'found',
-    profile: { id: data.id, fullName: data.full_name, role: data.role, isActive: data.is_active },
+    profile: {
+      id: data.id,
+      fullName: data.full_name,
+      role: data.role,
+      isActive: data.is_active,
+      submitsWeeklyReport: data.submits_weekly_report,
+    },
   }
 }
 
@@ -453,15 +473,24 @@ export async function createProfileFromApprovedEmployee(userId: string, employee
       role: employee.portalRole,
       is_active: employee.isActive,
       email: employee.emailNormalized,
+      // Copied verbatim from the roster — never inferred from role, never
+      // defaulted here. See ApprovedEmployee.submitsWeeklyReport.
+      submits_weekly_report: employee.submitsWeeklyReport,
     })
-    .select('id, full_name, role, is_active')
+    .select('id, full_name, role, is_active, submits_weekly_report')
     .single()
 
   if (error) {
     console.error('supabaseServiceClient: profile creation failed:', error.message)
     return null
   }
-  return { id: data.id, fullName: data.full_name, role: data.role, isActive: data.is_active }
+  return {
+    id: data.id,
+    fullName: data.full_name,
+    role: data.role,
+    isActive: data.is_active,
+    submitsWeeklyReport: data.submits_weekly_report,
+  }
 }
 
 export type SyncOutcome =
@@ -541,6 +570,9 @@ export interface ManagedUserSummary {
   email: string
   role: 'manager' | 'admin'
   status: ReturnType<typeof deriveManagedUserStatus>
+  // Read-only display flag — see submits_weekly_report on approved_employees.
+  // Never a toggle here; changing it is not part of this surface.
+  submitsWeeklyReport: boolean
 }
 
 // Lists every approved_employees row with a real portal_role assigned,
@@ -553,7 +585,9 @@ export interface ManagedUserSummary {
 export async function listManagedUsers(): Promise<ManagedUserSummary[] | null> {
   const client = getServiceClient()
   const [rosterResult, profileResult] = await Promise.all([
-    client.from('approved_employees').select('full_name, email, email_normalized, portal_role, is_active, account_created_at'),
+    client
+      .from('approved_employees')
+      .select('full_name, email, email_normalized, portal_role, is_active, account_created_at, submits_weekly_report'),
     client.from('profiles').select('email, role, is_active'),
   ])
 
@@ -577,6 +611,7 @@ export async function listManagedUsers(): Promise<ManagedUserSummary[] | null> {
         email: row.email,
         role: (profile?.role ?? row.portal_role) as 'manager' | 'admin',
         status: deriveManagedUserStatus(row.is_active, row.account_created_at !== null, profileSnapshot),
+        submitsWeeklyReport: row.submits_weekly_report,
       }
     })
     .sort((a, b) => a.fullName.localeCompare(b.fullName))
@@ -660,6 +695,9 @@ export async function addOrCreateManagerAccount(fullName: string, email: string)
           email_normalized: emailNormalized,
           portal_role: 'manager',
           is_active: true,
+          // Every manager created through User Management submits their own
+          // weekly report — explicit here, never inferred from portal_role.
+          submits_weekly_report: true,
         },
         { onConflict: 'email_normalized' },
       )

@@ -227,6 +227,11 @@ export default function UserManagement({ onBack }: UserManagementProps) {
                 <span className={`status-badge user-status-badge user-status-${user.status}`}>
                   {STATUS_LABELS[user.status]}
                 </span>
+                {user.submitsWeeklyReport && (
+                  <span className="status-badge submits-report-badge" title="This person submits their own weekly report">
+                    Submits Weekly Report
+                  </span>
+                )}
                 <div className="user-management-row-actions">
                   {user.status === 'pending' && (
                     <button

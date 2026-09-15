@@ -9,6 +9,12 @@ export interface Profile {
   fullName: string | null
   role: ProfileRole
   isActive: boolean
+  // True for every Manager (backfilled) and for a dual-role admin submitter
+  // — an Admin explicitly designated as also submitting their own weekly
+  // report — never inferred from role alone. See
+  // src/lib/adminUserManagement.ts and the submits_weekly_report column on
+  // profiles/approved_employees.
+  submitsWeeklyReport: boolean
 }
 
 export interface ReportSections {

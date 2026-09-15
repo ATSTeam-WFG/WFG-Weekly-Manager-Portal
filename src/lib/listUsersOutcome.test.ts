@@ -60,7 +60,36 @@ describe('mapListUsersResponse — non-2xx responses', () => {
 
 describe('mapListUsersResponse — 2xx responses', () => {
   test('a 200 with a valid users array is a success outcome', () => {
-    const users = [{ fullName: 'Jane Manager', email: 'jane@wfgtitle.com', role: 'manager' as const, status: 'active' as const }]
+    const users = [
+      {
+        fullName: 'Jane Manager',
+        email: 'jane@wfgtitle.com',
+        role: 'manager' as const,
+        status: 'active' as const,
+        submitsWeeklyReport: true,
+      },
+    ]
+    const result = mapListUsersResponse(true, { users })
+    assert.deepEqual(result, { status: 'ok', users })
+  })
+
+  test('submitsWeeklyReport passes through untouched — this is a pure pass-through, never re-derived from role/status', () => {
+    const users = [
+      {
+        fullName: 'Dual-Role Admin',
+        email: 'dualrole.admin@example.com',
+        role: 'admin' as const,
+        status: 'active' as const,
+        submitsWeeklyReport: true,
+      },
+      {
+        fullName: 'Plain Admin',
+        email: 'admin@wfgtitle.com',
+        role: 'admin' as const,
+        status: 'active' as const,
+        submitsWeeklyReport: false,
+      },
+    ]
     const result = mapListUsersResponse(true, { users })
     assert.deepEqual(result, { status: 'ok', users })
   })

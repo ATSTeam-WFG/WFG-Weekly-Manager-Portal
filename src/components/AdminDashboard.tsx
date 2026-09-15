@@ -16,6 +16,11 @@ interface AdminDashboardProps {
   onOpenWeeklySummary: () => void
   onOpenReportsAnalytics: () => void
   onOpenUserManagement: () => void
+  // Present only for a dual-role admin submitter — an Admin who also
+  // submits their own weekly report — see profile.submitsWeeklyReport in
+  // App.tsx. Omitted entirely for a plain Admin, so the button never
+  // renders for one.
+  onOpenMyReport?: () => void
 }
 
 type FilterKey = 'all' | 'submitted' | 'draft' | 'not_started' | 'needs_attention'
@@ -67,6 +72,7 @@ export default function AdminDashboard({
   onOpenWeeklySummary,
   onOpenReportsAnalytics,
   onOpenUserManagement,
+  onOpenMyReport,
 }: AdminDashboardProps) {
   const [managers, setManagers] = useState<ManagerSummary[]>([])
   const [loading, setLoading] = useState(true)
@@ -114,6 +120,11 @@ export default function AdminDashboard({
         <div className="admin-heading-top">
           <h1>Admin Dashboard</h1>
           <div className="admin-heading-actions">
+            {onOpenMyReport && (
+              <button type="button" className="btn btn-secondary my-report-btn" onClick={onOpenMyReport}>
+                My Weekly Report
+              </button>
+            )}
             <button type="button" className="btn btn-secondary user-management-btn" onClick={onOpenUserManagement}>
               User Management
             </button>

@@ -133,6 +133,11 @@
   color: var(--muted-gray);
 }
 
+.submits-report-badge {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--terracotta);
+}
+
 .user-management-row-actions {
   display: flex;
   gap: 8px;

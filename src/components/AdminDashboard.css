@@ -87,7 +87,8 @@
 }
 
 .weekly-summary-btn,
-.reports-analytics-btn {
+.reports-analytics-btn,
+.my-report-btn {
   white-space: nowrap;
 }
 

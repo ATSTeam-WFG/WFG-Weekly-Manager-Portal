@@ -13,6 +13,9 @@ export interface ManagedUser {
   email: string
   role: ProfileRole
   status: 'pending' | 'awaiting_first_login' | 'active' | 'inactive'
+  // Read-only display flag — see submits_weekly_report on approved_employees.
+  // Never a toggle in User Management; changing it is not part of this surface.
+  submitsWeeklyReport: boolean
 }
 
 export type FetchManagedUsersOutcome =

@@ -146,6 +146,12 @@ describe('supabaseServiceClient.ts wires the pure decision logic before any rost
     assert.match(fnMatch[0], /portal_role: 'manager'/)
   })
 
+  test('addOrCreateManagerAccount always sets submits_weekly_report: true on the roster upsert — every manager created through User Management is explicitly a submitter, never inferred from portal_role', () => {
+    const fnMatch = serviceClientSrc.match(/export async function addOrCreateManagerAccount\([\s\S]*?\n\}/)
+    assert.ok(fnMatch)
+    assert.match(fnMatch[0], /submits_weekly_report: true/)
+  })
+
   test('createAccountForExistingEmployee calls decideCreateAccountForExistingAction and never performs an upsert (never creates a roster row)', () => {
     const fnMatch = serviceClientSrc.match(/export async function createAccountForExistingEmployee\([\s\S]*?\n\}/)
     assert.ok(fnMatch, 'could not locate createAccountForExistingEmployee')
@@ -194,6 +200,14 @@ describe('supabaseServiceClient.ts wires the pure decision logic before any rost
     assert.match(fnMatch[0], /account_created_at/)
     assert.match(fnMatch[0], /profileByEmail\.get\(row\.email_normalized\)/)
     assert.match(fnMatch[0], /deriveManagedUserStatus\(row\.is_active, row\.account_created_at !== null, profileSnapshot\)/)
+  })
+
+  test('listManagedUsers selects submits_weekly_report from approved_employees and returns it read-only on each summary — never toggled here', () => {
+    const fnMatch = serviceClientSrc.match(/export async function listManagedUsers\([\s\S]*?\n\}/)
+    assert.ok(fnMatch, 'could not locate listManagedUsers')
+    assert.match(fnMatch[0], /\.select\('[^']*submits_weekly_report[^']*'\)/)
+    assert.match(fnMatch[0], /submitsWeeklyReport: row\.submits_weekly_report/)
+    assert.equal(fnMatch[0].includes('.update('), false, 'listManagedUsers must be read-only')
   })
 })
 
@@ -321,6 +335,12 @@ describe('complete-profile.ts creates a profile with the approved roster role, i
     const fnMatch = serviceClientSrc.match(/function toApprovedEmployee\([\s\S]*?\n\}/)
     assert.ok(fnMatch, 'could not locate toApprovedEmployee')
     assert.match(fnMatch[0], /row\.portal_role !== 'manager' && row\.portal_role !== 'admin'/)
+  })
+
+  test('createProfileFromApprovedEmployee copies submits_weekly_report verbatim from the roster employee — never hardcoded, never inferred from role', () => {
+    const fnMatch = serviceClientSrc.match(/export async function createProfileFromApprovedEmployee\([\s\S]*?\n\}/)
+    assert.ok(fnMatch, 'could not locate createProfileFromApprovedEmployee')
+    assert.match(fnMatch[0], /submits_weekly_report: employee\.submitsWeeklyReport/)
   })
 
   test('calls clearPasswordChangeRequired in both the idempotent (already-found) and newly-created profile paths', () => {
