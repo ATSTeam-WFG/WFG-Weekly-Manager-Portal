@@ -134,6 +134,23 @@
   padding: 12px 14px;
 }
 
+.reminder-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.reminder-copy-btn {
+  font-size: 12px;
+  padding: 6px 12px;
+  min-width: 108px;
+}
+
+.reminder-copy-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .reminder-panel-footer {
   padding: 16px 24px 20px;
   border-top: 1px solid var(--soft-sand);
@@ -155,9 +172,4 @@
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-}
-
-.reminder-panel-actions .btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }

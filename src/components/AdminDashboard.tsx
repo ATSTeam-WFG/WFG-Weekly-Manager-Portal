@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import StatusBadge from './StatusBadge'
 import ReminderPanel from './ReminderPanel'
 import { fetchManagersForWeek, type ManagerSummary } from '../lib/adminService'
+import { getReminderTargets, type ReminderTarget } from '../lib/reminderService'
 import { supabase } from '../lib/supabaseClient'
 import { getDaysUntilDeadline, type ReportingWeek } from '../utils/week'
-import { REMINDER_ACTIONS_ENABLED } from '../config/featureFlags'
 import './AdminDashboard.css'
 
 interface AdminDashboardProps {
@@ -77,7 +77,7 @@ export default function AdminDashboard({
   const [managers, setManagers] = useState<ManagerSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FilterKey>('all')
-  const [reminderTarget, setReminderTarget] = useState<ManagerSummary[] | null>(null)
+  const [reminderTarget, setReminderTarget] = useState<ReminderTarget[] | null>(null)
 
   const daysLeft = getDaysUntilDeadline(week.fridayDate)
   const isPastDeadline = daysLeft <= 0
@@ -101,7 +101,12 @@ export default function AdminDashboard({
   const submitted = managers.filter((m) => m.status === 'submitted').length
   const draft = managers.filter((m) => m.status === 'draft').length
   const notStarted = managers.filter((m) => m.status === 'not_started').length
-  const needsAttention = draft + notStarted
+  // The single canonical "who is pending a reminder" selection — reused
+  // as-is for the Pending count, the bulk Prepare Reminders button, and the
+  // ReminderPanel payload, so there is only ever one recipient-selection
+  // implementation in the app (see src/lib/reminderService.ts).
+  const pendingReminderTargets = getReminderTargets(managers)
+  const needsAttention = pendingReminderTargets.length
   const completionPct = total > 0 ? Math.round((submitted / total) * 100) : 0
 
   const filterCounts: Record<FilterKey, number> = {
@@ -203,11 +208,11 @@ export default function AdminDashboard({
           <div className="manager-list-card">
             <div className="manager-list-header">
               <h2>Managers</h2>
-              {REMINDER_ACTIONS_ENABLED && needsAttention > 0 && (
+              {needsAttention > 0 && (
                 <button
                   type="button"
                   className="btn btn-secondary manager-bulk-remind-btn"
-                  onClick={() => setReminderTarget(managers.filter((m) => m.status !== 'submitted'))}
+                  onClick={() => setReminderTarget(pendingReminderTargets)}
                 >
                   Prepare Reminders ({needsAttention})
                 </button>
@@ -258,13 +263,13 @@ export default function AdminDashboard({
                       </span>
                     </div>
                     <StatusBadge status={manager.status} />
-                    {REMINDER_ACTIONS_ENABLED && manager.status !== 'submitted' && (
+                    {manager.status !== 'submitted' && (
                       <button
                         type="button"
                         className="manager-remind-btn"
                         onClick={(e) => {
                           e.stopPropagation()
-                          setReminderTarget([manager])
+                          setReminderTarget(getReminderTargets([manager]))
                         }}
                       >
                         Remind
