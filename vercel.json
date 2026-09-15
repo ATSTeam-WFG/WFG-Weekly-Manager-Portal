@@ -7,7 +7,6 @@
     }
   },
   "crons": [
-    { "path": "/api/reminders", "schedule": "*/5 * * * 5" },
     { "path": "/api/auto-submit", "schedule": "*/5 * * * 5" }
   ]
 }
