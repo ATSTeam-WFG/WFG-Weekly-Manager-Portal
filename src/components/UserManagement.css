@@ -1,0 +1,165 @@
+.user-management {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 24px 100px;
+}
+
+.user-management-heading h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 24px;
+}
+
+.user-management-add-card,
+.user-management-list-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.user-management-add-card h2,
+.user-management-list-card h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 8px;
+}
+
+.user-management-add-helper {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0 0 16px;
+}
+
+.user-management-add-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.user-management-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.user-management-field .login-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.user-management-message-error {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--terracotta);
+  margin: 0 0 12px;
+}
+
+.user-management-message-success {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  margin: 0 0 12px;
+}
+
+.user-management-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.user-management-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 10px;
+}
+
+.user-management-row-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 160px;
+}
+
+.user-management-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.user-management-email {
+  font-size: 13px;
+  color: var(--muted-gray);
+}
+
+.role-badge {
+  background: var(--soft-sand);
+  color: var(--espresso);
+}
+
+.role-badge.role-admin {
+  background: var(--dark-charcoal);
+  color: var(--white);
+}
+
+.user-status-badge.user-status-pending {
+  background: rgba(217, 119, 6, 0.14);
+  color: var(--amber);
+}
+
+.user-status-badge.user-status-awaiting_first_login {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--terracotta);
+}
+
+.user-status-badge.user-status-active {
+  background: rgba(22, 131, 75, 0.12);
+  color: var(--green);
+}
+
+.user-status-badge.user-status-inactive {
+  background: rgba(120, 113, 108, 0.14);
+  color: var(--muted-gray);
+}
+
+.user-management-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.user-management-row .user-management-message-error,
+.user-management-row .user-management-message-success {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+}
+
+@media (max-width: 640px) {
+  .user-management-add-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .user-management-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .user-management-row-actions {
+    width: 100%;
+  }
+
+  .user-management-row-actions .btn {
+    flex: 1;
+  }
+}

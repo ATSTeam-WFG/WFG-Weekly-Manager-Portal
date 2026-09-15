@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import {
+  clearPasswordChangeRequired,
   createProfileFromApprovedEmployee,
   findProfileByUserId,
   lookupApprovedEmployeeByNormalizedEmail,
@@ -76,7 +77,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (existingLookup.status === 'found') {
       // Idempotent: a retried/duplicated call is a success, not an error,
-      // and never touches the already-existing row.
+      // and never touches the already-existing row. Still attempts to
+      // clear the mandatory-password-change marker (best-effort, see
+      // clearPasswordChangeRequired) — a prior call may have created the
+      // profile but failed on that follow-up step, and this is the only
+      // remaining opportunity to retry it.
+      await clearPasswordChangeRequired(userData.user.id)
       return res.status(200).json({ status: 'created', role: existingLookup.profile.role })
     }
 
@@ -91,6 +97,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!created) {
       return sendError(res, 500, 'PROFILE_CREATION_FAILED', 'Could not finish setting up your account.')
     }
+
+    // Only reachable once the profile itself was created successfully —
+    // this is what actually lifts the mandatory-password-change gate (see
+    // api/_lib/adminAuth.ts and the reports_password_change_required_lock
+    // trigger). By this point in the flow, the caller's own new password
+    // was already saved (CreatePassword.tsx calls supabase.auth.updateUser
+    // before ever calling this endpoint), so clearing the marker here can
+    // never leave the shared temporary password valid with the gate open.
+    // Best-effort: logged, not thrown, on failure — the profile is already
+    // created and must not be reported as failed just because this
+    // follow-up call had trouble (see clearPasswordChangeRequired's own
+    // comment for the known limitation this implies).
+    await clearPasswordChangeRequired(userData.user.id)
 
     return res.status(200).json({ status: 'created', role: created.role })
   } catch (err) {

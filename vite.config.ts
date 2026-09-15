@@ -29,6 +29,12 @@ export default defineConfig(({ mode }) => {
   // middleware can see them once they are.
   if (env.SUPABASE_SECRET_KEY) process.env.SUPABASE_SECRET_KEY = env.SUPABASE_SECRET_KEY
   if (env.ONBOARDING_REDIRECT_URL) process.env.ONBOARDING_REDIRECT_URL = env.ONBOARDING_REDIRECT_URL
+  // Shared-temporary-password account creation (Admin User Management) —
+  // server-only, read exclusively by api/_lib/supabaseServiceClient.ts's
+  // createEmployeeAccount. Not set in this repo's real .env.local yet;
+  // copied through the same way so the local API middleware can see it once
+  // it is.
+  if (env.EMPLOYEE_TEMP_PASSWORD) process.env.EMPLOYEE_TEMP_PASSWORD = env.EMPLOYEE_TEMP_PASSWORD
 
   return {
     plugins: [react(), localApiPlugin()],

@@ -13,6 +13,7 @@ import AdminDashboard from './components/AdminDashboard'
 import ManagerReportView from './components/ManagerReportView'
 import WeeklySummary from './components/WeeklySummary'
 import ReportsAnalytics from './components/ReportsAnalytics'
+import UserManagement from './components/UserManagement'
 import { supabase } from './lib/supabaseClient'
 import {
   fetchWeekReport,
@@ -28,6 +29,7 @@ import { getCurrentReportingWeek, getReportingWeekByOffset } from './utils/week'
 import { getManagerWriteLockReason, MANAGER_WRITE_LOCK_MESSAGES } from './lib/managerEditLock'
 import type { ManagerReportSectionsV2, Profile, ReportSections, ReportStatus } from './types'
 import { EMPLOYEE_ROSTER_SYNC_ENABLED, SELF_SERVICE_ONBOARDING_ENABLED } from './config/featureFlags'
+import { isPasswordChangeRequired } from './lib/onboardingSession'
 import './App.css'
 
 type View = 'dashboard' | 'form' | 'submitted' | 'history' | 'edit-submitted'
@@ -81,6 +83,7 @@ function App() {
   const [adminWeekOffset, setAdminWeekOffset] = useState(0)
   const [weeklySummaryOpen, setWeeklySummaryOpen] = useState(false)
   const [reportsAnalyticsOpen, setReportsAnalyticsOpen] = useState(false)
+  const [userManagementOpen, setUserManagementOpen] = useState(false)
 
   const [view, setView] = useState<View>('dashboard')
   const [status, setStatus] = useState<ReportStatus>('not_started')
@@ -147,17 +150,33 @@ function App() {
   // complete-profile call, or a password-recovery password change) — in
   // both cases "we now have a session and need to (re)resolve the profile
   // and route accordingly" is exactly the same operation.
-  async function finishSigningIn(userId: string) {
+  async function finishSigningIn(userId: string, passwordChangeRequired: boolean = false) {
+    // Checked before anything else, including whether a profile already
+    // exists: an employee account created by Admin User Management (shared
+    // temporary password) must land on Create Password on every sign-in
+    // until they set their own password, regardless of profile state. This
+    // is a routing hint only — the actual, bypass-proof enforcement is
+    // api/_lib/adminAuth.ts (Admin API calls) and the
+    // reports_password_change_required_lock database trigger (Manager
+    // report writes, which never reach this client code path or any Node
+    // API at all).
+    if (passwordChangeRequired) {
+      setAuthStatus('onboarding-password')
+      return
+    }
+
     let userProfile = await fetchProfile(userId)
     if (!activeRef.current) return
 
     if (!userProfile) {
       setProfile(null)
-      // With onboarding off, this is the original, unchanged dead end. Only
-      // once the flag is on does a signed-in, profile-less user (necessarily
-      // arrived via an invite link — see App's PASSWORD_RECOVERY handling
-      // below for the other, distinct new-session case) get a chance to
-      // finish setup instead of hitting the dead end immediately.
+      // With self-service onboarding off, a profile-less session is the
+      // original dead end — an Admin-created account with no profile yet
+      // is handled entirely by the passwordChangeRequired check above; if
+      // it somehow reaches here (marker already cleared, but complete-profile
+      // was never actually called), the roster check in complete-profile.ts
+      // remains the real authorization boundary regardless of how this
+      // screen was reached.
       setAuthStatus(SELF_SERVICE_ONBOARDING_ENABLED ? 'onboarding-password' : 'no-profile')
       return
     }
@@ -264,6 +283,7 @@ function App() {
         setAdminWeekOffset(0)
         setWeeklySummaryOpen(false)
         setReportsAnalyticsOpen(false)
+        setUserManagementOpen(false)
         resetReportState()
         return
       }
@@ -284,7 +304,7 @@ function App() {
       resetReportState()
       setSelectedManager(null)
 
-      await finishSigningIn(session.user.id)
+      await finishSigningIn(session.user.id, isPasswordChangeRequired(session.user.app_metadata))
     }
 
     applySessionRef.current = applySession
@@ -442,7 +462,16 @@ function App() {
         mode="onboarding"
         email={userEmail}
         onSignOut={handleSignOut}
-        onSuccess={() => managerId && finishSigningIn(managerId)}
+        // Deliberately handleSignOut, not finishSigningIn: once
+        // completeOnboardingProfile() succeeds (password set + profile
+        // created), the invited employee is signed out and lands on the
+        // plain Login screen via the existing onAuthStateChange listener
+        // above — never straight onto their Dashboard already
+        // authenticated. They then sign in fresh with the password they
+        // just created. The password-recovery instance below is
+        // deliberately untouched — an existing user resetting their own
+        // password stays signed in, unrelated to this change.
+        onSuccess={handleSignOut}
         onRejected={() => setAuthStatus('no-profile')}
       />
     )
@@ -469,6 +498,8 @@ function App() {
           <WeeklySummary week={adminWeek} weekOffset={adminWeekOffset} onBack={() => setWeeklySummaryOpen(false)} />
         ) : reportsAnalyticsOpen ? (
           <ReportsAnalytics onBack={() => setReportsAnalyticsOpen(false)} />
+        ) : userManagementOpen ? (
+          <UserManagement onBack={() => setUserManagementOpen(false)} />
         ) : (
           <AdminDashboard
             week={adminWeek}
@@ -478,6 +509,7 @@ function App() {
             onSelectManager={setSelectedManager}
             onOpenWeeklySummary={() => setWeeklySummaryOpen(true)}
             onOpenReportsAnalytics={() => setReportsAnalyticsOpen(true)}
+            onOpenUserManagement={() => setUserManagementOpen(true)}
           />
         )
       ) : (

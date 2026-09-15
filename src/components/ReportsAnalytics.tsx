@@ -291,15 +291,16 @@ export default function ReportsAnalytics({ onBack }: ReportsAnalyticsProps) {
       )}
 
       {!loading && AI_EXECUTIVE_SUMMARY_ENABLED && (
-        <>
-          <p className="ra-eyebrow no-print">AI Executive Analysis</p>
-          <ExecutiveAnalysisCard
-            periodKey={period}
-            offset={offset}
-            weekStartDates={range.weekStartDates}
-            periodStartDate={toISODate(range.periodStart)}
-          />
-        </>
+        // No separate "AI Executive Analysis" eyebrow here (unlike the
+        // sections above) — ExecutiveAnalysisCard already renders its own
+        // "AI Executive Analysis" <h2>, so an eyebrow above it would just
+        // duplicate that heading.
+        <ExecutiveAnalysisCard
+          periodKey={period}
+          offset={offset}
+          weekStartDates={range.weekStartDates}
+          periodStartDate={toISODate(range.periodStart)}
+        />
       )}
     </div>
   )

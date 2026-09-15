@@ -69,7 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const employee = await lookupApprovedEmployeeByNormalizedEmail(emailNormalized)
 
       if (employee && employee.isActive) {
-        const outcome = await inviteApprovedEmployee(employee.email, ONBOARDING_REDIRECT_URL)
+        const outcome = await inviteApprovedEmployee(employee.email, ONBOARDING_REDIRECT_URL, 'self_service')
         // outcome.ok === false with alreadyRegistered === true means this
         // person already has a working password-based account — intentionally
         // no email is sent in that case; they already have normal sign-in and

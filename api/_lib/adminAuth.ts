@@ -57,7 +57,38 @@ export async function authenticateAdmin(config: AdminAuthConfig): Promise<AdminA
 
   const { data: userData, error: userError } = await supabase.auth.getUser(accessToken)
   if (userError || !userData.user) {
+    // Same server-side-only logging convention already used below for
+    // profileError — this branch was previously silent, which is exactly
+    // why a real "Invalid or expired session" failure couldn't be
+    // classified beyond that one generic message. AuthError's own
+    // name/status/code are Supabase's own fixed, safe classification
+    // strings (e.g. 'bad_jwt', 'session_not_found') — never the token
+    // itself, never a credential.
+    console.error('adminAuth: getUser() rejected the bearer token:', {
+      name: userError?.name,
+      status: userError?.status,
+      code: userError?.code,
+      message: userError?.message,
+    })
     return { ok: false, status: 401, code: 'UNAUTHORIZED', message: 'Invalid or expired session.' }
+  }
+
+  // Checked before the profile/role lookup, and before anything else this
+  // caller might be trying to do: an account still on its shared temporary
+  // password (see api/_lib/supabaseServiceClient.ts's createEmployeeAccount)
+  // must not reach any Admin API action — including one that would otherwise
+  // succeed for a fully-onboarded Admin — until they've set their own
+  // password (api/onboarding/complete-profile.ts clears this marker). Read
+  // live from getUser()'s own response, never from a client-supplied value;
+  // app_metadata is settable only via the Admin API, never by the caller
+  // themselves.
+  if (userData.user.app_metadata?.password_change_required === true) {
+    return {
+      ok: false,
+      status: 403,
+      code: 'PASSWORD_CHANGE_REQUIRED',
+      message: 'You must set your own password before continuing.',
+    }
   }
 
   const { data: profile, error: profileError } = await supabase

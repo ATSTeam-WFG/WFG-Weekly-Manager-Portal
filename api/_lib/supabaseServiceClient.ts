@@ -1,4 +1,11 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import {
+  decideCreateManagerAccountAction,
+  decideCreateAccountForExistingAction,
+  deriveManagedUserStatus,
+  type ProfileSnapshot,
+  type RosterEntrySnapshot,
+} from './adminUserManagement.js'
 
 // This is the ONLY file in the repo permitted to reference
 // SUPABASE_SECRET_KEY. Every caller gets a narrow, purpose-built function
@@ -48,6 +55,7 @@ export interface ApprovedEmployee {
   emailNormalized: string
   portalRole: 'manager' | 'admin'
   isActive: boolean
+  accountCreated: boolean
 }
 
 interface ApprovedEmployeeRow {
@@ -58,6 +66,7 @@ interface ApprovedEmployeeRow {
   email_normalized: string
   portal_role: string | null
   is_active: boolean
+  account_created_at: string | null
 }
 
 function toApprovedEmployee(row: ApprovedEmployeeRow): ApprovedEmployee | null {
@@ -72,6 +81,7 @@ function toApprovedEmployee(row: ApprovedEmployeeRow): ApprovedEmployee | null {
     emailNormalized: row.email_normalized,
     portalRole: row.portal_role,
     isActive: row.is_active,
+    accountCreated: row.account_created_at !== null,
   }
 }
 
@@ -80,7 +90,7 @@ function toApprovedEmployee(row: ApprovedEmployeeRow): ApprovedEmployee | null {
 export async function lookupApprovedEmployeeByNormalizedEmail(emailNormalized: string): Promise<ApprovedEmployee | null> {
   const { data, error } = await getServiceClient()
     .from('approved_employees')
-    .select('id, full_name, title, email, email_normalized, portal_role, is_active')
+    .select('id, full_name, title, email, email_normalized, portal_role, is_active, account_created_at')
     .eq('email_normalized', emailNormalized)
     .maybeSingle()
 
@@ -185,24 +195,166 @@ export async function resolveReminderDeliveryFailed(
   return data === true
 }
 
-export type InviteOutcome = { ok: true } | { ok: false; alreadyRegistered: boolean }
+// inviteApprovedEmployee/InviteOutcome/InviteSource below are now reached
+// ONLY by the self-service Request Access flow (api/onboarding/request-access.ts,
+// source: 'self_service') — since Admin User Management no longer sends
+// invitation emails at all (see createEmployeeAccount further down, which
+// creates the Auth account directly with a shared temporary password
+// instead). Left otherwise unchanged/untouched: self-service is still gated
+// off by SELF_SERVICE_ONBOARDING_ENABLED and out of scope for that redesign,
+// so this function, its 'admin_invite' branch (now unreachable in practice,
+// kept rather than removed to avoid touching a working, tested, if currently
+// unused, code path), and its own onboarding marker remain exactly as they
+// were.
+//
+// 'sent': the invite email went out and (for an admin_invite source) the
+// onboarding marker was set successfully — the ONLY status callers may treat
+// as a fully-completed invitation.
+// 'sent_marker_failed': admin_invite ONLY — the invite email may already
+// have gone out (Supabase's inviteUserByEmail had already succeeded before
+// the follow-up updateUserById call failed), but the app_metadata marker
+// could not be set. Callers MUST NOT report this as a full success: without
+// the marker, the invited employee will land on NoProfile instead of Create
+// Password.
+// 'already_registered' / 'send_failed': unchanged pre-existing outcomes —
+// the invite email itself was not (re)sent.
+export type InviteOutcome =
+  | { status: 'sent' }
+  | { status: 'sent_marker_failed' }
+  | { status: 'already_registered' }
+  | { status: 'send_failed' }
+
+// Which flow originated this invite. Controls ONLY whether the app_metadata
+// onboarding marker below gets set — never anything about the invite email
+// itself, and never a substitute for SELF_SERVICE_ONBOARDING_ENABLED (which
+// still independently gates the self-service Request Access UI/flow
+// entirely separately from this).
+export type InviteSource = 'admin_invite' | 'self_service'
+
+// The key/value set on the invited user's app_metadata (never user_metadata)
+// when source is 'admin_invite' — see src/lib/onboardingSession.ts, the sole
+// reader of this marker. app_metadata is writable only via this
+// service-role-credentialed admin.updateUserById call, never by the client
+// itself (supabase.auth.updateUser only ever touches user_metadata), so it
+// is a trustworthy, server-issued routing hint — never a client-side flag or
+// URL param, and never itself the authorization boundary: complete-profile.ts's
+// own approved_employees check remains that, unchanged, regardless of this
+// marker.
+const ADMIN_INVITE_APP_METADATA = { onboarding_source: 'admin_invite' } as const
 
 // Sends a Supabase-hosted invite email — the only way a new portal account
 // is ever created. Requires SUPABASE_SECRET_KEY; auth.admin itself is never
 // exposed outside this function. Never returns the underlying Supabase error
-// (message or code) to the caller — only the one distinction callers need
-// (already registered vs. not), so a request-access failure can never leak
-// implementation detail into a browser-facing response.
-export async function inviteApprovedEmployee(email: string, redirectTo: string): Promise<InviteOutcome> {
-  const { error } = await getServiceClient().auth.admin.inviteUserByEmail(email, { redirectTo })
+// (message or code) to the caller — only the fixed status values above, so a
+// request-access or Admin-invite failure can never leak implementation
+// detail into a browser-facing response.
+//
+// Sender address note: the approved company sender (WeeklyUpdates@wfgtitle.com,
+// see WEEKLY_UPDATES_FROM_EMAIL in api/_lib/emailSender.ts) cannot be applied
+// to this email from application code — Supabase's admin.inviteUserByEmail
+// has no from-address parameter at all. The sender for every Supabase-hosted
+// auth email (invite, recovery, etc.) is fixed by the Supabase project's own
+// Auth SMTP configuration (Dashboard -> Authentication -> Emails -> SMTP
+// Settings -> Sender email), which must be set there directly, separately
+// from this codebase, once real SMTP is approved and configured.
+export async function inviteApprovedEmployee(email: string, redirectTo: string, source: InviteSource): Promise<InviteOutcome> {
+  const { data, error } = await getServiceClient().auth.admin.inviteUserByEmail(email, { redirectTo })
 
-  if (!error) return { ok: true }
-
-  const alreadyRegistered = error.code === 'email_exists' || error.code === 'user_already_exists'
-  if (!alreadyRegistered) {
-    console.error('supabaseServiceClient: invite failed:', error.message)
+  if (error) {
+    const alreadyRegistered = error.code === 'email_exists' || error.code === 'user_already_exists'
+    if (!alreadyRegistered) {
+      console.error('supabaseServiceClient: invite failed:', error.message)
+    }
+    return alreadyRegistered ? { status: 'already_registered' } : { status: 'send_failed' }
   }
-  return { ok: false, alreadyRegistered }
+
+  // Only an Admin-initiated invite gets tagged — a self-service invite
+  // (request-access.ts) must never become eligible for Create Password
+  // through this path; it stays gated by SELF_SERVICE_ONBOARDING_ENABLED
+  // exactly as before.
+  if (source === 'admin_invite') {
+    // The invite email has already been sent by this point — Supabase does
+    // not offer an atomic "send + tag" operation, so this can genuinely
+    // diverge from the marker below. Reporting 'sent' here regardless would
+    // let the caller believe onboarding is fully wired up when it isn't;
+    // 'sent_marker_failed' forces every caller to treat this as incomplete.
+    if (!data.user) {
+      console.error('supabaseServiceClient: invite succeeded but returned no user id; cannot set the admin-invite marker.')
+      return { status: 'sent_marker_failed' }
+    }
+    const { error: metadataError } = await getServiceClient().auth.admin.updateUserById(data.user.id, {
+      app_metadata: ADMIN_INVITE_APP_METADATA,
+    })
+    if (metadataError) {
+      console.error('supabaseServiceClient: setting admin-invite onboarding marker failed:', metadataError.message)
+      return { status: 'sent_marker_failed' }
+    }
+  }
+
+  return { status: 'sent' }
+}
+
+// -----------------------------------------------------------------------
+// Shared-temporary-password account creation — Admin User Management's
+// current onboarding mechanism. Replaces invitation emails/links entirely:
+// the Auth account is created directly, with a fixed, server-only temporary
+// password (EMPLOYEE_TEMP_PASSWORD, never read anywhere outside this
+// function, never bundled into client code, never logged, never returned to
+// any caller), and app_metadata.password_change_required=true. No email is
+// ever sent by this call — Admin User Management sends no email at all;
+// the temporary password is communicated to the employee entirely outside
+// this codebase (see src/lib/onboardingSession.ts for the marker that keeps
+// the employee locked out of normal portal use until they change it).
+// -----------------------------------------------------------------------
+
+const PASSWORD_CHANGE_REQUIRED_APP_METADATA = { password_change_required: true } as const
+
+export type CreateAccountOutcome = { status: 'created' } | { status: 'already_registered' } | { status: 'failed' }
+
+// Never logs, returns, or otherwise exposes EMPLOYEE_TEMP_PASSWORD's value —
+// only whether the call succeeded. A missing env var fails closed (never
+// falls back to inviting, never proceeds with an empty/undefined password).
+export async function createEmployeeAccount(email: string): Promise<CreateAccountOutcome> {
+  const tempPassword = process.env.EMPLOYEE_TEMP_PASSWORD
+  if (!tempPassword) {
+    console.error('supabaseServiceClient: EMPLOYEE_TEMP_PASSWORD is not configured.')
+    return { status: 'failed' }
+  }
+
+  const { error } = await getServiceClient().auth.admin.createUser({
+    email,
+    password: tempPassword,
+    email_confirm: true,
+    app_metadata: PASSWORD_CHANGE_REQUIRED_APP_METADATA,
+  })
+
+  if (error) {
+    const alreadyRegistered = error.code === 'email_exists' || error.code === 'user_already_exists'
+    if (!alreadyRegistered) {
+      console.error('supabaseServiceClient: createEmployeeAccount failed:', error.message)
+    }
+    return alreadyRegistered ? { status: 'already_registered' } : { status: 'failed' }
+  }
+
+  return { status: 'created' }
+}
+
+// Clears the mandatory-password-change marker once the employee has
+// successfully set their own password (see api/onboarding/complete-profile.ts).
+// Best-effort: a failure here is logged, never thrown — the caller (profile
+// creation) has already succeeded and must not be reported as failed just
+// because this follow-up call had trouble; see complete-profile.ts's own
+// comment for the known limitation this implies (a failure here leaves the
+// employee still gated on their very next request until retried).
+export async function clearPasswordChangeRequired(userId: string): Promise<boolean> {
+  const { error } = await getServiceClient().auth.admin.updateUserById(userId, {
+    app_metadata: { password_change_required: false },
+  })
+  if (error) {
+    console.error('supabaseServiceClient: clearing password_change_required failed:', error.message)
+    return false
+  }
+  return true
 }
 
 export interface ProfileRow {
@@ -239,6 +391,34 @@ export async function findProfileByUserId(userId: string): Promise<ProfileLookup
     // Server-side only — message/code/details/hint are exactly what
     // PostgREST/Supabase returned, never forwarded to any HTTP response.
     console.error('supabaseServiceClient: profile lookup failed:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    })
+    return { status: 'error' }
+  }
+  if (!data) return { status: 'not-found' }
+  return {
+    status: 'found',
+    profile: { id: data.id, fullName: data.full_name, role: data.role, isActive: data.is_active },
+  }
+}
+
+// Reads a profile by its normalized email — used by Admin User Management,
+// where the caller (an approved_employees row) has no userId at all until
+// the invited person actually signs up. profiles.email is always the
+// roster's own normalized value (see createProfileFromApprovedEmployee), so
+// matching on it here is exact, never a case-sensitivity or whitespace trap.
+export async function findProfileByEmail(emailNormalized: string): Promise<ProfileLookupResult> {
+  const { data, error } = await getServiceClient()
+    .from('profiles')
+    .select('id, full_name, role, is_active')
+    .eq('email', emailNormalized)
+    .maybeSingle()
+
+  if (error) {
+    console.error('supabaseServiceClient: profile lookup by email failed:', {
       message: error.message,
       code: error.code,
       details: error.details,
@@ -342,4 +522,238 @@ export async function syncProfileAccessFromApprovedEmployee(
     return { status: 'error' }
   }
   return { status: 'synced', role: employee.portalRole, isActive: true }
+}
+
+// -----------------------------------------------------------------------
+// Admin User Management — Admin-driven account creation, deactivation, and
+// reactivation, built entirely on the existing approved_employees /
+// profiles / Supabase Auth architecture above (no parallel user system).
+// Every function here is called only from an Admin-authenticated
+// api/admin/users/*.ts endpoint (authenticateAdmin) — never reachable by a
+// Manager. The WHAT-should-happen decisions live in
+// api/_lib/adminUserManagement.ts (pure, directly unit-tested); these
+// functions are the thin I/O layer that fetches fresh state, calls that
+// decision logic, and performs exactly the resulting read/write.
+// -----------------------------------------------------------------------
+
+export interface ManagedUserSummary {
+  fullName: string
+  email: string
+  role: 'manager' | 'admin'
+  status: ReturnType<typeof deriveManagedUserStatus>
+}
+
+// Lists every approved_employees row with a real portal_role assigned,
+// joined against profiles by normalized email (the only link between the
+// two tables prior to sign-up — approved_employees has no auth.users id at
+// all until the person completes Create Password). The displayed role
+// prefers the profile's own current role when one exists (the actual,
+// currently-enforced access level) and falls back to the roster's
+// portal_role for a still-pending/awaiting-first-login entry.
+export async function listManagedUsers(): Promise<ManagedUserSummary[] | null> {
+  const client = getServiceClient()
+  const [rosterResult, profileResult] = await Promise.all([
+    client.from('approved_employees').select('full_name, email, email_normalized, portal_role, is_active, account_created_at'),
+    client.from('profiles').select('email, role, is_active'),
+  ])
+
+  if (rosterResult.error || profileResult.error) {
+    console.error(
+      'supabaseServiceClient: listManagedUsers failed:',
+      rosterResult.error?.message ?? profileResult.error?.message,
+    )
+    return null
+  }
+
+  const profileByEmail = new Map((profileResult.data ?? []).map((p) => [p.email, p]))
+
+  return (rosterResult.data ?? [])
+    .filter((row): row is typeof row & { portal_role: 'manager' | 'admin' } => row.portal_role === 'manager' || row.portal_role === 'admin')
+    .map((row) => {
+      const profile = profileByEmail.get(row.email_normalized)
+      const profileSnapshot: ProfileSnapshot | null = profile ? { isActive: profile.is_active } : null
+      return {
+        fullName: row.full_name,
+        email: row.email,
+        role: (profile?.role ?? row.portal_role) as 'manager' | 'admin',
+        status: deriveManagedUserStatus(row.is_active, row.account_created_at !== null, profileSnapshot),
+      }
+    })
+    .sort((a, b) => a.fullName.localeCompare(b.fullName))
+}
+
+async function fetchRosterAndProfileSnapshots(
+  emailNormalized: string,
+): Promise<{ roster: RosterEntrySnapshot | null; profile: ProfileSnapshot | null } | { error: true }> {
+  const employee = await lookupApprovedEmployeeByNormalizedEmail(emailNormalized)
+  const profileLookup = await findProfileByEmail(emailNormalized)
+  if (profileLookup.status === 'error') return { error: true }
+  return {
+    roster: employee ? { portalRole: employee.portalRole, isActive: employee.isActive, accountCreated: employee.accountCreated } : null,
+    profile: profileLookup.status === 'found' ? { isActive: profileLookup.profile.isActive } : null,
+  }
+}
+
+// Shared tail for both addOrCreateManagerAccount and
+// createAccountForExistingEmployee below: actually create the Auth account,
+// then record approved_employees.account_created_at so the User Management
+// list can show "Awaiting First Login" without any extra Auth-API lookup.
+// A failure to record the timestamp is logged but not fatal — the account
+// itself was already created successfully; the roster row simply won't
+// reflect that until the next successful call (harmless: it never blocks
+// or duplicates account creation, since createEmployeeAccount itself
+// already fails closed with 'already_registered' for a second attempt).
+async function createAccountAndMarkRoster(
+  emailNormalized: string,
+  email: string,
+): Promise<{ status: 'created' } | { status: 'already_created' } | { status: 'error' }> {
+  const outcome = await createEmployeeAccount(email)
+  if (outcome.status === 'failed') return { status: 'error' }
+  if (outcome.status === 'already_registered') return { status: 'already_created' }
+
+  const { error: markError } = await getServiceClient()
+    .from('approved_employees')
+    .update({ account_created_at: new Date().toISOString() })
+    .eq('email_normalized', emailNormalized)
+  if (markError) {
+    console.error('supabaseServiceClient: failed to record account_created_at:', markError.message)
+  }
+
+  return { status: 'created' }
+}
+
+export type CreateManagerAccountOutcome =
+  | { status: 'created' }
+  | { status: 'already_registered' }
+  | { status: 'already_created' }
+  | { status: 'invalid_domain' }
+  | { status: 'role_conflict' }
+  | { status: 'inactive' }
+  | { status: 'error' }
+
+// "Add Manager" — Admin-only, from api/admin/users/invite.ts. fullName is
+// only ever used the FIRST time a roster row is created for this email; if
+// one already exists, its stored name is left untouched. No email is sent —
+// this creates the Auth account directly with the shared temporary
+// password (see createEmployeeAccount); the employee's own portal access
+// details are communicated to them entirely outside this codebase.
+export async function addOrCreateManagerAccount(fullName: string, email: string): Promise<CreateManagerAccountOutcome> {
+  const emailNormalized = normalizeEmail(email)
+  const snapshots = await fetchRosterAndProfileSnapshots(emailNormalized)
+  if ('error' in snapshots) return { status: 'error' }
+
+  const decision = decideCreateManagerAccountAction(emailNormalized, snapshots.roster, snapshots.profile)
+
+  if (decision.action === 'invalid_domain') return { status: 'invalid_domain' }
+  if (decision.action === 'role_conflict') return { status: 'role_conflict' }
+  if (decision.action === 'inactive') return { status: 'inactive' }
+  if (decision.action === 'already_registered') return { status: 'already_registered' }
+  if (decision.action === 'already_created') return { status: 'already_created' }
+
+  if (decision.action === 'create_roster_and_account') {
+    const { error: upsertError } = await getServiceClient()
+      .from('approved_employees')
+      .upsert(
+        {
+          full_name: fullName.trim(),
+          email,
+          email_normalized: emailNormalized,
+          portal_role: 'manager',
+          is_active: true,
+        },
+        { onConflict: 'email_normalized' },
+      )
+    if (upsertError) {
+      console.error('supabaseServiceClient: addOrCreateManagerAccount roster upsert failed:', upsertError.message)
+      return { status: 'error' }
+    }
+  }
+
+  const result = await createAccountAndMarkRoster(emailNormalized, email)
+  if (result.status === 'error') return { status: 'error' }
+  if (result.status === 'already_created') return { status: 'already_created' }
+  return { status: 'created' }
+}
+
+export type CreateAccountForExistingOutcome =
+  | { status: 'created' }
+  | { status: 'not_found' }
+  | { status: 'already_registered' }
+  | { status: 'already_created' }
+  | { status: 'inactive' }
+  | { status: 'error' }
+
+// The per-row "Create Account" action in User Management — Admin-only, from
+// api/admin/users/create-account.ts. Never creates a roster row and never
+// sets/changes a role; only creates the Auth account (shared temporary
+// password) for an existing, active, not-yet-created roster entry — Manager
+// or Admin alike.
+export async function createAccountForExistingEmployee(email: string): Promise<CreateAccountForExistingOutcome> {
+  const emailNormalized = normalizeEmail(email)
+  const snapshots = await fetchRosterAndProfileSnapshots(emailNormalized)
+  if ('error' in snapshots) return { status: 'error' }
+
+  const decision = decideCreateAccountForExistingAction(snapshots.roster, snapshots.profile)
+  if (decision.action === 'not_found') return { status: 'not_found' }
+  if (decision.action === 'inactive') return { status: 'inactive' }
+  if (decision.action === 'already_registered') return { status: 'already_registered' }
+  if (decision.action === 'already_created') return { status: 'already_created' }
+
+  const result = await createAccountAndMarkRoster(emailNormalized, email)
+  if (result.status === 'error') return { status: 'error' }
+  if (result.status === 'already_created') return { status: 'already_created' }
+  return { status: 'created' }
+}
+
+export type SetManagedUserActiveOutcome = { status: 'ok' } | { status: 'not_found' } | { status: 'error' }
+
+// Deactivate/reactivate — Admin-only, from api/admin/users/set-active.ts.
+// Updates approved_employees.is_active immediately (the roster is the
+// source of truth Admin User Management manages directly) and, if a
+// profile already exists, profiles.is_active too, in the same call — this
+// takes effect immediately regardless of EMPLOYEE_ROSTER_SYNC_ENABLED,
+// which gates a completely separate mechanism (automatic login-time
+// reconciliation), not direct Admin action. Never touches role/portal_role
+// — role is always preserved across a deactivate/reactivate cycle.
+export async function setManagedUserActive(email: string, isActive: boolean): Promise<SetManagedUserActiveOutcome> {
+  const emailNormalized = normalizeEmail(email)
+  const client = getServiceClient()
+
+  const { data: rosterRow, error: rosterSelectError } = await client
+    .from('approved_employees')
+    .select('id')
+    .eq('email_normalized', emailNormalized)
+    .maybeSingle()
+
+  if (rosterSelectError) {
+    console.error('supabaseServiceClient: setManagedUserActive roster lookup failed:', rosterSelectError.message)
+    return { status: 'error' }
+  }
+  if (!rosterRow) return { status: 'not_found' }
+
+  const { error: rosterUpdateError } = await client
+    .from('approved_employees')
+    .update({ is_active: isActive })
+    .eq('email_normalized', emailNormalized)
+
+  if (rosterUpdateError) {
+    console.error('supabaseServiceClient: setManagedUserActive roster update failed:', rosterUpdateError.message)
+    return { status: 'error' }
+  }
+
+  const profileLookup = await findProfileByEmail(emailNormalized)
+  if (profileLookup.status === 'error') return { status: 'error' }
+  if (profileLookup.status === 'found') {
+    const { error: profileUpdateError } = await client
+      .from('profiles')
+      .update({ is_active: isActive })
+      .eq('id', profileLookup.profile.id)
+
+    if (profileUpdateError) {
+      console.error('supabaseServiceClient: setManagedUserActive profile update failed:', profileUpdateError.message)
+      return { status: 'error' }
+    }
+  }
+
+  return { status: 'ok' }
 }

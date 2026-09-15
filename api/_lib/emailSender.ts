@@ -20,10 +20,18 @@ export interface EmailSender {
 }
 
 // Server-only, non-secret configuration — a display name/address is not a
-// credential, so a safe placeholder default is fine until a real sender is
-// approved. Override via env vars, no code change needed later.
-export function getReminderFromAddress(): string {
-  return process.env.REMINDER_FROM_EMAIL || 'reports-test@example.com'
+// credential, so a safe placeholder default is fine until it's configured.
+// WEEKLY_UPDATES_FROM_EMAIL is the single approved company sender address
+// (WeeklyUpdates@wfgtitle.com), shared conceptually across both the Friday
+// reminder emails (wired here) and onboarding/invitation emails — see
+// api/_lib/supabaseServiceClient.ts's inviteApprovedEmployee for why the
+// invitation path cannot actually consume this same value in code: Supabase-
+// hosted invite emails have no from-address parameter at all; that sender is
+// configured entirely in the Supabase project's own Auth SMTP settings, not
+// here. This function is intentionally not named "reminder"-anything, since
+// the address it returns is not reminder-specific.
+export function getWeeklyUpdatesFromEmail(): string {
+  return process.env.WEEKLY_UPDATES_FROM_EMAIL || 'weekly-updates-test@example.com'
 }
 
 export function getReminderFromName(): string {
@@ -38,7 +46,7 @@ export function getReminderFromName(): string {
 export class TestModeEmailSender implements EmailSender {
   async send(message: EmailMessage): Promise<EmailSendResult> {
     console.log(
-      `[TEST EMAIL — not actually sent]\nFrom: "${getReminderFromName()}" <${getReminderFromAddress()}>\nTo: ${message.to}\nSubject: ${message.subject}\n\n${message.body}\n`,
+      `[TEST EMAIL — not actually sent]\nFrom: "${getReminderFromName()}" <${getWeeklyUpdatesFromEmail()}>\nTo: ${message.to}\nSubject: ${message.subject}\n\n${message.body}\n`,
     )
     return {
       to: message.to,

@@ -15,6 +15,7 @@ interface AdminDashboardProps {
   onSelectManager: (manager: ManagerSummary) => void
   onOpenWeeklySummary: () => void
   onOpenReportsAnalytics: () => void
+  onOpenUserManagement: () => void
 }
 
 type FilterKey = 'all' | 'submitted' | 'draft' | 'not_started' | 'needs_attention'
@@ -24,7 +25,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'submitted', label: 'Submitted' },
   { key: 'draft', label: 'Draft' },
   { key: 'not_started', label: 'Not Started' },
-  { key: 'needs_attention', label: 'Needs Attention' },
+  { key: 'needs_attention', label: 'Pending' },
 ]
 
 function formatSubmittedAt(iso: string) {
@@ -65,6 +66,7 @@ export default function AdminDashboard({
   onSelectManager,
   onOpenWeeklySummary,
   onOpenReportsAnalytics,
+  onOpenUserManagement,
 }: AdminDashboardProps) {
   const [managers, setManagers] = useState<ManagerSummary[]>([])
   const [loading, setLoading] = useState(true)
@@ -109,39 +111,42 @@ export default function AdminDashboard({
   return (
     <div className="admin-dashboard">
       <div className="admin-heading">
-        <div>
+        <div className="admin-heading-top">
           <h1>Admin Dashboard</h1>
-          <div className="week-selector">
-            <button
-              type="button"
-              className="week-nav-btn"
-              onClick={onPreviousWeek}
-              aria-label="Previous reporting week"
-            >
-              &larr;
+          <div className="admin-heading-actions">
+            <button type="button" className="btn btn-secondary user-management-btn" onClick={onOpenUserManagement}>
+              User Management
             </button>
-            <span className="week-selector-label">
-              Week of {week.label}
-              {isCurrentWeek && <span className="week-current-badge">Current</span>}
-            </span>
-            <button
-              type="button"
-              className="week-nav-btn"
-              onClick={onNextWeek}
-              disabled={isCurrentWeek}
-              aria-label="Next reporting week"
-            >
-              &rarr;
+            <button type="button" className="btn btn-secondary reports-analytics-btn" onClick={onOpenReportsAnalytics}>
+              Reports &amp; Analytics
+            </button>
+            <button type="button" className="btn btn-secondary weekly-summary-btn" onClick={onOpenWeeklySummary}>
+              Weekly Summary
             </button>
           </div>
         </div>
 
-        <div className="admin-heading-actions">
-          <button type="button" className="btn btn-secondary reports-analytics-btn" onClick={onOpenReportsAnalytics}>
-            Reports &amp; Analytics
+        <div className="week-selector">
+          <button
+            type="button"
+            className="week-nav-btn"
+            onClick={onPreviousWeek}
+            aria-label="Previous reporting week"
+          >
+            &larr;
           </button>
-          <button type="button" className="btn btn-secondary weekly-summary-btn" onClick={onOpenWeeklySummary}>
-            Weekly Summary
+          <span className="week-selector-label">
+            Week of {week.label}
+            {isCurrentWeek && <span className="week-current-badge">Current</span>}
+          </span>
+          <button
+            type="button"
+            className="week-nav-btn"
+            onClick={onNextWeek}
+            disabled={isCurrentWeek}
+            aria-label="Next reporting week"
+          >
+            &rarr;
           </button>
         </div>
       </div>
@@ -169,7 +174,7 @@ export default function AdminDashboard({
             </div>
             <div className="admin-stat-card">
               <span className="admin-stat-value admin-stat-attention">{needsAttention}</span>
-              <span className="admin-stat-label">Needs Attention</span>
+              <span className="admin-stat-label">Pending</span>
             </div>
             <div className="admin-stat-card">
               <span className="admin-stat-value">{completionPct}%</span>
