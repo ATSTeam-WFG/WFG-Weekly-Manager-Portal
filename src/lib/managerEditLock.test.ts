@@ -13,8 +13,6 @@ import assert from 'node:assert/strict'
 import {
   getManagerWriteLockReason,
   MANAGER_WRITE_LOCK_MESSAGES,
-  NEW_REPORT_CUTOFF_HOUR,
-  NEW_REPORT_CUTOFF_MINUTE,
   EDIT_CUTOFF_HOUR,
   EDIT_CUTOFF_MINUTE,
   resolveSaveStatus,
@@ -29,12 +27,12 @@ function minutesFrom(iso: string, offsetMinutes: number): Date {
   return new Date(new Date(iso).getTime() + offsetMinutes * 60_000)
 }
 
-describe('cutoff constants match the approved business rules', () => {
-  test('new-report cutoff is 3:00 PM', () => {
-    assert.equal(NEW_REPORT_CUTOFF_HOUR, 15)
-    assert.equal(NEW_REPORT_CUTOFF_MINUTE, 0)
-  })
-  test('edit cutoff is 3:30 PM', () => {
+function secondsFrom(iso: string, offsetSeconds: number): Date {
+  return new Date(new Date(iso).getTime() + offsetSeconds * 1_000)
+}
+
+describe('cutoff constant matches the approved business rule', () => {
+  test('the single edit cutoff is 3:30 PM — there is no longer a separate, earlier new-report cutoff', () => {
     assert.equal(EDIT_CUTOFF_HOUR, 15)
     assert.equal(EDIT_CUTOFF_MINUTE, 30)
   })
@@ -57,29 +55,31 @@ for (const [label, base] of [
       assert.equal(getManagerWriteLockReason(false, t), null)
     })
 
-    test('Friday 2:59 PM: neither is locked yet', () => {
+    test('Friday 2:59 PM: Not Started (new report) is allowed, same as an existing report', () => {
       const t = minutesFrom(base, -1)
       assert.equal(getManagerWriteLockReason(true, t), null)
       assert.equal(getManagerWriteLockReason(false, t), null)
     })
 
-    test('Friday exactly 3:00 PM: a new report is locked, an existing one is not', () => {
+    test('Friday exactly 3:00 PM: Not Started (new report) is now ALLOWED — the grace period begins, same as an existing report', () => {
       const t = new Date(base)
-      assert.equal(getManagerWriteLockReason(true, t), 'new_report_locked')
+      assert.equal(getManagerWriteLockReason(true, t), null)
       assert.equal(getManagerWriteLockReason(false, t), null)
     })
 
-    test('Friday 3:00-3:29 PM with an existing report: still open (editing remains available)', () => {
-      const t = minutesFrom(base, 20)
+    test('Friday 3:15 PM: Not Started (new report) remains allowed, same as an existing report', () => {
+      const t = minutesFrom(base, 15)
+      assert.equal(getManagerWriteLockReason(true, t), null)
       assert.equal(getManagerWriteLockReason(false, t), null)
     })
 
-    test('Friday 3:00-3:29 PM with no report: locked as new_report_locked, not edit_locked', () => {
-      const t = minutesFrom(base, 20)
-      assert.equal(getManagerWriteLockReason(true, t), 'new_report_locked')
+    test('Friday 3:29:59 PM (last instant of the grace period): Not Started (new report) is still allowed, same as an existing report', () => {
+      const t = secondsFrom(base, 29 * 60 + 59) // exactly 3:29:59 PM
+      assert.equal(getManagerWriteLockReason(true, t), null)
+      assert.equal(getManagerWriteLockReason(false, t), null)
     })
 
-    test('Friday exactly 3:30 PM: both are edit_locked, regardless of isNewReport', () => {
+    test('Friday exactly 3:30 PM: BOTH a brand-new report and an existing report are edit_locked — one single cutoff', () => {
       const t = minutesFrom(base, 30)
       assert.equal(getManagerWriteLockReason(true, t), 'edit_locked')
       assert.equal(getManagerWriteLockReason(false, t), 'edit_locked')
@@ -91,13 +91,13 @@ for (const [label, base] of [
       assert.equal(getManagerWriteLockReason(false, t), 'edit_locked')
     })
 
-    test('Saturday: both are edit_locked', () => {
+    test('Saturday: both remain edit_locked — the weekend lock is unaffected by this change', () => {
       const t = minutesFrom(base, 24 * 60)
       assert.equal(getManagerWriteLockReason(true, t), 'edit_locked')
       assert.equal(getManagerWriteLockReason(false, t), 'edit_locked')
     })
 
-    test('Sunday: both are edit_locked', () => {
+    test('Sunday: both remain edit_locked — the weekend lock is unaffected by this change', () => {
       const t = minutesFrom(base, 2 * 24 * 60)
       assert.equal(getManagerWriteLockReason(true, t), 'edit_locked')
       assert.equal(getManagerWriteLockReason(false, t), 'edit_locked')
@@ -112,10 +112,12 @@ for (const [label, base] of [
 }
 
 describe('MANAGER_WRITE_LOCK_MESSAGES', () => {
-  test('has a distinct, non-empty message for each lock reason', () => {
-    assert.ok(MANAGER_WRITE_LOCK_MESSAGES.new_report_locked.length > 0)
+  test('has a non-empty message for the one remaining lock reason', () => {
     assert.ok(MANAGER_WRITE_LOCK_MESSAGES.edit_locked.length > 0)
-    assert.notEqual(MANAGER_WRITE_LOCK_MESSAGES.new_report_locked, MANAGER_WRITE_LOCK_MESSAGES.edit_locked)
+  })
+
+  test('the obsolete new_report_locked reason no longer exists on the messages map', () => {
+    assert.equal('new_report_locked' in MANAGER_WRITE_LOCK_MESSAGES, false)
   })
 })
 

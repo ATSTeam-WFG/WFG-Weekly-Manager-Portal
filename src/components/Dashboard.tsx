@@ -53,15 +53,21 @@ export default function Dashboard({
 
   // A report row already exists once status is 'draft' or 'submitted' —
   // only 'not_started' means "no row yet", i.e. a genuinely new report.
+  // Still passed through to getManagerWriteLockReason for call-signature
+  // stability, even though a new vs. existing report no longer changes the
+  // lock decision itself — see managerEditLock.ts.
   const isNewReport = status === 'not_started'
-  // null = fully open; 'new_report_locked' = past 3:00 PM with no report yet
-  // (stays Not Submitted, no Start button); 'edit_locked' = past 3:30 PM,
-  // nothing can be written regardless of status. See
-  // src/lib/managerEditLock.ts for the shared decision logic — the same
-  // function the service-layer guard and (independently) the database
-  // trigger use, so all three layers agree on the same instant.
+  // null = fully open; 'edit_locked' = past 3:30 PM, nothing can be written
+  // regardless of status (new or existing). See src/lib/managerEditLock.ts
+  // for the shared decision logic — the same function the service-layer
+  // guard and (independently) the database trigger use, so all three layers
+  // agree on the same instant.
   const lockReason = getManagerWriteLockReason(isNewReport)
-  const inLateEditWindow = lockReason === null && !isNewReport && isPastEasternCutoff(15, 0)
+  // Shown for EVERY status, including Not Started — a manager who starts
+  // their report during the 3:00-3:29 PM grace period needs the same
+  // "until 3:30 PM ET" notice an existing draft already gets, since the
+  // same single cutoff now applies to both.
+  const inLateEditWindow = lockReason === null && isPastEasternCutoff(15, 0)
 
   const actionLabel =
     status === 'not_started' ? 'Start Report' : status === 'draft' ? 'Continue Draft' : 'Edit Submitted Report'

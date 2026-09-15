@@ -1,43 +1,46 @@
-// Pure decision logic for the Friday Manager-editing cutoffs. No imports
+// Pure decision logic for the Friday Manager-editing cutoff. No imports
 // beyond easternTime.ts (itself import-free), so this — and its test file —
 // run directly via a bare `node --test`, no build step.
 //
-// Two distinct cutoffs, both America/New_York, DST-safe via
-// isPastEasternCutoff:
-//   - 3:00 PM: a manager with NO existing report row for this reporting
-//     week may no longer start one. They remain Not Submitted.
-//   - 3:30 PM: ALL Manager writes lock — Save Draft, Submit, Save Changes,
-//     Start, Continue/edit anything — for any report, new or existing.
-// The database enforces the same two cutoffs independently (see
-// supabase/migrations/*_manager_edit_lock.sql) as the authoritative,
-// bypass-proof layer; this module is the client/service-side mirror used
-// for immediate UX and to avoid an unnecessary network round-trip for the
-// common "stale tab" case.
+// ONE cutoff, America/New_York, DST-safe via isPastEasternCutoff: Friday
+// 3:30 PM. Before it, a manager may freely start a brand-new report, save a
+// draft, continue editing, or submit — a report with no existing row (Not
+// Started) is treated exactly the same as one that already has a row
+// (Draft, auto-submitted, or Submitted) for lock purposes. At/after 3:30 PM,
+// every Manager write locks — Start, Save Draft, Submit, Save Changes,
+// Continue/edit anything — for any report, new or existing, and stays
+// locked through the rest of the week (see isPastEasternCutoff's own
+// Saturday/Sunday persistence).
+//
+// This used to have a second, earlier 3:00 PM cutoff that blocked ONLY
+// starting a brand-new report — removed per the business-rule change
+// giving Not Started managers the same 3:00-3:29 PM grace period as an
+// existing draft. The database enforces this single cutoff independently
+// (see supabase/migrations/*_manager_edit_lock.sql and its later
+// refinements) as the authoritative, bypass-proof layer; this module is the
+// client/service-side mirror used for immediate UX and to avoid an
+// unnecessary network round-trip for the common "stale tab" case.
 import { isPastEasternCutoff } from '../utils/easternTime.js'
 import type { ReportStatus } from '../types.js'
 
-export const NEW_REPORT_CUTOFF_HOUR = 15
-export const NEW_REPORT_CUTOFF_MINUTE = 0
 export const EDIT_CUTOFF_HOUR = 15
 export const EDIT_CUTOFF_MINUTE = 30
 
-export type ManagerWriteLockReason = 'new_report_locked' | 'edit_locked' | null
+export type ManagerWriteLockReason = 'edit_locked' | null
 
-// `isNewReport` means: no report row exists yet for this manager/week (the
-// caller's status was 'not_started' before this action) — as opposed to
-// continuing a draft or editing an already-submitted report, both of which
-// count as "existing" regardless of which service function performs the
-// write. Checked in this order deliberately: past 3:30 PM always wins,
-// regardless of isNewReport, since a manager with no report is just as
-// locked out as one with an existing report once editing closes entirely.
-export function getManagerWriteLockReason(isNewReport: boolean, now: Date = new Date()): ManagerWriteLockReason {
+// `isNewReport` is accepted (and still passed by every caller) purely for
+// call-signature stability — callers already need it for other reasons
+// (e.g. saveReportV2's stale-draft reconciliation), and keeping the
+// parameter here means none of them needed to change when the earlier,
+// separate 3:00 PM new-report cutoff was removed. It no longer affects the
+// lock decision itself: a new report and an existing report now share the
+// exact same 3:30 PM cutoff.
+export function getManagerWriteLockReason(_isNewReport: boolean, now: Date = new Date()): ManagerWriteLockReason {
   if (isPastEasternCutoff(EDIT_CUTOFF_HOUR, EDIT_CUTOFF_MINUTE, now)) return 'edit_locked'
-  if (isNewReport && isPastEasternCutoff(NEW_REPORT_CUTOFF_HOUR, NEW_REPORT_CUTOFF_MINUTE, now)) return 'new_report_locked'
   return null
 }
 
 export const MANAGER_WRITE_LOCK_MESSAGES: Record<Exclude<ManagerWriteLockReason, null>, string> = {
-  new_report_locked: 'The submission deadline has passed for this reporting week. This report remains Not Submitted.',
   edit_locked: 'Editing is closed for this reporting week.',
 }
 
