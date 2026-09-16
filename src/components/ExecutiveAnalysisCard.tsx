@@ -18,6 +18,47 @@ import './ExecutiveAnalysisCard.css'
 type Mode = 'view' | 'edit'
 type ActionStatus = 'idle' | 'generating' | 'saving' | 'reverting'
 
+// Toggled on <body> only for the duration of an Executive-Analysis-only
+// print/export — src/print.css hides every other section on the page while
+// this class is present, leaving only .print-header (WFG branding + the
+// reporting week/date) and this card's own .executive-summary-section
+// (heading, badge, and the current saved content) visible. The page-level
+// "Print / Export PDF" buttons in ReportsAnalytics.tsx/WeeklySummary.tsx
+// never touch this class and are completely unaffected.
+const PRINT_EXECUTIVE_ANALYSIS_ONLY_CLASS = 'print-executive-analysis-only'
+
+// Safety-net only: 'afterprint' fires reliably in every browser this app
+// targets and is what actually removes the class in the normal case (both
+// on a completed print and on a canceled dialog). This timeout exists
+// solely so a browser/print flow that somehow never fires 'afterprint'
+// can't leave the whole app permanently stuck showing only the Executive
+// Analysis — it's long enough to never interrupt a real print dialog still
+// open, and the cleanup itself is idempotent (safe to run twice).
+const PRINT_MODE_FALLBACK_MS = 60_000
+
+// Isolates printing to just this card (plus the shared page letterhead) by
+// toggling a body-level class around the existing native window.print() —
+// never a second print mechanism, never touching the page-level Print /
+// Export PDF buttons. Reachable regardless of view/edit mode: printing
+// while editing is harmless, since the already-existing
+// .executive-summary-content--print-only rule (below) guarantees the
+// LAST-SAVED content is what actually renders for print either way.
+function printExecutiveAnalysisOnly(): void {
+  document.body.classList.add(PRINT_EXECUTIVE_ANALYSIS_ONLY_CLASS)
+
+  let cleaned = false
+  const cleanup = () => {
+    if (cleaned) return
+    cleaned = true
+    document.body.classList.remove(PRINT_EXECUTIVE_ANALYSIS_ONLY_CLASS)
+    window.removeEventListener('afterprint', cleanup)
+  }
+
+  window.addEventListener('afterprint', cleanup)
+  window.setTimeout(cleanup, PRINT_MODE_FALLBACK_MS)
+  window.print()
+}
+
 interface ExecutiveAnalysisCardProps {
   periodKey: ReportPeriodKey
   offset: number
@@ -199,6 +240,11 @@ export default function ExecutiveAnalysisCard({ periodKey, offset, weekStartDate
               disabled={!hasSubmissions || busy}
             >
               {actionStatus === 'generating' ? 'Generating…' : analysis ? 'Regenerate' : 'Generate AI Analysis'}
+            </button>
+          )}
+          {analysis && (
+            <button type="button" className="btn btn-secondary" onClick={printExecutiveAnalysisOnly} disabled={busy}>
+              Print Executive Analysis
             </button>
           )}
         </div>
