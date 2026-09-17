@@ -109,6 +109,57 @@ export function decideCreateAccountForExistingAction(
   return { action: 'create' }
 }
 
+// Edit Employee — the target roster row, identified by its own stable id
+// (never by the editable email field). emailNormalized/portalRole are its
+// CURRENT values, read fresh by the caller immediately before deciding.
+export interface EmployeeRecordSnapshot {
+  id: string
+  emailNormalized: string
+  portalRole: 'manager' | 'admin'
+}
+
+// The requested new values for portalRole/email — pre-normalized by the
+// caller, matching the convention every other decide* function here
+// already uses (see decideCreateManagerAccountAction's `email` parameter).
+// fullName and submitsWeeklyReport are NOT part of the decision surface at
+// all: no branch below depends on either, so they're passed straight
+// through by the caller to the actual update payload untouched.
+export interface UpdateEmployeeRequest {
+  emailNormalized: string
+  portalRole: 'manager' | 'admin'
+}
+
+export type UpdateEmployeeAction =
+  | { action: 'not_found' } // no roster row exists for the given id
+  | { action: 'invalid_domain' }
+  | { action: 'email_conflict' } // the requested email is already used by a DIFFERENT roster row
+  // The acting Admin is editing their OWN row (matched by comparing their
+  // own profile email against the target's current email — never anything
+  // client-supplied) and the request would remove their own admin access.
+  // Checked only for a caller who is already confirmed admin-role by
+  // authenticateAdmin, so the only way this ever fires is an admin
+  // attempting to demote themselves — never a false positive for someone
+  // who was never admin to begin with.
+  | { action: 'self_role_change_blocked' }
+  | { action: 'update' }
+
+// Decides what Edit Employee should do. Never mutates anything itself — the
+// target snapshot, the email-conflict check, and the self-edit flag must
+// all be computed fresh by the caller immediately beforehand (see
+// updateManagedEmployee in supabaseServiceClient.ts).
+export function decideUpdateEmployeeAction(
+  target: EmployeeRecordSnapshot | null,
+  request: UpdateEmployeeRequest,
+  emailConflictExists: boolean,
+  isActingAdminSelf: boolean,
+): UpdateEmployeeAction {
+  if (!target) return { action: 'not_found' }
+  if (!isWfgEmail(request.emailNormalized)) return { action: 'invalid_domain' }
+  if (isActingAdminSelf && request.portalRole !== 'admin') return { action: 'self_role_change_blocked' }
+  if (emailConflictExists) return { action: 'email_conflict' }
+  return { action: 'update' }
+}
+
 export type ManagedUserStatus = 'pending' | 'awaiting_first_login' | 'active' | 'inactive'
 
 // A row's displayed status is driven by the roster's is_active first (an

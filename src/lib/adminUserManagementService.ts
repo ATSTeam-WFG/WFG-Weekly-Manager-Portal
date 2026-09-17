@@ -129,6 +129,69 @@ export async function createAccountForExistingEmployee(email: string): Promise<C
   return { status: 'error' }
 }
 
+export type UpdateManagedEmployeeOutcome =
+  | { status: 'ok' }
+  | { status: 'not_found' }
+  | { status: 'invalid_domain' }
+  | { status: 'email_conflict' }
+  | { status: 'self_role_change_blocked' }
+  // account_created_at is set but this row's Auth identity (auth_user_id)
+  // hasn't been backfilled yet — the email specifically could not be
+  // changed; other fields may have still been intended, but the server
+  // refuses the WHOLE request rather than silently applying a partial edit.
+  | { status: 'auth_identity_unresolved' }
+  // A genuine partial-failure state on the server — do not retry blindly.
+  | { status: 'partial_failure' }
+  | { status: 'error' }
+
+const UPDATE_MANAGED_EMPLOYEE_ERROR_CODES: Record<string, UpdateManagedEmployeeOutcome['status']> = {
+  NOT_FOUND: 'not_found',
+  INVALID_DOMAIN: 'invalid_domain',
+  EMAIL_CONFLICT: 'email_conflict',
+  SELF_ROLE_CHANGE_BLOCKED: 'self_role_change_blocked',
+  AUTH_IDENTITY_UNRESOLVED: 'auth_identity_unresolved',
+  PARTIAL_FAILURE: 'partial_failure',
+}
+
+// "Edit Employee" — corrects an existing employee's full name, email,
+// portal role, and/or submits_weekly_report. Identified by the stable
+// approved_employees `id`, never by email (email is one of the fields this
+// can change). Never touches is_active — that stays Deactivate/Reactivate's
+// own action.
+export async function updateManagedEmployee(
+  id: string,
+  fullName: string,
+  email: string,
+  role: 'manager' | 'admin',
+  submitsWeeklyReport: boolean,
+): Promise<UpdateManagedEmployeeOutcome> {
+  let accessToken: string
+  try {
+    accessToken = await getValidAccessToken()
+  } catch {
+    return { status: 'error' }
+  }
+
+  let response: Response
+  try {
+    response = await fetch('/api/admin/users/update', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, fullName, email, role, submitsWeeklyReport }),
+    })
+  } catch {
+    return { status: 'error' }
+  }
+
+  const body = await response.json().catch(() => null)
+
+  if (response.ok && body?.status === 'ok') return { status: 'ok' }
+  if (body?.error && UPDATE_MANAGED_EMPLOYEE_ERROR_CODES[body.error]) {
+    return { status: UPDATE_MANAGED_EMPLOYEE_ERROR_CODES[body.error] }
+  }
+  return { status: 'error' }
+}
+
 export type SetUserActiveOutcome = { status: 'ok'; isActive: boolean } | { status: 'error' }
 
 export async function setUserActive(email: string, isActive: boolean): Promise<SetUserActiveOutcome> {

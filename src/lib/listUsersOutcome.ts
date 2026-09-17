@@ -9,6 +9,10 @@ import type { ProfileRole } from '../types'
 // fetchManagedUsers() is the only caller of mapListUsersResponse below.
 
 export interface ManagedUser {
+  // approved_employees' own stable primary key. Edit Employee (and the row
+  // list itself) must key off this, never off email — the email is one of
+  // the fields Edit Employee can change.
+  id: string
   fullName: string
   email: string
   role: ProfileRole

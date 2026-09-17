@@ -2,9 +2,11 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
   decideCreateManagerAccountAction,
   decideCreateAccountForExistingAction,
+  decideUpdateEmployeeAction,
   deriveManagedUserStatus,
   type ProfileSnapshot,
   type RosterEntrySnapshot,
+  type EmployeeRecordSnapshot,
 } from './adminUserManagement.js'
 
 // This is the ONLY file in the repo permitted to reference
@@ -61,6 +63,13 @@ export interface ApprovedEmployee {
   // and for an Admin explicitly designated as also submitting their own
   // weekly report. Never derived from portalRole alone.
   submitsWeeklyReport: boolean
+  // The Auth user's own id, captured once at Create Account time (see
+  // createAccountAndMarkRoster) — null until an Auth account exists, and
+  // for any pre-existing account created before this column existed (see
+  // supabase/migrations/20260917_approved_employees_auth_user_id.sql's
+  // backfill). This is the ONLY thing Edit Employee may use to target an
+  // Auth user for an email change — never an email-based scan.
+  authUserId: string | null
 }
 
 interface ApprovedEmployeeRow {
@@ -73,6 +82,7 @@ interface ApprovedEmployeeRow {
   is_active: boolean
   account_created_at: string | null
   submits_weekly_report: boolean
+  auth_user_id: string | null
 }
 
 function toApprovedEmployee(row: ApprovedEmployeeRow): ApprovedEmployee | null {
@@ -89,6 +99,7 @@ function toApprovedEmployee(row: ApprovedEmployeeRow): ApprovedEmployee | null {
     isActive: row.is_active,
     accountCreated: row.account_created_at !== null,
     submitsWeeklyReport: row.submits_weekly_report,
+    authUserId: row.auth_user_id,
   }
 }
 
@@ -97,7 +108,7 @@ function toApprovedEmployee(row: ApprovedEmployeeRow): ApprovedEmployee | null {
 export async function lookupApprovedEmployeeByNormalizedEmail(emailNormalized: string): Promise<ApprovedEmployee | null> {
   const { data, error } = await getServiceClient()
     .from('approved_employees')
-    .select('id, full_name, title, email, email_normalized, portal_role, is_active, account_created_at, submits_weekly_report')
+    .select('id, full_name, title, email, email_normalized, portal_role, is_active, account_created_at, submits_weekly_report, auth_user_id')
     .eq('email_normalized', emailNormalized)
     .maybeSingle()
 
@@ -316,7 +327,15 @@ export async function inviteApprovedEmployee(email: string, redirectTo: string, 
 
 const PASSWORD_CHANGE_REQUIRED_APP_METADATA = { password_change_required: true } as const
 
-export type CreateAccountOutcome = { status: 'created' } | { status: 'already_registered' } | { status: 'failed' }
+export type CreateAccountOutcome =
+  // authUserId is the new Auth user's own id — captured here so the caller
+  // (createAccountAndMarkRoster) can store it in
+  // approved_employees.auth_user_id in the same write that already records
+  // account_created_at, giving Edit Employee a stable, scan-free way to
+  // resolve this employee's Auth user later.
+  | { status: 'created'; authUserId: string }
+  | { status: 'already_registered' }
+  | { status: 'failed' }
 
 // Never logs, returns, or otherwise exposes EMPLOYEE_TEMP_PASSWORD's value —
 // only whether the call succeeded. A missing env var fails closed (never
@@ -328,7 +347,7 @@ export async function createEmployeeAccount(email: string): Promise<CreateAccoun
     return { status: 'failed' }
   }
 
-  const { error } = await getServiceClient().auth.admin.createUser({
+  const { data, error } = await getServiceClient().auth.admin.createUser({
     email,
     password: tempPassword,
     email_confirm: true,
@@ -343,7 +362,7 @@ export async function createEmployeeAccount(email: string): Promise<CreateAccoun
     return alreadyRegistered ? { status: 'already_registered' } : { status: 'failed' }
   }
 
-  return { status: 'created' }
+  return { status: 'created', authUserId: data.user.id }
 }
 
 // Clears the mandatory-password-change marker once the employee has
@@ -566,6 +585,10 @@ export async function syncProfileAccessFromApprovedEmployee(
 // -----------------------------------------------------------------------
 
 export interface ManagedUserSummary {
+  // approved_employees' own stable primary key — the ONLY identifier Edit
+  // Employee (and, for row rendering, the client's own list key) may use to
+  // target a row. Never the email, which Edit Employee itself can change.
+  id: string
   fullName: string
   email: string
   role: 'manager' | 'admin'
@@ -587,7 +610,7 @@ export async function listManagedUsers(): Promise<ManagedUserSummary[] | null> {
   const [rosterResult, profileResult] = await Promise.all([
     client
       .from('approved_employees')
-      .select('full_name, email, email_normalized, portal_role, is_active, account_created_at, submits_weekly_report'),
+      .select('id, full_name, email, email_normalized, portal_role, is_active, account_created_at, submits_weekly_report'),
     client.from('profiles').select('email, role, is_active'),
   ])
 
@@ -607,6 +630,7 @@ export async function listManagedUsers(): Promise<ManagedUserSummary[] | null> {
       const profile = profileByEmail.get(row.email_normalized)
       const profileSnapshot: ProfileSnapshot | null = profile ? { isActive: profile.is_active } : null
       return {
+        id: row.id,
         fullName: row.full_name,
         email: row.email,
         role: (profile?.role ?? row.portal_role) as 'manager' | 'admin',
@@ -631,13 +655,16 @@ async function fetchRosterAndProfileSnapshots(
 
 // Shared tail for both addOrCreateManagerAccount and
 // createAccountForExistingEmployee below: actually create the Auth account,
-// then record approved_employees.account_created_at so the User Management
-// list can show "Awaiting First Login" without any extra Auth-API lookup.
-// A failure to record the timestamp is logged but not fatal — the account
-// itself was already created successfully; the roster row simply won't
-// reflect that until the next successful call (harmless: it never blocks
-// or duplicates account creation, since createEmployeeAccount itself
-// already fails closed with 'already_registered' for a second attempt).
+// then record approved_employees.account_created_at AND auth_user_id (the
+// new Auth user's own id) so the User Management list can show "Awaiting
+// First Login" without any extra Auth-API lookup, and so a future Edit
+// Employee email change can resolve this employee's Auth user directly by
+// id — never by scanning Auth users by email. A failure to record either
+// column is logged but not fatal — the account itself was already created
+// successfully; the roster row simply won't reflect that until the next
+// successful call (harmless: it never blocks or duplicates account
+// creation, since createEmployeeAccount itself already fails closed with
+// 'already_registered' for a second attempt).
 async function createAccountAndMarkRoster(
   emailNormalized: string,
   email: string,
@@ -648,10 +675,10 @@ async function createAccountAndMarkRoster(
 
   const { error: markError } = await getServiceClient()
     .from('approved_employees')
-    .update({ account_created_at: new Date().toISOString() })
+    .update({ account_created_at: new Date().toISOString(), auth_user_id: outcome.authUserId })
     .eq('email_normalized', emailNormalized)
   if (markError) {
-    console.error('supabaseServiceClient: failed to record account_created_at:', markError.message)
+    console.error('supabaseServiceClient: failed to record account_created_at/auth_user_id:', markError.message)
   }
 
   return { status: 'created' }
@@ -790,6 +817,467 @@ export async function setManagedUserActive(email: string, isActive: boolean): Pr
     if (profileUpdateError) {
       console.error('supabaseServiceClient: setManagedUserActive profile update failed:', profileUpdateError.message)
       return { status: 'error' }
+    }
+  }
+
+  return { status: 'ok' }
+}
+
+// -----------------------------------------------------------------------
+// Edit Employee — Admin-only, from api/admin/users/update.ts. Corrects an
+// existing approved_employees row's full name, email, portal role, and/or
+// submits_weekly_report after the fact (e.g. a typo caught before or after
+// the employee's first login). Deliberately separate from
+// setManagedUserActive above: this never touches is_active, and that
+// function never touches these four fields — Deactivate/Reactivate and
+// Edit Employee remain fully independent actions.
+// -----------------------------------------------------------------------
+
+export interface UpdateManagedEmployeeInput {
+  fullName: string
+  email: string
+  role: 'manager' | 'admin'
+  submitsWeeklyReport: boolean
+}
+
+export type UpdateManagedEmployeeOutcome =
+  | { status: 'ok' }
+  | { status: 'not_found' }
+  | { status: 'invalid_domain' }
+  | { status: 'email_conflict' }
+  | { status: 'self_role_change_blocked' }
+  // account_created_at is set (an Auth account exists) but auth_user_id is
+  // still null for this row — a legacy row from before that column existed,
+  // not yet backfilled (see supabase/migrations/20260917_approved_employees_auth_user_id.sql).
+  // There is no safe way to resolve which Auth user this is without
+  // scanning by email, which this function deliberately never does anymore
+  // — so an EMAIL change is refused outright rather than guessed. Name/
+  // role/submits_weekly_report edits are unaffected and still succeed.
+  | { status: 'auth_identity_unresolved' }
+  // At least one store (Auth and/or approved_employees) was already
+  // changed, a later write then failed, AND compensating every store that
+  // had actually changed did not fully succeed — e.g. Auth's email was
+  // reverted but the roster row's rollback also failed, or vice versa. This
+  // is a genuine split-brain state that needs manual reconciliation in
+  // Supabase Studio. See the console.error just before this is returned for
+  // exactly which store(s) rolled back and which didn't (never a
+  // password/token/secret).
+  | { status: 'partial_failure' }
+  | { status: 'error' }
+
+// id is approved_employees' own stable primary key — the ONLY thing used to
+// locate the row being edited; the (possibly-changing) email in `updates`
+// is never used to identify the target, only as a new value to apply.
+// actingAdminUserId is the caller's own Auth user id (from
+// authenticateAdmin's result, never anything client-supplied) — used solely
+// to detect a self-edit for the role-change lockout guard below.
+export async function updateManagedEmployee(
+  id: string,
+  updates: UpdateManagedEmployeeInput,
+  actingAdminUserId: string,
+): Promise<UpdateManagedEmployeeOutcome> {
+  const client = getServiceClient()
+  const fullName = updates.fullName.trim()
+  const emailNormalized = normalizeEmail(updates.email)
+
+  const { data: targetRow, error: targetError } = await client
+    .from('approved_employees')
+    .select('id, full_name, email, email_normalized, portal_role, submits_weekly_report, account_created_at, auth_user_id')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (targetError) {
+    console.error('supabaseServiceClient: updateManagedEmployee target lookup failed:', targetError.message)
+    return { status: 'error' }
+  }
+
+  const target: EmployeeRecordSnapshot | null =
+    targetRow && (targetRow.portal_role === 'manager' || targetRow.portal_role === 'admin')
+      ? { id: targetRow.id, emailNormalized: targetRow.email_normalized, portalRole: targetRow.portal_role }
+      : null
+
+  // Self-edit detection: compare the ACTING admin's own profile email (read
+  // fresh by their own Auth user id, never anything the request claims)
+  // against the TARGET row's current email — never the requested new one,
+  // so this can't be sidestepped by also changing the email in the same
+  // request.
+  const { data: actingAdminProfile, error: actingAdminError } = await client
+    .from('profiles')
+    .select('email')
+    .eq('id', actingAdminUserId)
+    .maybeSingle()
+  if (actingAdminError) {
+    console.error('supabaseServiceClient: updateManagedEmployee acting-admin lookup failed:', actingAdminError.message)
+    return { status: 'error' }
+  }
+  const isActingAdminSelf = !!target && !!actingAdminProfile && actingAdminProfile.email === target.emailNormalized
+
+  let emailConflictExists = false
+  if (target) {
+    const { data: conflictRow, error: conflictError } = await client
+      .from('approved_employees')
+      .select('id')
+      .eq('email_normalized', emailNormalized)
+      .neq('id', id)
+      .maybeSingle()
+    if (conflictError) {
+      console.error('supabaseServiceClient: updateManagedEmployee email-conflict check failed:', conflictError.message)
+      return { status: 'error' }
+    }
+    emailConflictExists = !!conflictRow
+  }
+
+  const decision = decideUpdateEmployeeAction(
+    target,
+    { emailNormalized, portalRole: updates.role },
+    emailConflictExists,
+    isActingAdminSelf,
+  )
+
+  if (decision.action === 'not_found') return { status: 'not_found' }
+  if (decision.action === 'invalid_domain') return { status: 'invalid_domain' }
+  if (decision.action === 'self_role_change_blocked') return { status: 'self_role_change_blocked' }
+  if (decision.action === 'email_conflict') return { status: 'email_conflict' }
+
+  // decision.action === 'update' from here on.
+  const emailChanging = emailNormalized !== targetRow!.email_normalized
+  const accountCreated = targetRow!.account_created_at !== null
+  const authUserId = targetRow!.auth_user_id
+
+  // Snapshot of every approved_employees column this request can change,
+  // captured BEFORE any write. Used both to detect what's actually changing
+  // and, if a later write fails, to restore the roster row to exactly this
+  // state — full_name/role/submits_weekly_report included, not just email,
+  // so a partially-applied edit never lingers on the new value for any
+  // field. Never includes id, so a rollback can never touch a different row.
+  const originalRoster = {
+    fullName: targetRow!.full_name,
+    email: targetRow!.email,
+    emailNormalized: targetRow!.email_normalized,
+    portalRole: targetRow!.portal_role,
+    submitsWeeklyReport: targetRow!.submits_weekly_report,
+  }
+
+  // Look up the existing profile (if any) ONCE, by the row's CURRENT email —
+  // never the new one, and never re-derived after any write below — so this
+  // can never resolve to the wrong profile no matter what changes next.
+  const profileLookup = await findProfileByEmail(targetRow!.email_normalized)
+  if (profileLookup.status === 'error') return { status: 'error' }
+  const existingProfile = profileLookup.status === 'found' ? profileLookup.profile : null
+
+  // Snapshot of every profile column this request can change, captured from
+  // the SAME pre-write data already fetched above — no new query. email
+  // isn't part of ProfileRow (findProfileByEmail never selects it), but
+  // profiles.email is always exactly the roster's own normalized value (see
+  // createProfileFromApprovedEmployee), which is the current, pre-edit
+  // email this profile was just looked up by: originalRoster.emailNormalized.
+  // Used only if a later write fails and the profile needs reverting to
+  // exactly this state.
+  const originalProfile: { fullName: string | null; email: string; role: 'manager' | 'admin'; submitsWeeklyReport: boolean } | null =
+    existingProfile
+      ? {
+          fullName: existingProfile.fullName,
+          email: originalRoster.emailNormalized,
+          role: existingProfile.role,
+          submitsWeeklyReport: existingProfile.submitsWeeklyReport,
+        }
+      : null
+
+  // 1) If the Auth account already exists and the email is actually
+  //    changing, update Auth FIRST — it carries the real uniqueness
+  //    constraint and is the hardest failure to recover from if left for
+  //    last. Never touches the password or app_metadata, so this can never
+  //    re-trigger the temp-password/first-login workflow. Resolves the Auth
+  //    user EXCLUSIVELY via the stable auth_user_id column — never a
+  //    listUsers()-by-email scan. If this row's account was created before
+  //    that column existed and hasn't been backfilled yet, this fails
+  //    closed rather than guessing.
+  let authEmailChanged = false
+  if (accountCreated && emailChanging) {
+    if (!authUserId) {
+      console.error(
+        'supabaseServiceClient: updateManagedEmployee refused an email change — account_created_at is set but auth_user_id is not yet backfilled.',
+        { approvedEmployeeId: id },
+      )
+      return { status: 'auth_identity_unresolved' }
+    }
+
+    const { error: authUpdateError } = await client.auth.admin.updateUserById(authUserId, {
+      email: updates.email,
+      email_confirm: true,
+    })
+    if (authUpdateError) {
+      const conflict = authUpdateError.code === 'email_exists' || authUpdateError.code === 'user_already_exists'
+      if (!conflict) {
+        console.error('supabaseServiceClient: updateManagedEmployee Auth email update failed:', authUpdateError.message)
+      }
+      return conflict ? { status: 'email_conflict' } : { status: 'error' }
+    }
+    authEmailChanged = true
+  }
+
+  // Best-effort compensating action if a write AFTER the Auth email change
+  // fails below: put the Auth email back exactly as it was. A no-op
+  // (returns true, nothing to undo) if the Auth email was never actually
+  // changed by this request.
+  async function rollbackAuthEmail(): Promise<boolean> {
+    if (!authEmailChanged || !authUserId) return true
+    const { error } = await client.auth.admin.updateUserById(authUserId, {
+      email: originalRoster.email,
+      email_confirm: true,
+    })
+    return !error
+  }
+
+  // Tracks whether the roster write below actually applied, so a later
+  // failure knows whether there's anything to compensate. A Supabase
+  // .update().eq('id', id) call is a single Postgres UPDATE statement
+  // against one row: it is atomic (all listed columns change together or
+  // none do), so there is no partially-applied-roster-write case to guard
+  // against separately — rosterUpdated is true only once the statement has
+  // returned with no error AND its own .select() confirms exactly one row,
+  // matching this id, was actually written (see the roster update below).
+  // Without that confirmation, `.update().eq(...)` can return error: null
+  // even when the filter matched zero rows — a silent no-op that must never
+  // be treated the same as a real write.
+  let rosterUpdated = false
+
+  // Reverts approved_employees back to its pre-edit snapshot — ALL of
+  // full_name, email, email_normalized, portal_role, and
+  // submits_weekly_report, not just email — so a compensated edit can never
+  // leave the roster row on the new name/role/submits value either. A no-op
+  // if the roster row was never actually changed. Never writes id, so this
+  // can never touch a different row, and never touches profiles or
+  // reports.manager_id.
+  async function rollbackRoster(): Promise<boolean> {
+    if (!rosterUpdated) return true
+    const { error } = await client
+      .from('approved_employees')
+      .update({
+        full_name: originalRoster.fullName,
+        email: originalRoster.email,
+        email_normalized: originalRoster.emailNormalized,
+        portal_role: originalRoster.portalRole,
+        submits_weekly_report: originalRoster.submitsWeeklyReport,
+      })
+      .eq('id', id)
+    return !error
+  }
+
+  // Tracks whether the profile write below actually applied — same
+  // principle as rosterUpdated, set true as soon as there's evidence the
+  // intended profile row was written (regardless of whether its returned
+  // value then verifies), never merely from the absence of an error.
+  let profileUpdated = false
+
+  // Reverts the profile row (if one exists) back to its pre-edit snapshot —
+  // full_name, email, role, and submits_weekly_report. A no-op if the
+  // profile row was never actually changed. Targets ONLY existingProfile.id
+  // — never writes id, never touches auth_user_id (not a profiles column),
+  // and never touches reports or reports.manager_id.
+  async function rollbackProfile(): Promise<boolean> {
+    if (!profileUpdated || !existingProfile || !originalProfile) return true
+    const { error } = await client
+      .from('profiles')
+      .update({
+        full_name: originalProfile.fullName,
+        email: originalProfile.email,
+        role: originalProfile.role,
+        submits_weekly_report: originalProfile.submitsWeeklyReport,
+      })
+      .eq('id', existingProfile.id)
+    return !error
+  }
+
+  // Called once a write fails after at least one store may have already
+  // changed. Compensates every store that was ACTUALLY changed by THIS
+  // request — profile first, then roster, then Auth (the reverse of the
+  // order they were written in: Auth -> roster -> profile) — and never
+  // touches a store nothing here ever wrote to. Returns a normal `error`
+  // only when every attempted compensation succeeded, meaning the row is
+  // fully consistent with its pre-edit state again. Otherwise returns the
+  // distinct `partial_failure` outcome, with exactly which store(s) rolled
+  // back and which didn't logged server-side (ids and emails only — never a
+  // password, token, temp password, API key, or any other secret) so an
+  // admin can reconcile manually instead of retrying blindly.
+  async function rollbackAndReport(reason: 'roster_update_failed' | 'profile_update_failed'): Promise<UpdateManagedEmployeeOutcome> {
+    const profileRollback: boolean | 'not_attempted_unchanged' = profileUpdated ? await rollbackProfile() : 'not_attempted_unchanged'
+    const rosterRollback: boolean | 'not_attempted_unchanged' = rosterUpdated ? await rollbackRoster() : 'not_attempted_unchanged'
+    const authRollback: boolean | 'not_attempted_unchanged' = authEmailChanged ? await rollbackAuthEmail() : 'not_attempted_unchanged'
+
+    const anyRollbackFailed = profileRollback === false || rosterRollback === false || authRollback === false
+
+    if (!anyRollbackFailed) {
+      console.error(
+        `supabaseServiceClient: updateManagedEmployee — ${reason}; every store this request had changed was rolled back successfully.`,
+        { approvedEmployeeId: id, authUserId, profileRollback, rosterRollback, authRollback },
+      )
+      return { status: 'error' }
+    }
+
+    console.error(
+      `supabaseServiceClient: updateManagedEmployee PARTIAL FAILURE — ${reason}, and at least one compensating rollback also failed. Manual reconciliation required in Supabase Studio. Do not retry this edit until reconciled.`,
+      {
+        approvedEmployeeId: id,
+        authUserId,
+        originalEmail: originalRoster.email,
+        attemptedNewEmail: updates.email,
+        profileRollback,
+        rosterRollback,
+        authRollback,
+      },
+    )
+    return { status: 'partial_failure' }
+  }
+
+  // 2) Roster row — the source of truth Admin User Management manages
+  //    directly, and what every future Create Account call will read.
+  //    .select() is required here, not optional: without it, Supabase
+  //    returns error: null even when .eq('id', id) matched zero rows (a
+  //    silent no-op), which would let this function report `ok` without
+  //    ever having changed anything. Requesting the written row back lets
+  //    us verify exactly one row, matching this id, with the requested
+  //    submits_weekly_report value, was actually written.
+  const { data: rosterUpdateRows, error: rosterUpdateError } = await client
+    .from('approved_employees')
+    .update({
+      full_name: fullName,
+      email: updates.email,
+      email_normalized: emailNormalized,
+      portal_role: updates.role,
+      submits_weekly_report: updates.submitsWeeklyReport,
+    })
+    .eq('id', id)
+    .select('id, submits_weekly_report')
+
+  if (rosterUpdateError) {
+    console.error('supabaseServiceClient: updateManagedEmployee roster update failed:', rosterUpdateError.message)
+    // A hard Postgres/PostgREST error means Postgres's own statement-level
+    // atomicity guarantees nothing was written — rosterUpdated is still
+    // false here, and only Auth (if changed) needs compensating.
+    return rollbackAndReport('roster_update_failed')
+  }
+
+  // Write EVIDENCE is deliberately separate from value VERIFICATION below.
+  // .eq('id', id) can only ever return rows whose id already equals `id`,
+  // so a returned-id mismatch is structurally unreachable — kept only as
+  // defense-in-depth. What actually matters is the row COUNT:
+  //   0 rows  -> the filter matched nothing; Postgres touched nothing; this
+  //              is the only case where the roster is genuinely unchanged.
+  //   1 row   -> a real UPDATE statement was applied to exactly this row —
+  //              full_name/email/email_normalized/portal_role were written
+  //              atomically together with submits_weekly_report, REGARDLESS
+  //              of what submits_weekly_report itself came back as. The row
+  //              is now definitely in a changed state.
+  //   2+ rows -> a write occurred, but to more rows than a unique id filter
+  //              should ever match — evidence of a duplicate-id/schema-
+  //              integrity problem a routine rollback cannot fully diagnose.
+  const rosterRowCount = rosterUpdateRows?.length ?? 0
+  const rosterIntendedRowReturned = rosterRowCount === 1 && rosterUpdateRows![0].id === id
+
+  if (rosterRowCount === 0) {
+    console.error(
+      'supabaseServiceClient: updateManagedEmployee roster update matched zero rows — no write occurred; refusing to report success.',
+      { approvedEmployeeId: id },
+    )
+    // rosterUpdated stays false: there is genuinely nothing to compensate
+    // for this store, only Auth (if changed).
+    return rollbackAndReport('roster_update_failed')
+  }
+
+  if (!rosterIntendedRowReturned) {
+    // rosterRowCount is 2+ (or, structurally unreachable, a returned id
+    // mismatch). A write DID happen — set rosterUpdated so the best-effort,
+    // id-scoped rollback below is still attempted — but escalate this
+    // distinctly from a routine value mismatch: this pattern can only mean
+    // approved_employees.id failed to behave as a unique key, which no
+    // amount of retrying this edit will fix on its own.
+    rosterUpdated = true
+    console.error(
+      'supabaseServiceClient: updateManagedEmployee roster update ABNORMAL — matched more than one row for a single id filter. Possible duplicate id / schema-integrity issue; manual investigation is required beyond the usual rollback.',
+      { approvedEmployeeId: id, returnedRowCount: rosterRowCount },
+    )
+    return rollbackAndReport('roster_update_failed')
+  }
+
+  // Exactly one row, matching this id, was written — rosterUpdated is true
+  // from this point regardless of what the value check below finds, because
+  // the row is now unconditionally in a changed state that must be
+  // reverted if that check fails.
+  rosterUpdated = true
+
+  const rosterValueVerified = rosterUpdateRows![0].submits_weekly_report === updates.submitsWeeklyReport
+  if (!rosterValueVerified) {
+    console.error(
+      'supabaseServiceClient: updateManagedEmployee roster update wrote the intended row, but submits_weekly_report did not match the requested value — reverting.',
+      { approvedEmployeeId: id },
+    )
+    return rollbackAndReport('roster_update_failed')
+  }
+
+  // 3) Profile row, if one exists — updated by ITS OWN id (never re-derived
+  //    from the just-changed roster row, never by email), so this can never
+  //    touch a different profile. profiles.id is never written here, so
+  //    every historical reports.manager_id keeps pointing at the exact same
+  //    row throughout.
+  if (existingProfile) {
+    const { data: profileUpdateRows, error: profileUpdateError } = await client
+      .from('profiles')
+      .update({
+        full_name: fullName,
+        email: emailNormalized,
+        role: updates.role,
+        submits_weekly_report: updates.submitsWeeklyReport,
+      })
+      .eq('id', existingProfile.id)
+      .select('id, submits_weekly_report')
+
+    if (profileUpdateError) {
+      console.error('supabaseServiceClient: updateManagedEmployee profile update failed:', profileUpdateError.message)
+      // A hard error means nothing was written to profiles (statement-level
+      // atomicity) — profileUpdated stays false. Roster HAS already changed
+      // at this point — compensate it, then Auth.
+      return rollbackAndReport('profile_update_failed')
+    }
+
+    // Same write-evidence-vs-value-verification separation as the roster
+    // update above, for exactly the same reasons.
+    const profileRowCount = profileUpdateRows?.length ?? 0
+    const profileIntendedRowReturned = profileRowCount === 1 && profileUpdateRows![0].id === existingProfile.id
+
+    if (profileRowCount === 0) {
+      console.error(
+        'supabaseServiceClient: updateManagedEmployee profile update matched zero rows — no write occurred; refusing to report success.',
+        { approvedEmployeeId: id },
+      )
+      // profileUpdated stays false: only roster and Auth (whichever
+      // actually changed) need compensating.
+      return rollbackAndReport('profile_update_failed')
+    }
+
+    if (!profileIntendedRowReturned) {
+      profileUpdated = true
+      console.error(
+        'supabaseServiceClient: updateManagedEmployee profile update ABNORMAL — matched more than one row for a single id filter. Possible duplicate id / schema-integrity issue; manual investigation is required beyond the usual rollback.',
+        { approvedEmployeeId: id, returnedRowCount: profileRowCount },
+      )
+      return rollbackAndReport('profile_update_failed')
+    }
+
+    // Exactly one row, matching existingProfile.id, was written —
+    // profileUpdated is true from this point regardless of the value check.
+    profileUpdated = true
+
+    const profileValueVerified = profileUpdateRows![0].submits_weekly_report === updates.submitsWeeklyReport
+    if (!profileValueVerified) {
+      console.error(
+        'supabaseServiceClient: updateManagedEmployee profile update wrote the intended row, but submits_weekly_report did not match the requested value — reverting.',
+        { approvedEmployeeId: id },
+      )
+      // Roster HAS already changed, and now profile has too — compensate
+      // profile, then roster, then Auth, via the same path a hard error
+      // would take.
+      return rollbackAndReport('profile_update_failed')
     }
   }
 

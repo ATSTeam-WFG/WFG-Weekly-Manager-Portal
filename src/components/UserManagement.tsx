@@ -4,6 +4,7 @@ import {
   createManagerAccount,
   createAccountForExistingEmployee,
   setUserActive,
+  updateManagedEmployee,
   type ManagedUser,
 } from '../lib/adminUserManagementService'
 import './StatusBadge.css'
@@ -11,6 +12,12 @@ import './UserManagement.css'
 
 interface UserManagementProps {
   onBack: () => void
+  // The signed-in Admin's own email — used only for the client-side
+  // self-lockout defense in depth (disabling the role field when editing
+  // your own row). The server independently re-verifies this itself from
+  // the caller's own authenticated session; this prop is never trusted as
+  // the actual safeguard.
+  currentUserEmail: string | null
 }
 
 const STATUS_LABELS: Record<ManagedUser['status'], string> = {
@@ -39,7 +46,7 @@ function createAccountPlaceholderMessage(status: string): string | null {
   }
 }
 
-export default function UserManagement({ onBack }: UserManagementProps) {
+export default function UserManagement({ onBack, currentUserEmail }: UserManagementProps) {
   const [users, setUsers] = useState<ManagedUser[]>([])
   const [loading, setLoading] = useState(true)
   // Holds the safe {code, message} from fetchManagedUsers's error outcome —
@@ -56,6 +63,16 @@ export default function UserManagement({ onBack }: UserManagementProps) {
 
   const [rowActionEmail, setRowActionEmail] = useState<string | null>(null)
   const [rowMessage, setRowMessage] = useState<{ email: string; text: string; isError: boolean } | null>(null)
+
+  // Edit Employee — identified throughout by the row's stable id, never by
+  // email (email is one of the fields being edited).
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editFullName, setEditFullName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [editRole, setEditRole] = useState<'manager' | 'admin'>('manager')
+  const [editSubmitsWeeklyReport, setEditSubmitsWeeklyReport] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editMessage, setEditMessage] = useState<{ id: string; text: string; isError: boolean } | null>(null)
 
   const loadUsers = () => {
     setLoading(true)
@@ -146,6 +163,62 @@ export default function UserManagement({ onBack }: UserManagementProps) {
     setRowMessage({ email: user.email, text: 'Could not update this user. Please try again.', isError: true })
   }
 
+  const isEditingSelf =
+    editingId !== null &&
+    !!currentUserEmail &&
+    users.find((u) => u.id === editingId)?.email.trim().toLowerCase() === currentUserEmail.trim().toLowerCase()
+
+  const handleStartEdit = (user: ManagedUser) => {
+    setEditingId(user.id)
+    setEditFullName(user.fullName)
+    setEditEmail(user.email)
+    setEditRole(user.role)
+    setEditSubmitsWeeklyReport(user.submitsWeeklyReport)
+    setEditMessage(null)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingId(null)
+    setEditMessage(null)
+  }
+
+  const handleSaveEdit = async (e: FormEvent, user: ManagedUser) => {
+    e.preventDefault()
+    setEditMessage(null)
+
+    const trimmedName = editFullName.trim()
+    const trimmedEmail = editEmail.trim()
+    if (!trimmedName || !trimmedEmail) {
+      setEditMessage({ id: user.id, text: 'A name and email are required.', isError: true })
+      return
+    }
+
+    setSavingEdit(true)
+    const outcome = await updateManagedEmployee(user.id, trimmedName, trimmedEmail, editRole, editSubmitsWeeklyReport)
+    setSavingEdit(false)
+
+    if (outcome.status === 'ok') {
+      setEditingId(null)
+      loadUsers()
+      return
+    }
+    const text =
+      outcome.status === 'not_found'
+        ? 'This employee could not be found. Please refresh and try again.'
+        : outcome.status === 'invalid_domain'
+          ? 'Only approved @wfgtitle.com email addresses can be used.'
+          : outcome.status === 'email_conflict'
+            ? 'That email address is already in use by another portal account.'
+            : outcome.status === 'self_role_change_blocked'
+              ? 'You cannot remove your own Admin access.'
+              : outcome.status === 'auth_identity_unresolved'
+                ? 'This account was created before we could safely verify its sign-in identity. Name, role, and weekly-report settings can still be edited, but the email cannot be changed until this is resolved — please contact support.'
+                : outcome.status === 'partial_failure'
+                  ? 'Something went wrong while saving this change and it may be incomplete. Do NOT retry — please contact support before making any further changes to this employee.'
+                  : 'Could not save these changes. Please try again.'
+    setEditMessage({ id: user.id, text, isError: true })
+  }
+
   return (
     <div className="user-management">
       <button type="button" className="link-btn back-link" onClick={onBack}>
@@ -215,52 +288,137 @@ export default function UserManagement({ onBack }: UserManagementProps) {
           <p className="admin-empty-state">No users found yet.</p>
         ) : (
           <ul className="user-management-list">
-            {users.map((user) => (
-              <li key={user.email} className="user-management-row">
-                <div className="user-management-row-main">
-                  <span className="user-management-name">{user.fullName}</span>
-                  <span className="user-management-email">{user.email}</span>
-                </div>
-                <span className={`status-badge role-badge role-${user.role}`}>
-                  {user.role === 'admin' ? 'Admin' : 'Manager'}
-                </span>
-                <span className={`status-badge user-status-badge user-status-${user.status}`}>
-                  {STATUS_LABELS[user.status]}
-                </span>
-                {user.submitsWeeklyReport && (
-                  <span className="status-badge submits-report-badge" title="This person submits their own weekly report">
-                    Submits Weekly Report
+            {users.map((user) =>
+              editingId === user.id ? (
+                <li key={user.id} className="user-management-row user-management-row-editing">
+                  <form className="user-management-edit-form" onSubmit={(e) => handleSaveEdit(e, user)}>
+                    <div className="user-management-edit-fields">
+                      <div className="user-management-field">
+                        <label className="login-label" htmlFor={`edit-full-name-${user.id}`}>
+                          Full Name
+                        </label>
+                        <input
+                          id={`edit-full-name-${user.id}`}
+                          type="text"
+                          className="login-input"
+                          value={editFullName}
+                          onChange={(e) => setEditFullName(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="user-management-field">
+                        <label className="login-label" htmlFor={`edit-email-${user.id}`}>
+                          Email
+                        </label>
+                        <input
+                          id={`edit-email-${user.id}`}
+                          type="email"
+                          className="login-input"
+                          value={editEmail}
+                          onChange={(e) => setEditEmail(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="user-management-field">
+                        <label className="login-label" htmlFor={`edit-role-${user.id}`}>
+                          Portal Role
+                        </label>
+                        <select
+                          id={`edit-role-${user.id}`}
+                          className="login-input"
+                          value={editRole}
+                          onChange={(e) => setEditRole(e.target.value as 'manager' | 'admin')}
+                          disabled={isEditingSelf}
+                        >
+                          <option value="manager">Manager</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                        {isEditingSelf && (
+                          <span className="user-management-field-note">You cannot change your own role.</span>
+                        )}
+                      </div>
+                      <div className="user-management-field user-management-field-checkbox">
+                        <label className="login-label" htmlFor={`edit-submits-${user.id}`}>
+                          <input
+                            id={`edit-submits-${user.id}`}
+                            type="checkbox"
+                            checked={editSubmitsWeeklyReport}
+                            onChange={(e) => setEditSubmitsWeeklyReport(e.target.checked)}
+                          />
+                          Submits Weekly Report
+                        </label>
+                      </div>
+                    </div>
+                    {editMessage && editMessage.id === user.id && (
+                      <p className={editMessage.isError ? 'user-management-message-error' : 'user-management-message-success'}>
+                        {editMessage.text}
+                      </p>
+                    )}
+                    <div className="user-management-edit-actions">
+                      <button type="submit" className="btn btn-primary" disabled={savingEdit}>
+                        {savingEdit ? 'Saving…' : 'Save Changes'}
+                      </button>
+                      <button type="button" className="btn btn-secondary" onClick={handleCancelEdit} disabled={savingEdit}>
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                </li>
+              ) : (
+                <li key={user.id} className="user-management-row">
+                  <div className="user-management-row-main">
+                    <span className="user-management-name">{user.fullName}</span>
+                    <span className="user-management-email">{user.email}</span>
+                  </div>
+                  <span className={`status-badge role-badge role-${user.role}`}>
+                    {user.role === 'admin' ? 'Admin' : 'Manager'}
                   </span>
-                )}
-                <div className="user-management-row-actions">
-                  {user.status === 'pending' && (
+                  <span className={`status-badge user-status-badge user-status-${user.status}`}>
+                    {STATUS_LABELS[user.status]}
+                  </span>
+                  {user.submitsWeeklyReport && (
+                    <span className="status-badge submits-report-badge" title="This person submits their own weekly report">
+                      Submits Weekly Report
+                    </span>
+                  )}
+                  <div className="user-management-row-actions">
+                    {user.status === 'pending' && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={rowActionEmail === user.email}
+                        onClick={() => handleCreateAccountForExisting(user)}
+                      >
+                        Create Account
+                      </button>
+                    )}
+                    {user.role === 'manager' && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={rowActionEmail === user.email}
+                        onClick={() => handleToggleActive(user)}
+                      >
+                        {user.status === 'inactive' ? 'Reactivate' : 'Deactivate'}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn-secondary"
                       disabled={rowActionEmail === user.email}
-                      onClick={() => handleCreateAccountForExisting(user)}
+                      onClick={() => handleStartEdit(user)}
                     >
-                      Create Account
+                      Edit
                     </button>
+                  </div>
+                  {rowMessage && rowMessage.email === user.email && (
+                    <p className={rowMessage.isError ? 'user-management-message-error' : 'user-management-message-success'}>
+                      {rowMessage.text}
+                    </p>
                   )}
-                  {user.role === 'manager' && (
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={rowActionEmail === user.email}
-                      onClick={() => handleToggleActive(user)}
-                    >
-                      {user.status === 'inactive' ? 'Reactivate' : 'Deactivate'}
-                    </button>
-                  )}
-                </div>
-                {rowMessage && rowMessage.email === user.email && (
-                  <p className={rowMessage.isError ? 'user-management-message-error' : 'user-management-message-success'}>
-                    {rowMessage.text}
-                  </p>
-                )}
-              </li>
-            ))}
+                </li>
+              ),
+            )}
           </ul>
         )}
       </div>

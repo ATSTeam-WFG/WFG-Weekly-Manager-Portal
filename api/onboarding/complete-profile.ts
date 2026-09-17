@@ -93,6 +93,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return sendError(res, 403, 'NOT_APPROVED', 'This account is not approved for portal access.')
     }
 
+    // Defensive consistency check only — never blocks or redesigns this
+    // flow. approved_employees.auth_user_id (set at Create Account time,
+    // see createAccountAndMarkRoster) should always equal the id of the
+    // person actually completing onboarding for this same roster row; if
+    // it's set and somehow disagrees, that's worth surfacing loudly for
+    // investigation, but this endpoint's own authority for "who is this"
+    // remains userData.user.id from their own verified session — never
+    // employee.authUserId, which is not used to make any decision here.
+    if (employee.authUserId && employee.authUserId !== userData.user.id) {
+      console.error(
+        'complete-profile: identity mismatch — approved_employees.auth_user_id does not match the authenticated user completing onboarding.',
+        { approvedEmployeeId: employee.id, expectedAuthUserId: employee.authUserId, actualAuthUserId: userData.user.id },
+      )
+    }
+
     const created = await createProfileFromApprovedEmployee(userData.user.id, employee)
     if (!created) {
       return sendError(res, 500, 'PROFILE_CREATION_FAILED', 'Could not finish setting up your account.')

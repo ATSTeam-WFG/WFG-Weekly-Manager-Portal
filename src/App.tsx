@@ -508,7 +508,7 @@ function App() {
         ) : reportsAnalyticsOpen ? (
           <ReportsAnalytics onBack={() => setReportsAnalyticsOpen(false)} />
         ) : userManagementOpen ? (
-          <UserManagement onBack={() => setUserManagementOpen(false)} />
+          <UserManagement onBack={() => setUserManagementOpen(false)} currentUserEmail={userEmail} />
         ) : (
           <AdminDashboard
             week={adminWeek}

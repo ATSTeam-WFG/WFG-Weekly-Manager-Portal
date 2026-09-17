@@ -6,9 +6,11 @@ import {
   isWfgEmail,
   decideCreateManagerAccountAction,
   decideCreateAccountForExistingAction,
+  decideUpdateEmployeeAction,
   deriveManagedUserStatus,
   type RosterEntrySnapshot,
   type ProfileSnapshot,
+  type EmployeeRecordSnapshot,
 } from './adminUserManagement.ts'
 
 const PENDING_MANAGER: RosterEntrySnapshot = { portalRole: 'manager', isActive: true, accountCreated: false }
@@ -129,6 +131,99 @@ describe('decideCreateAccountForExistingAction', () => {
 
   test('an account already created (awaiting first login, no profile yet) -> already_created, never re-created', () => {
     assert.deepEqual(decideCreateAccountForExistingAction(CREATED_MANAGER, null), { action: 'already_created' })
+  })
+})
+
+describe('decideUpdateEmployeeAction', () => {
+  const MANAGER_TARGET: EmployeeRecordSnapshot = { id: 'row-1', emailNormalized: 'jane@wfgtitle.com', portalRole: 'manager' }
+  const ADMIN_TARGET: EmployeeRecordSnapshot = { id: 'row-2', emailNormalized: 'gene@wfgtitle.com', portalRole: 'admin' }
+
+  test('no target row for the given id -> not_found, regardless of the request', () => {
+    assert.deepEqual(
+      decideUpdateEmployeeAction(null, { emailNormalized: 'jane@wfgtitle.com', portalRole: 'manager' }, false, false),
+      { action: 'not_found' },
+    )
+  })
+
+  test('a non-WFG new email is rejected regardless of every other input', () => {
+    assert.deepEqual(
+      decideUpdateEmployeeAction(MANAGER_TARGET, { emailNormalized: 'jane@example.com', portalRole: 'manager' }, false, false),
+      { action: 'invalid_domain' },
+    )
+  })
+
+  test('name-only edit (email/role unchanged) -> update', () => {
+    assert.deepEqual(
+      decideUpdateEmployeeAction(MANAGER_TARGET, { emailNormalized: MANAGER_TARGET.emailNormalized, portalRole: 'manager' }, false, false),
+      { action: 'update' },
+    )
+  })
+
+  test('email changed to a new, non-conflicting WFG address -> update (email edit, whether or not an Auth account exists yet is an I/O concern, not this decision)', () => {
+    assert.deepEqual(
+      decideUpdateEmployeeAction(MANAGER_TARGET, { emailNormalized: 'jane.new@wfgtitle.com', portalRole: 'manager' }, false, false),
+      { action: 'update' },
+    )
+  })
+
+  test('duplicate email rejection: the new email is already used by a DIFFERENT roster row -> email_conflict', () => {
+    assert.deepEqual(
+      decideUpdateEmployeeAction(MANAGER_TARGET, { emailNormalized: 'gene@wfgtitle.com', portalRole: 'manager' }, true, false),
+      { action: 'email_conflict' },
+    )
+  })
+
+  test('role change manager -> admin, not self -> update', () => {
+    assert.deepEqual(
+      decideUpdateEmployeeAction(MANAGER_TARGET, { emailNormalized: MANAGER_TARGET.emailNormalized, portalRole: 'admin' }, false, false),
+      { action: 'update' },
+    )
+  })
+
+  test('role change admin -> manager, not self -> update (no self involved, so no lockout concern)', () => {
+    assert.deepEqual(
+      decideUpdateEmployeeAction(ADMIN_TARGET, { emailNormalized: ADMIN_TARGET.emailNormalized, portalRole: 'manager' }, false, false),
+      { action: 'update' },
+    )
+  })
+
+  test('Admin + submits-weekly-report is a valid combination — submitsWeeklyReport is not even part of this decision, so role alone (admin, unchanged) -> update', () => {
+    assert.deepEqual(
+      decideUpdateEmployeeAction(ADMIN_TARGET, { emailNormalized: ADMIN_TARGET.emailNormalized, portalRole: 'admin' }, false, false),
+      { action: 'update' },
+    )
+  })
+
+  test('self-lockout: the acting admin editing their OWN row and changing role away from admin -> self_role_change_blocked', () => {
+    assert.deepEqual(
+      decideUpdateEmployeeAction(ADMIN_TARGET, { emailNormalized: ADMIN_TARGET.emailNormalized, portalRole: 'manager' }, false, true),
+      { action: 'self_role_change_blocked' },
+    )
+  })
+
+  test('self-edit that KEEPS role as admin is allowed — the guard only blocks actually removing your own admin access', () => {
+    assert.deepEqual(
+      decideUpdateEmployeeAction(ADMIN_TARGET, { emailNormalized: ADMIN_TARGET.emailNormalized, portalRole: 'admin' }, false, true),
+      { action: 'update' },
+    )
+  })
+
+  test('self-lockout is checked before email_conflict — a self-demotion is rejected as self_role_change_blocked even if the email would also conflict', () => {
+    assert.deepEqual(
+      decideUpdateEmployeeAction(ADMIN_TARGET, { emailNormalized: 'jane@wfgtitle.com', portalRole: 'manager' }, true, true),
+      { action: 'self_role_change_blocked' },
+    )
+  })
+
+  test('stable-id targeting: the decision only ever looks at the target snapshot passed in — the caller is responsible for resolving it by id, never by the request email', () => {
+    // Two different targets sharing no fields but id/emailNormalized/portalRole
+    // still produce identical decisions for identical requests — proving
+    // nothing here depends on any client-supplied identity beyond `target`.
+    const otherManager: EmployeeRecordSnapshot = { id: 'row-99', emailNormalized: 'other@wfgtitle.com', portalRole: 'manager' }
+    assert.deepEqual(
+      decideUpdateEmployeeAction(otherManager, { emailNormalized: otherManager.emailNormalized, portalRole: 'manager' }, false, false),
+      { action: 'update' },
+    )
   })
 })
 
