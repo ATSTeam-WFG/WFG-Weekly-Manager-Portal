@@ -32,9 +32,9 @@ function secondsFrom(iso: string, offsetSeconds: number): Date {
 }
 
 describe('cutoff constant matches the approved business rule', () => {
-  test('the single edit cutoff is 3:30 PM — there is no longer a separate, earlier new-report cutoff', () => {
-    assert.equal(EDIT_CUTOFF_HOUR, 15)
-    assert.equal(EDIT_CUTOFF_MINUTE, 30)
+  test('the single edit cutoff is 4:00 PM — there is no longer a separate, earlier new-report cutoff', () => {
+    assert.equal(EDIT_CUTOFF_HOUR, 16)
+    assert.equal(EDIT_CUTOFF_MINUTE, 0)
   })
 })
 
@@ -55,38 +55,38 @@ for (const [label, base] of [
       assert.equal(getManagerWriteLockReason(false, t), null)
     })
 
-    test('Friday 2:59 PM: Not Started (new report) is allowed, same as an existing report', () => {
-      const t = minutesFrom(base, -1)
+    test('Friday 2:59:59 PM: Not Started (new report) is allowed, same as an existing report', () => {
+      const t = secondsFrom(base, -1) // exactly 2:59:59 PM
       assert.equal(getManagerWriteLockReason(true, t), null)
       assert.equal(getManagerWriteLockReason(false, t), null)
     })
 
-    test('Friday exactly 3:00 PM: Not Started (new report) is now ALLOWED — the grace period begins, same as an existing report', () => {
+    test('Friday exactly 3:00:00 PM: Not Started (new report) is now ALLOWED — the grace period begins, same as an existing report', () => {
       const t = new Date(base)
       assert.equal(getManagerWriteLockReason(true, t), null)
       assert.equal(getManagerWriteLockReason(false, t), null)
     })
 
-    test('Friday 3:15 PM: Not Started (new report) remains allowed, same as an existing report', () => {
-      const t = minutesFrom(base, 15)
-      assert.equal(getManagerWriteLockReason(true, t), null)
-      assert.equal(getManagerWriteLockReason(false, t), null)
-    })
-
-    test('Friday 3:29:59 PM (last instant of the grace period): Not Started (new report) is still allowed, same as an existing report', () => {
-      const t = secondsFrom(base, 29 * 60 + 59) // exactly 3:29:59 PM
-      assert.equal(getManagerWriteLockReason(true, t), null)
-      assert.equal(getManagerWriteLockReason(false, t), null)
-    })
-
-    test('Friday exactly 3:30 PM: BOTH a brand-new report and an existing report are edit_locked — one single cutoff', () => {
+    test('Friday exactly 3:30:00 PM: still editable — the old 3:30 PM cutoff no longer applies', () => {
       const t = minutesFrom(base, 30)
+      assert.equal(getManagerWriteLockReason(true, t), null)
+      assert.equal(getManagerWriteLockReason(false, t), null)
+    })
+
+    test('Friday exactly 3:59:59 PM (last instant of the grace period): Not Started (new report) is still allowed, same as an existing report', () => {
+      const t = secondsFrom(base, 59 * 60 + 59) // exactly 3:59:59 PM
+      assert.equal(getManagerWriteLockReason(true, t), null)
+      assert.equal(getManagerWriteLockReason(false, t), null)
+    })
+
+    test('Friday exactly 4:00:00 PM: BOTH a brand-new report and an existing report are edit_locked — one single cutoff', () => {
+      const t = minutesFrom(base, 60)
       assert.equal(getManagerWriteLockReason(true, t), 'edit_locked')
       assert.equal(getManagerWriteLockReason(false, t), 'edit_locked')
     })
 
-    test('Friday after 3:30 PM: both remain edit_locked', () => {
-      const t = minutesFrom(base, 90)
+    test('Friday after 4:00 PM: both remain edit_locked', () => {
+      const t = minutesFrom(base, 120)
       assert.equal(getManagerWriteLockReason(true, t), 'edit_locked')
       assert.equal(getManagerWriteLockReason(false, t), 'edit_locked')
     })
@@ -125,12 +125,12 @@ describe('MANAGER_WRITE_LOCK_MESSAGES', () => {
 // still shows 'draft' (they had the form open before 3:00 PM), the Friday
 // auto-submit already flipped the database row to 'submitted' in the
 // background, and the manager saves their edits sometime between 3:00 and
-// 3:30 PM (still within the allowed editing window). The save must persist
+// 4:00 PM (still within the allowed editing window). The save must persist
 // their content — expressed here as "use a content-only update, never an
 // upsert that would set status" — while status remains 'submitted', never
 // regressing to 'draft'.
 describe('resolveSaveStatus — stale local draft vs. already-submitted database row', () => {
-  test('stale local draft + database already submitted + edit between 3:00 and 3:30 -> content saved, status stays submitted', () => {
+  test('stale local draft + database already submitted + edit between 3:00 and 4:00 -> content saved, status stays submitted', () => {
     const resolution = resolveSaveStatus('draft', false, 'submitted')
     assert.equal(resolution.mode, 'content-only', 'must persist content without touching status/submitted_at/submission_source')
     assert.equal(resolution.status, 'submitted', 'status must remain submitted, never regress to draft')

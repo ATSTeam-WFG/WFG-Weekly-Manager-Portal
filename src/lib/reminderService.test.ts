@@ -73,14 +73,13 @@ describe('buildFridayReminderEmail', () => {
     assert.doesNotMatch(content.subject, /4:00 PM/)
   })
 
-  test('draft-status body mentions the 3:00 PM auto-submit and the 3:30 PM edit window', () => {
+  test('draft-status body mentions the 3:00 PM auto-submit and the 4:00 PM edit window', () => {
     const content = buildFridayReminderEmail(
       { id: 'a', fullName: 'Jane Manager', email: 'jane@example.com', status: 'draft' },
       WEEK,
     )
     assert.match(content.body, /3:00 PM ET/)
-    assert.match(content.body, /3:30 PM ET/)
-    assert.doesNotMatch(content.body, /4:00 PM/)
+    assert.match(content.body, /4:00 PM ET/)
   })
 
   test('not_started-status body never claims the (nonexistent) report will be auto-submitted', () => {

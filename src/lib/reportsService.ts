@@ -112,8 +112,8 @@ export async function updateReportSectionsV2(
   sections: ManagerReportSectionsV2,
 ): Promise<void> {
   // Editing an existing report (whether a saved draft or an already-
-  // submitted one) is never a "new report" — the 3:30 PM edit cutoff always
-  // applies here, never the earlier 3:00 PM new-report cutoff.
+  // submitted one) is never a "new report" — the single 4:00 PM edit cutoff
+  // always applies here (see managerEditLock.ts).
   assertNotLocked(false)
 
   const { error } = await supabase
@@ -144,10 +144,11 @@ export async function updateReportSectionsV2(
 // manager/week (the caller's status was 'not_started' before this call) —
 // the caller (App.tsx) already tracks this and must pass it accurately,
 // since this function's own upsert can't distinguish "creating" from
-// "continuing a draft" without an extra read. Determines which cutoff
-// applies: false gets the later 3:30 PM edit cutoff (continuing a draft, or
-// a first-time submit of an already-drafted report), true gets the earlier
-// 3:00 PM new-report cutoff.
+// "continuing a draft" without an extra read. No longer affects which
+// cutoff applies (a new report and an existing one now share the same
+// single 4:00 PM edit cutoff — see managerEditLock.ts) — still needed here
+// for the stale-draft reconciliation below, which must only ever run for an
+// existing report.
 //
 // Returns the status actually persisted — normally identical to the
 // requested `status`, but see the stale-draft reconciliation below for the

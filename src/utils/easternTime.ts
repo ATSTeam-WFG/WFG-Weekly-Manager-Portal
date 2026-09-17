@@ -83,8 +83,10 @@ export function isInEasternActionWindow(
 // always false (well before this week's own Friday cutoff); the cutoff
 // naturally "resets" to false again once the following Monday's new
 // reporting week begins, since that's a different week's Friday entirely.
-// Used for the Manager-editing lock (3:00 PM / 3:30 PM ET), which must stay
-// in effect through the weekend rather than only during a narrow window.
+// Used for the Manager-editing lock (single cutoff, currently 4:00 PM ET —
+// see managerEditLock.ts's EDIT_CUTOFF_HOUR/MINUTE) and for the Dashboard's
+// 3:00 PM "late edit window" notice threshold — both must stay in effect
+// through the weekend rather than only during a narrow window.
 export function isPastEasternCutoff(targetHour: number, targetMinute: number, now: Date = new Date()): boolean {
   const parts = getEasternParts(now)
 

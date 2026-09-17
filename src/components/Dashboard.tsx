@@ -57,16 +57,18 @@ export default function Dashboard({
   // stability, even though a new vs. existing report no longer changes the
   // lock decision itself — see managerEditLock.ts.
   const isNewReport = status === 'not_started'
-  // null = fully open; 'edit_locked' = past 3:30 PM, nothing can be written
+  // null = fully open; 'edit_locked' = past 4:00 PM, nothing can be written
   // regardless of status (new or existing). See src/lib/managerEditLock.ts
   // for the shared decision logic — the same function the service-layer
   // guard and (independently) the database trigger use, so all three layers
   // agree on the same instant.
   const lockReason = getManagerWriteLockReason(isNewReport)
   // Shown for EVERY status, including Not Started — a manager who starts
-  // their report during the 3:00-3:29 PM grace period needs the same
-  // "until 3:30 PM ET" notice an existing draft already gets, since the
-  // same single cutoff now applies to both.
+  // their report during the 3:00-3:59 PM grace period needs the same
+  // "until 4:00 PM ET" notice an existing draft already gets, since the
+  // same single cutoff now applies to both. The 3:00 PM threshold here is
+  // the START of that window (unchanged) — only the final lock at the end
+  // of the window moved from 3:30 PM to 4:00 PM.
   const inLateEditWindow = lockReason === null && isPastEasternCutoff(15, 0)
 
   const actionLabel =
@@ -140,7 +142,7 @@ export default function Dashboard({
             <button className="btn btn-primary btn-large" onClick={onAction}>
               {actionLabel}
             </button>
-            {inLateEditWindow && <p className="hero-late-window-notice">You can still edit this report until 3:30 PM ET.</p>}
+            {inLateEditWindow && <p className="hero-late-window-notice">You can still edit this report until 4:00 PM ET.</p>}
           </>
         )}
 

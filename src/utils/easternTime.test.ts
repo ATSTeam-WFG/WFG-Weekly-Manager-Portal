@@ -133,11 +133,12 @@ describe('isInEasternActionWindow — non-Friday guard', () => {
   })
 })
 
-// isPastEasternCutoff backs the Manager-editing lock (3:00 PM = no new
-// report; 3:30 PM = fully locked). Exhaustive boundary coverage per the
-// approved test list: 11:59 AM, 12:00 PM, 2:59 PM, exactly 3:00 PM,
-// 3:00-3:29, exactly 3:30 PM, after 3:30 PM, Saturday, Sunday, Monday/new
-// week — each checked for both EST and EDT.
+// isPastEasternCutoff backs the Manager-editing lock (single cutoff,
+// currently 4:00 PM ET — see managerEditLock.ts) and the 3:00 PM "late edit
+// window" notice threshold. Exhaustive boundary coverage per the approved
+// test list: 11:59 AM, 12:00 PM, 2:59 PM, exactly 3:00 PM, 3:00-3:59,
+// exactly 4:00 PM, after 4:00 PM, Saturday, Sunday, Monday/new week — each
+// checked for both EST and EDT.
 describe('isPastEasternCutoff — EST (January)', () => {
   test('Friday 11:59 AM is before the 3:00 PM cutoff', () => {
     assert.equal(isPastEasternCutoff(15, 0, minutesFrom(EST_NOON_UTC, -1)), false)
@@ -151,31 +152,31 @@ describe('isPastEasternCutoff — EST (January)', () => {
   test('Friday exactly 3:00 PM has reached the 3:00 PM cutoff', () => {
     assert.equal(isPastEasternCutoff(15, 0, new Date(EST_3PM_UTC)), true)
   })
-  test('Friday 3:00-3:29 PM has reached the 3:00 PM cutoff but not the 3:30 PM cutoff', () => {
+  test('Friday 3:00-3:59 PM has reached the 3:00 PM cutoff but not the 4:00 PM cutoff', () => {
     const at315 = minutesFrom(EST_3PM_UTC, 15)
     assert.equal(isPastEasternCutoff(15, 0, at315), true)
-    assert.equal(isPastEasternCutoff(15, 30, at315), false)
+    assert.equal(isPastEasternCutoff(16, 0, at315), false)
   })
-  test('Friday exactly 3:30 PM has reached the 3:30 PM cutoff', () => {
-    assert.equal(isPastEasternCutoff(15, 30, minutesFrom(EST_3PM_UTC, 30)), true)
+  test('Friday exactly 4:00 PM has reached the 4:00 PM cutoff', () => {
+    assert.equal(isPastEasternCutoff(16, 0, minutesFrom(EST_3PM_UTC, 60)), true)
   })
-  test('Friday after 3:30 PM has reached the 3:30 PM cutoff', () => {
-    assert.equal(isPastEasternCutoff(15, 30, minutesFrom(EST_3PM_UTC, 90)), true)
+  test('Friday after 4:00 PM has reached the 4:00 PM cutoff', () => {
+    assert.equal(isPastEasternCutoff(16, 0, minutesFrom(EST_3PM_UTC, 120)), true)
   })
   test('Saturday (the day after) is past both cutoffs', () => {
     const saturday = minutesFrom(EST_3PM_UTC, 24 * 60) // Fri 3pm + 24h = Saturday 3pm EST
     assert.equal(isPastEasternCutoff(15, 0, saturday), true)
-    assert.equal(isPastEasternCutoff(15, 30, saturday), true)
+    assert.equal(isPastEasternCutoff(16, 0, saturday), true)
   })
   test('Sunday is past both cutoffs', () => {
     const sunday = minutesFrom(EST_3PM_UTC, 2 * 24 * 60)
     assert.equal(isPastEasternCutoff(15, 0, sunday), true)
-    assert.equal(isPastEasternCutoff(15, 30, sunday), true)
+    assert.equal(isPastEasternCutoff(16, 0, sunday), true)
   })
   test('Monday (the new reporting week) is before both cutoffs again', () => {
     const monday = minutesFrom(EST_3PM_UTC, 3 * 24 * 60)
     assert.equal(isPastEasternCutoff(15, 0, monday), false)
-    assert.equal(isPastEasternCutoff(15, 30, monday), false)
+    assert.equal(isPastEasternCutoff(16, 0, monday), false)
   })
 })
 
@@ -192,31 +193,31 @@ describe('isPastEasternCutoff — EDT (July)', () => {
   test('Friday exactly 3:00 PM has reached the 3:00 PM cutoff', () => {
     assert.equal(isPastEasternCutoff(15, 0, new Date(EDT_3PM_UTC)), true)
   })
-  test('Friday 3:00-3:29 PM has reached the 3:00 PM cutoff but not the 3:30 PM cutoff', () => {
+  test('Friday 3:00-3:59 PM has reached the 3:00 PM cutoff but not the 4:00 PM cutoff', () => {
     const at315 = minutesFrom(EDT_3PM_UTC, 15)
     assert.equal(isPastEasternCutoff(15, 0, at315), true)
-    assert.equal(isPastEasternCutoff(15, 30, at315), false)
+    assert.equal(isPastEasternCutoff(16, 0, at315), false)
   })
-  test('Friday exactly 3:30 PM has reached the 3:30 PM cutoff', () => {
-    assert.equal(isPastEasternCutoff(15, 30, minutesFrom(EDT_3PM_UTC, 30)), true)
+  test('Friday exactly 4:00 PM has reached the 4:00 PM cutoff', () => {
+    assert.equal(isPastEasternCutoff(16, 0, minutesFrom(EDT_3PM_UTC, 60)), true)
   })
-  test('Friday after 3:30 PM has reached the 3:30 PM cutoff', () => {
-    assert.equal(isPastEasternCutoff(15, 30, minutesFrom(EDT_3PM_UTC, 90)), true)
+  test('Friday after 4:00 PM has reached the 4:00 PM cutoff', () => {
+    assert.equal(isPastEasternCutoff(16, 0, minutesFrom(EDT_3PM_UTC, 120)), true)
   })
   test('Saturday is past both cutoffs', () => {
     const saturday = minutesFrom(EDT_3PM_UTC, 24 * 60)
     assert.equal(isPastEasternCutoff(15, 0, saturday), true)
-    assert.equal(isPastEasternCutoff(15, 30, saturday), true)
+    assert.equal(isPastEasternCutoff(16, 0, saturday), true)
   })
   test('Sunday is past both cutoffs', () => {
     const sunday = minutesFrom(EDT_3PM_UTC, 2 * 24 * 60)
     assert.equal(isPastEasternCutoff(15, 0, sunday), true)
-    assert.equal(isPastEasternCutoff(15, 30, sunday), true)
+    assert.equal(isPastEasternCutoff(16, 0, sunday), true)
   })
   test('Monday (the new reporting week) is before both cutoffs again', () => {
     const monday = minutesFrom(EDT_3PM_UTC, 3 * 24 * 60)
     assert.equal(isPastEasternCutoff(15, 0, monday), false)
-    assert.equal(isPastEasternCutoff(15, 30, monday), false)
+    assert.equal(isPastEasternCutoff(16, 0, monday), false)
   })
 })
 
@@ -224,6 +225,6 @@ describe('isPastEasternCutoff — non-Friday/Sat/Sun guard', () => {
   test('Monday through Thursday, at a time-of-day that would be past cutoff on Friday, is false', () => {
     const thursday4pm = new Date(new Date(THURSDAY_NOON_EST_UTC).getTime() + 4 * 60 * 60_000)
     assert.equal(isPastEasternCutoff(15, 0, thursday4pm), false)
-    assert.equal(isPastEasternCutoff(15, 30, thursday4pm), false)
+    assert.equal(isPastEasternCutoff(16, 0, thursday4pm), false)
   })
 })

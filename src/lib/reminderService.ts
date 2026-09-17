@@ -36,7 +36,7 @@ export function buildFridayReminderEmail(target: ReminderTarget, week: Reporting
 
   const statusParagraph =
     target.status === 'draft'
-      ? `You have a draft saved for the week of ${week.label}, but it hasn't been submitted yet. If it's still not submitted by 3:00 PM ET today, it will be automatically submitted for you using what you've saved so far — you'll still be able to edit it until 3:30 PM ET.`
+      ? `You have a draft saved for the week of ${week.label}, but it hasn't been submitted yet. If it's still not submitted by 3:00 PM ET today, it will be automatically submitted for you using what you've saved so far — you'll still be able to edit it until 4:00 PM ET.`
       : `Your Weekly Manager Report for the week of ${week.label} hasn't been started yet. Reports that haven't been started are not automatically submitted, so please start and submit yours manually before the deadline.`
 
   const body = [
