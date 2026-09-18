@@ -28,6 +28,16 @@ interface ReportFormProps {
   onSubmit: (data: ManagerReportSectionsV2) => void
   isEditingSubmitted?: boolean
   onSaveChanges?: (data: ManagerReportSectionsV2) => void
+  // True only while a Submit is in flight (onSubmit was called and hasn't
+  // resolved yet) — disables the Submit button so a second click can never
+  // fire a duplicate submission, and shows a "Submitting…" label.
+  isSubmitting?: boolean
+  // Set only when a genuine Submit attempt failed for a reason other than
+  // the Friday-cutoff guard (that has its own lockMessage) — e.g. a
+  // network/Supabase error. Distinct from this component's own client-side
+  // validation message below. The manager's entered content in `data` is
+  // never touched by this — they can simply retry.
+  submitFailureMessage?: string | null
 }
 
 const LEGACY_SECTIONS: { key: keyof ReportSections; title: string }[] = [
@@ -55,6 +65,8 @@ export default function ReportForm({
   onSubmit,
   isEditingSubmitted = false,
   onSaveChanges,
+  isSubmitting = false,
+  submitFailureMessage = null,
 }: ReportFormProps) {
   const [data, setData] = useState<ManagerReportSectionsV2>(initialData)
   const [savedMessage, setSavedMessage] = useState(false)
@@ -109,6 +121,10 @@ export default function ReportForm({
   }
 
   const handleSubmitClick = () => {
+    // Defense-in-depth alongside disabling the button below: a second
+    // click that somehow still fires (e.g. a queued event) can never start
+    // a duplicate submission while one is already in flight.
+    if (isSubmitting) return
     if (!isWhatMattersNowValidForSubmit(data.whatMattersNow)) {
       setSubmitError('"01 — What Matters Now" needs 2–3 meaningful items before you can submit.')
       setSavedMessage(false)
@@ -281,6 +297,7 @@ export default function ReportForm({
       </div>
 
       {lockMessage && <p className="voice-error-message report-lock-message">{lockMessage}</p>}
+      {submitFailureMessage && <p className="voice-error-message report-lock-message">{submitFailureMessage}</p>}
 
       <div className="report-form-actions">
         {savedMessage && <span className="saved-message">{isEditingSubmitted ? 'Changes saved' : 'Draft saved'}</span>}
@@ -290,11 +307,11 @@ export default function ReportForm({
           </button>
         ) : (
           <>
-            <button className="btn btn-secondary" onClick={handleSave}>
+            <button className="btn btn-secondary" onClick={handleSave} disabled={isSubmitting}>
               Save Draft
             </button>
-            <button className="btn btn-primary" onClick={handleSubmitClick}>
-              Submit Report
+            <button className="btn btn-primary" onClick={handleSubmitClick} disabled={isSubmitting}>
+              {isSubmitting ? 'Submitting…' : 'Submit Report'}
             </button>
           </>
         )}

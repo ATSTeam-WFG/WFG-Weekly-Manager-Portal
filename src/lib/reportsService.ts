@@ -31,9 +31,20 @@ interface WeekReport {
   submittedAt: string | null
 }
 
+// A genuine "no report exists yet" result and "the query itself failed"
+// must never be collapsed into the same value — a caller that only checks
+// for a falsy/null return can't tell them apart, which is exactly what
+// previously let a failed fetch render as "Not Started" instead of a
+// distinct, non-destructive error state. See App.tsx's finishSigningIn and
+// Dashboard.tsx's statusLoadError handling for how each outcome is used.
+export type FetchWeekReportOutcome =
+  | { status: 'found'; report: WeekReport }
+  | { status: 'not_found' }
+  | { status: 'error' }
+
 const REPORT_CONTENT_COLUMNS = `status, ${REPORT_CONTENT_COLUMNS_BASE}, submitted_at`
 
-export async function fetchWeekReport(managerId: string, weekStartDate: string): Promise<WeekReport | null> {
+export async function fetchWeekReport(managerId: string, weekStartDate: string): Promise<FetchWeekReportOutcome> {
   const { data, error } = await supabase
     .from('reports')
     .select(REPORT_CONTENT_COLUMNS)
@@ -43,14 +54,17 @@ export async function fetchWeekReport(managerId: string, weekStartDate: string):
 
   if (error) {
     console.error('Failed to fetch report from Supabase:', error.message)
-    return null
+    return { status: 'error' }
   }
-  if (!data) return null
+  if (!data) return { status: 'not_found' }
 
   return {
-    status: data.status,
-    content: rowToContent(data),
-    submittedAt: data.submitted_at,
+    status: 'found',
+    report: {
+      status: data.status,
+      content: rowToContent(data),
+      submittedAt: data.submitted_at,
+    },
   }
 }
 

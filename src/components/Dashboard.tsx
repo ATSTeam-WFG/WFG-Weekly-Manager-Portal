@@ -11,6 +11,13 @@ interface DashboardProps {
   status: ReportStatus
   managerId: string
   statusLoaded: boolean
+  // True only when the most recent fetch of this manager/week's report
+  // genuinely failed (a Supabase/network error) — never true for a real
+  // "no report exists yet" result. Checked before `status` is used for
+  // anything in the hero card below, so a failed fetch can never render as
+  // "Not Started": `status` may still hold a stale or default value, but
+  // it's never trusted while this is true.
+  statusLoadError: boolean
   reminderDismissed: boolean
   onDismissReminder: () => void
   onStart: () => void
@@ -23,6 +30,7 @@ export default function Dashboard({
   status,
   managerId,
   statusLoaded,
+  statusLoadError,
   reminderDismissed,
   onDismissReminder,
   onStart,
@@ -83,7 +91,8 @@ export default function Dashboard({
     status === 'not_started' ? 'Start Report' : status === 'draft' ? 'Continue Draft' : 'Edit Submitted Report'
   const onAction = status === 'not_started' ? onStart : status === 'draft' ? onContinue : onEditSubmitted
 
-  const showReminder = lockReason === null && statusLoaded && !reminderDismissed && status !== 'submitted'
+  const showReminder =
+    lockReason === null && statusLoaded && !statusLoadError && !reminderDismissed && status !== 'submitted'
 
   return (
     <div className="dashboard">
@@ -131,7 +140,10 @@ export default function Dashboard({
       <div className="hero-card">
         <div className="hero-card-top">
           <span className="hero-week-label">This Week&apos;s Report</span>
-          <StatusBadge status={status} />
+          {/* Suppressed on a load failure — `status` may still hold a
+              stale or default value, and showing it (even "Not Started")
+              would misrepresent an unknown status as a known one. */}
+          {!statusLoadError && <StatusBadge status={status} />}
         </div>
 
         <div className="hero-deadline-block">
@@ -143,7 +155,9 @@ export default function Dashboard({
           </span>
         </div>
 
-        {lockReason ? (
+        {statusLoadError ? (
+          <p className="hero-lock-message">We couldn&apos;t load your report status. Please refresh and try again.</p>
+        ) : lockReason ? (
           <p className="hero-lock-message">{MANAGER_WRITE_LOCK_MESSAGES[lockReason]}</p>
         ) : (
           <>
@@ -154,7 +168,7 @@ export default function Dashboard({
           </>
         )}
 
-        {!lockReason && <p className="hero-tip">Tip: Check in with your team before submitting this report.</p>}
+        {!lockReason && !statusLoadError && <p className="hero-tip">Tip: Check in with your team before submitting this report.</p>}
       </div>
 
       <div className="history-card">

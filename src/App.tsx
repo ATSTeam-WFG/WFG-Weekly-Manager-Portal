@@ -101,6 +101,24 @@ function App() {
   const [submittedAt, setSubmittedAt] = useState('')
   const [historyEntry, setHistoryEntry] = useState<ManagerReportHistoryEntry | null>(null)
   const [statusLoaded, setStatusLoaded] = useState(false)
+  // True only when the most recent attempt to fetch this manager/week's
+  // report genuinely failed (a Supabase/network error) — never set for a
+  // real "no report exists yet" result. Checked by Dashboard BEFORE it ever
+  // renders based on `status`, so a failed fetch can never display as "Not
+  // Started": `status` itself is deliberately left untouched by a failure,
+  // whatever it already was.
+  const [statusLoadError, setStatusLoadError] = useState(false)
+  // True only while a Submit is in flight — used both to disable the
+  // Submit button (preventing a duplicate submission from a second click)
+  // and, defensively, as a guard at the top of handleSubmit itself.
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  // Set only when a genuine Submit attempt fails for a reason OTHER than
+  // the Friday-cutoff guard (which already has its own lockMessage) — e.g.
+  // a network/Supabase error. Distinct from ReportForm's own client-side
+  // validation message. Never causes reportData/status to change; the
+  // manager's entered content and current status are left exactly as they
+  // were so they can simply retry.
+  const [submitFailureMessage, setSubmitFailureMessage] = useState<string | null>(null)
   const [reminderDismissed, setReminderDismissed] = useState(false)
   // Set only when a write is rejected by the service-layer or database
   // Friday-cutoff guard (a stale open tab, or a race between rendering and
@@ -143,7 +161,10 @@ function App() {
     setSubmittedAt('')
     setHistoryEntry(null)
     setStatusLoaded(false)
+    setStatusLoadError(false)
     setLockMessage(null)
+    setIsSubmitting(false)
+    setSubmitFailureMessage(null)
     // A fresh sign-in (or sign-out) makes the reminder eligible again — it's
     // only ever suppressed for the current page/session, never stored.
     setReminderDismissed(false)
@@ -233,10 +254,11 @@ function App() {
     setAuthStatus('signed-in')
 
     const week = getCurrentReportingWeek()
-    const existing = await fetchWeekReport(userId, week.weekStartDate)
+    const outcome = await fetchWeekReport(userId, week.weekStartDate)
     if (!activeRef.current) return
 
-    if (existing) {
+    if (outcome.status === 'found') {
+      const existing = outcome.report
       if (existing.content.version === 'v2') {
         setReportData(existing.content.sections)
         setLegacyReference(null)
@@ -246,9 +268,22 @@ function App() {
       }
       setStatus(existing.status)
       if (existing.submittedAt) setSubmittedAt(formatTimestamp(existing.submittedAt))
+      setStatusLoadError(false)
+    } else if (outcome.status === 'error') {
+      // The fetch itself failed — never treat this as "no report exists".
+      // status/reportData are deliberately left exactly as they already
+      // were (resetReportState()'s 'not_started' default on a fresh
+      // sign-in, or whatever was already correctly loaded on a later
+      // background re-check) — Dashboard checks statusLoadError before
+      // ever rendering based on `status`, so this can't display as "Not
+      // Started" either way.
+      setStatusLoadError(true)
+    } else {
+      // outcome.status === 'not_found' — genuinely no row for this
+      // manager/week. resetReportState() above already set the
+      // 'not_started' default; nothing further to do.
+      setStatusLoadError(false)
     }
-    // Status is now known either way — no row means genuinely not_started,
-    // which resetReportState() above already set as the default.
     setStatusLoaded(true)
   }
 
@@ -380,22 +415,37 @@ function App() {
     }
   }
 
-  const handleSubmit = (data: ManagerReportSectionsV2) => {
+  // Submitted is shown ONLY after saveReportV2 actually resolves — never
+  // optimistically. Guarded against a duplicate in-flight submission by
+  // isSubmitting (checked here AND used to disable ReportForm's own Submit
+  // button). On failure, reportData/status/view are deliberately left
+  // completely untouched — the manager's entered content (still held in
+  // ReportForm's own local state regardless) and current dashboard status
+  // are exactly as they were, so they can simply retry.
+  const handleSubmit = async (data: ManagerReportSectionsV2) => {
+    if (isSubmitting) return
     const isNewReport = status === 'not_started'
     if (checkManagerWriteLock(isNewReport)) return
+    if (!managerId) return
 
-    const now = new Date()
-    setReportData(data)
-    setStatus('submitted')
-    setLegacyReference(null)
-    setSubmittedAt(formatTimestamp(now.toISOString()))
-    setView('submitted')
-
-    if (managerId) {
+    setIsSubmitting(true)
+    setSubmitFailureMessage(null)
+    try {
       const week = getCurrentReportingWeek()
-      saveReportV2(managerId, week.weekStartDate, data, 'submitted', isNewReport).catch((err) => {
-        if (err instanceof ManagerEditLockedError) setLockMessage(err.message)
-      })
+      const persistedStatus = await saveReportV2(managerId, week.weekStartDate, data, 'submitted', isNewReport)
+      setReportData(data)
+      setStatus(persistedStatus)
+      setLegacyReference(null)
+      setSubmittedAt(formatTimestamp(new Date().toISOString()))
+      setView('submitted')
+    } catch (err) {
+      if (err instanceof ManagerEditLockedError) {
+        setLockMessage(err.message)
+      } else {
+        setSubmitFailureMessage("We couldn't submit your report. Please try again.")
+      }
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -534,6 +584,7 @@ function App() {
               status={status}
               managerId={managerId ?? ''}
               statusLoaded={statusLoaded}
+              statusLoadError={statusLoadError}
               reminderDismissed={reminderDismissed}
               onDismissReminder={() => setReminderDismissed(true)}
               onStart={() => setView('form')}
@@ -554,6 +605,8 @@ function App() {
               }}
               onSaveDraft={handleSaveDraft}
               onSubmit={handleSubmit}
+              isSubmitting={isSubmitting}
+              submitFailureMessage={submitFailureMessage}
             />
           )}
           {view === 'submitted' && (

@@ -39,9 +39,12 @@ export default function HistoricalReportView({
     let active = true
     setLoading(true)
 
-    fetchWeekReport(managerId, weekStartDate).then((result) => {
+    fetchWeekReport(managerId, weekStartDate).then((outcome) => {
       if (!active) return
-      setContent(result?.content ?? null)
+      // Both 'not_found' and 'error' render the same existing "Could not
+      // load this report." fallback below — unchanged behavior, just
+      // adapted to fetchWeekReport's new outcome shape.
+      setContent(outcome.status === 'found' ? outcome.report.content : null)
       setLoading(false)
     })
 
