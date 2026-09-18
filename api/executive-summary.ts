@@ -8,6 +8,7 @@ import {
 import { computeSourceFingerprint } from '../src/lib/executiveAnalysisFingerprint.js'
 import { toISODate } from '../src/utils/week.js'
 import { authenticateAdmin } from './_lib/adminAuth.js'
+import { extractAiJson } from './_lib/executiveSummaryJson.js'
 
 // Minimal local request/response typing so this file has no dependency on
 // @vercel/node (its transitive deps carry known vulnerabilities, and this is
@@ -219,9 +220,15 @@ Write a professional executive analysis using ONLY the information in the report
 Respond with ONLY a valid JSON object (no markdown fences, no commentary) with exactly these keys, each a string (a few sentences, or short lines starting with "- " for lists):
 {"executiveSummary": "...", "keyPriorities": "...", "majorWins": "...", "challengesRisks": "...", "challengeProgress": "...", "opportunities": "...", "prioritiesGoingForward": "..."}`
 
+  // 4096 (up from 2000): a real production period with more managers/weeks
+  // needs meaningfully more output across all 7 sections than the small
+  // datasets this pipeline was first built against — the previous ceiling
+  // was hit mid-generation for a larger real week, producing a truncated,
+  // unparseable response (see stop_reason handling below). Not raised
+  // further than this without evidence 4096 is itself insufficient.
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-5',
-    max_tokens: 2000,
+    max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   })
 
@@ -230,7 +237,47 @@ Respond with ONLY a valid JSON object (no markdown fences, no commentary) with e
     throw new Error('No text content returned from Anthropic.')
   }
 
-  const parsed = JSON.parse(extractJson(textBlock.text)) as Record<string, unknown>
+  const extraction = extractAiJson(textBlock.text, response.stop_reason)
+  if (extraction.outcome !== 'ok') {
+    // SECURITY: never log textBlock.text, the prompt, or any report
+    // content here — only safe, non-sensitive metadata (lengths, counts,
+    // booleans, category labels). See executiveSummaryJson.ts's header.
+    console.error('executive-summary: AI response could not be parsed as JSON.', {
+      outcome: extraction.outcome,
+      stopReason: response.stop_reason,
+      responseLength: textBlock.text.length,
+      contentBlockCount: response.content.length,
+      contentBlockTypes: response.content.map((block) => block.type),
+      ...(extraction.outcome === 'no_json_object'
+        ? { hasOpenBrace: extraction.hasOpenBrace, hasCloseBrace: extraction.hasCloseBrace }
+        : {}),
+    })
+    if (extraction.outcome === 'truncated') {
+      // Distinct from the generic parse failure below: the API itself
+      // reported it cut generation off (stop_reason=max_tokens) before the
+      // response could have been complete. Thrown here, before `sections`
+      // is ever assigned, so the caller's catch block runs and the existing
+      // saved analysis is never touched (see handler's generateAnalysis
+      // try/catch, which returns before reaching the persistence RPC).
+      throw new Error('AI response was truncated before completion (stop_reason=max_tokens).')
+    }
+    throw new Error('Could not locate a JSON object in the AI response.')
+  }
+
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(extraction.json) as Record<string, unknown>
+  } catch {
+    // A JSON.parse SyntaxError's own message can include a fragment of the
+    // offending input (e.g. the specific unexpected character) — never let
+    // that reach a log. Replaced here with a clean, generic error before it
+    // can propagate to handler's catch, which logs the caught error as-is.
+    console.error('executive-summary: AI response contained JSON-like boundaries but failed to parse.', {
+      responseLength: textBlock.text.length,
+      contentBlockCount: response.content.length,
+    })
+    throw new Error('Could not parse the AI response as JSON.')
+  }
 
   return {
     executiveSummary: String(parsed.executiveSummary ?? ''),
@@ -241,13 +288,4 @@ Respond with ONLY a valid JSON object (no markdown fences, no commentary) with e
     opportunities: String(parsed.opportunities ?? ''),
     prioritiesGoingForward: String(parsed.prioritiesGoingForward ?? ''),
   }
-}
-
-function extractJson(text: string): string {
-  const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error('Could not locate a JSON object in the AI response.')
-  }
-  return text.slice(start, end + 1)
 }
