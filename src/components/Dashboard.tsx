@@ -32,6 +32,14 @@ export default function Dashboard({
 }: DashboardProps) {
   const week = getCurrentReportingWeek()
   const daysLeft = getDaysUntilDeadline(week.fridayDate)
+  // getDaysUntilDeadline is calendar-day granularity only (it returns 0 for
+  // all of Friday, from 12:00 AM through 11:59 PM) — it was never meant to
+  // answer "has the 3:00 PM deadline itself passed". That real, time-of-day
+  // question is answered by isPastEasternCutoff, the same DST-safe check
+  // the 4:00 PM manager write lock and the "late edit window" notice below
+  // already use.
+  const isPastDeadline = isPastEasternCutoff(15, 0)
+  const isDueToday = !isPastDeadline && daysLeft <= 0
 
   const [history, setHistory] = useState<ManagerReportHistoryEntry[]>([])
   const [historyLoading, setHistoryLoading] = useState(true)
@@ -131,7 +139,7 @@ export default function Dashboard({
             Due <strong>{week.deadlineLabel}</strong>
           </p>
           <span className="hero-days-left">
-            {daysLeft > 0 ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining` : 'Deadline passed'}
+            {isPastDeadline ? 'Deadline passed' : isDueToday ? 'Due today' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining`}
           </span>
         </div>
 

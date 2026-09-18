@@ -21,6 +21,10 @@ function minutesFrom(iso: string, offsetMinutes: number): Date {
   return new Date(new Date(iso).getTime() + offsetMinutes * 60_000)
 }
 
+function secondsFrom(iso: string, offsetSeconds: number): Date {
+  return new Date(new Date(iso).getTime() + offsetSeconds * 1000)
+}
+
 describe('getEasternParts', () => {
   test('reads correct wall-clock parts during EST', () => {
     const parts = getEasternParts(new Date(EST_NOON_UTC))
@@ -219,6 +223,46 @@ describe('isPastEasternCutoff — EDT (July)', () => {
     assert.equal(isPastEasternCutoff(15, 0, monday), false)
     assert.equal(isPastEasternCutoff(16, 0, monday), false)
   })
+})
+
+// Regression coverage for the 2026-09-18 "Deadline passed" dashboard bug:
+// AdminDashboard.tsx and Dashboard.tsx used to derive isPastDeadline from
+// getDaysUntilDeadline (calendar-day granularity — 0 for all of Friday,
+// from 12:00 AM through 11:59 PM), which showed "Deadline passed" from
+// midnight Friday instead of 3:00 PM. The fix uses isPastEasternCutoff(15,
+// 0) directly, so its exact second-level correctness at the 3:00 PM
+// boundary is what actually matters for that bug — this block exhaustively
+// covers it, for both EST and EDT, at second precision.
+describe('isPastEasternCutoff(15, 0) second-precision boundary — regression for the "Deadline passed before 3:00 PM" dashboard bug', () => {
+  for (const [label, base] of [
+    ['EST (January)', EST_3PM_UTC],
+    ['EDT (July)', EDT_3PM_UTC],
+  ] as const) {
+    describe(label, () => {
+      test('Friday 12:00:01 AM ET: not passed', () => {
+        const midnight = secondsFrom(base, -15 * 60 * 60 + 1) // 3:00 PM - 15h + 1s = 12:00:01 AM same day
+        assert.equal(isPastEasternCutoff(15, 0, midnight), false)
+      })
+      test('Friday 2:59:59 PM ET: not passed', () => {
+        assert.equal(isPastEasternCutoff(15, 0, secondsFrom(base, -1)), false)
+      })
+      test('Friday exactly 3:00:00 PM ET: passed', () => {
+        assert.equal(isPastEasternCutoff(15, 0, new Date(base)), true)
+      })
+      test('Friday just after 3:00 PM ET (3:00:01 PM): passed', () => {
+        assert.equal(isPastEasternCutoff(15, 0, secondsFrom(base, 1)), true)
+      })
+      test('Saturday: still passed for that reporting week', () => {
+        assert.equal(isPastEasternCutoff(15, 0, minutesFrom(base, 24 * 60)), true)
+      })
+      test('Sunday: still passed for that reporting week', () => {
+        assert.equal(isPastEasternCutoff(15, 0, minutesFrom(base, 2 * 24 * 60)), true)
+      })
+      test('Monday (new reporting week): not passed again', () => {
+        assert.equal(isPastEasternCutoff(15, 0, minutesFrom(base, 3 * 24 * 60)), false)
+      })
+    })
+  }
 })
 
 describe('isPastEasternCutoff — non-Friday/Sat/Sun guard', () => {

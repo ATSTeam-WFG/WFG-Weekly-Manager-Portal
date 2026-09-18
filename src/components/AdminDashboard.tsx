@@ -5,6 +5,7 @@ import { fetchManagersForWeek, type ManagerSummary } from '../lib/adminService'
 import { getReminderTargets, type ReminderTarget } from '../lib/reminderService'
 import { supabase } from '../lib/supabaseClient'
 import { getDaysUntilDeadline, type ReportingWeek } from '../utils/week'
+import { isPastEasternCutoff } from '../utils/easternTime'
 import './AdminDashboard.css'
 
 interface AdminDashboardProps {
@@ -80,7 +81,14 @@ export default function AdminDashboard({
   const [reminderTarget, setReminderTarget] = useState<ReminderTarget[] | null>(null)
 
   const daysLeft = getDaysUntilDeadline(week.fridayDate)
-  const isPastDeadline = daysLeft <= 0
+  // getDaysUntilDeadline is calendar-day granularity only (it returns 0 for
+  // all of Friday, from 12:00 AM through 11:59 PM) — it was never meant to
+  // answer "has the 3:00 PM deadline itself passed". That real, time-of-day
+  // question is answered by isPastEasternCutoff, the same DST-safe check
+  // the 4:00 PM manager write lock and the "late edit window" notice
+  // already use elsewhere in this app.
+  const isPastDeadline = isPastEasternCutoff(15, 0)
+  const isDueToday = !isPastDeadline && daysLeft <= 0
 
   useEffect(() => {
     let active = true
@@ -201,7 +209,7 @@ export default function AdminDashboard({
           <div className="admin-deadline-row">
             <span>Due {week.deadlineLabel}</span>
             <span className="admin-days-left">
-              {isPastDeadline ? 'Deadline passed' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining`}
+              {isPastDeadline ? 'Deadline passed' : isDueToday ? 'Due today' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining`}
             </span>
           </div>
 
