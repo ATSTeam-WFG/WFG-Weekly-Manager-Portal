@@ -2,6 +2,7 @@ import { useState } from 'react'
 import MicButton from './MicButton'
 import BulletListInput from './BulletListInput'
 import { useSpeechToText } from '../hooks/useSpeechToText'
+import { useAutoGrowTextarea } from '../hooks/useAutoGrowTextarea'
 import type { ManagerReportSectionsV2, ReportSections } from '../types'
 import { getCurrentReportingWeek } from '../utils/week'
 import { capBullets, isWhatMattersNowValidForSubmit } from '../lib/reportValidation'
@@ -71,6 +72,10 @@ export default function ReportForm({
   const [data, setData] = useState<ManagerReportSectionsV2>(initialData)
   const [savedMessage, setSavedMessage] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  // Auto-grow the two free-text textareas as their own content changes —
+  // same dependency-free technique used per bullet row in BulletListInput.
+  const otherNotableItemsRef = useAutoGrowTextarea(data.otherNotableItems)
+  const okrNotesRef = useAutoGrowTextarea(data.okrNotes)
   const week = getCurrentReportingWeek()
   const weekEndingLabel = week.fridayDate.toLocaleDateString('en-US', {
     month: 'long',
@@ -260,8 +265,9 @@ export default function ReportForm({
         {errorField === 'otherNotableItems' && errorMessage && <p className="voice-error-message">{errorMessage}</p>}
         <textarea
           id="other-notable-items"
+          ref={otherNotableItemsRef}
           className="report-textarea"
-          rows={3}
+          rows={5}
           value={data.otherNotableItems}
           onChange={(e) => handleTextChange('otherNotableItems', e.target.value)}
           placeholder="Type here..."
@@ -288,8 +294,9 @@ export default function ReportForm({
         {errorField === 'okrNotes' && errorMessage && <p className="voice-error-message">{errorMessage}</p>}
         <textarea
           id="okr-notes"
+          ref={okrNotesRef}
           className="report-textarea"
-          rows={3}
+          rows={5}
           value={data.okrNotes}
           onChange={(e) => handleTextChange('okrNotes', e.target.value)}
           placeholder="Type here... (optional)"

@@ -173,13 +173,21 @@
   width: 100%;
   font-family: inherit;
   font-size: 14px;
+  line-height: 1.5;
   color: var(--espresso);
   background: var(--warm-cream);
   border: 1px solid var(--soft-sand);
   border-radius: 8px;
   padding: 12px 14px;
+  /* Vertical only — never horizontal, so width/layout can't be disturbed
+     by a manual drag. Comfortably taller by default (was 90px/3 rows);
+     grows further from there via useAutoGrowTextarea as content is typed. */
   resize: vertical;
-  min-height: 90px;
+  min-height: 130px;
+  /* The auto-grow effect keeps height matched to content, so no internal
+     scrollbar should ever be needed; hiding overflow avoids a brief
+     scrollbar flash before that effect runs on mount/change. */
+  overflow: hidden;
 }
 
 .report-textarea:focus {

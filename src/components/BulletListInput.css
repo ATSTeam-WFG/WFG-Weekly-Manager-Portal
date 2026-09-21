@@ -12,7 +12,11 @@
 
 .bullet-list-row-main {
   display: flex;
-  align-items: center;
+  /* flex-start rather than center: once the textarea below can grow taller
+     than the mic/remove buttons, centering would drift them toward the
+     middle of a tall box instead of keeping them pinned near the first
+     line, where they visually belong. */
+  align-items: flex-start;
   gap: 8px;
 }
 
@@ -20,11 +24,22 @@
   flex: 1;
   min-width: 0;
   font: inherit;
+  line-height: 1.4;
   padding: 10px 12px;
   border: 1px solid var(--soft-sand);
   border-radius: 8px;
   background: var(--white);
   color: var(--dark-charcoal);
+  /* Comfortably at least 2 lines tall initially; grows from there via
+     useAutoGrowTextarea as content wraps onto more lines. */
+  min-height: 56px;
+  /* Vertical only — never horizontal, so the row's width/layout can't be
+     disturbed by a manual drag. */
+  resize: vertical;
+  /* The auto-grow effect keeps the element's own height matched to its
+     content, so no internal scrollbar should ever be needed; hiding
+     overflow avoids a brief scrollbar flash before that effect runs. */
+  overflow: hidden;
 }
 
 .bullet-list-text:focus {
