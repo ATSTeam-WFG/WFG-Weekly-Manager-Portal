@@ -331,6 +331,26 @@ function App() {
       setUserEmail(session.user.email ?? null)
       setManagerId(session.user.id)
 
+      // A token refresh is session MAINTENANCE for the SAME already-signed-
+      // in user — never a new sign-in, and Supabase never emits it for a
+      // different user (that's SIGNED_IN). Supabase's own auth client
+      // pauses its background refresh timer while a tab is hidden and
+      // re-checks the session the instant it becomes visible again (see
+      // GoTrueClient's _onVisibilityChanged/_recoverAndRefresh in
+      // @supabase/auth-js) — so this fires precisely when a manager
+      // switches back to a tab left idle for a while. Treating it like a
+      // fresh sign-in was the confirmed cause of "the app resets and my
+      // unsaved report content disappears" after switching tabs:
+      // resetReportState() tore down `view`/`reportData`/etc., unmounting
+      // ReportForm and destroying whatever the manager had typed but not
+      // yet saved, and finishSigningIn() then reloaded the last-SAVED
+      // server state over it. None of that may ever run for this event —
+      // userEmail/managerId above are re-synced (idempotent: this is
+      // already the same user), and that is the entire scope of this event.
+      if (event === 'TOKEN_REFRESHED') {
+        return
+      }
+
       // A password-recovery link click always lands here first, regardless
       // of whether a profile already exists — the user must choose a new
       // password before anything else happens. This is a distinct, explicit
