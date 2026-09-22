@@ -30,3 +30,30 @@ export function isWhatMattersNowValidForSubmit(bullets: string[]): boolean {
   const count = countMeaningfulBullets(bullets)
   return count >= 2 && count <= 3
 }
+
+// A local structural shape matching ManagerReportSectionsV2 (src/types.ts),
+// rather than importing that type — this file has no imports of its own,
+// which lets its tests run directly via bare `node --test`.
+interface BulletSections {
+  whatMattersNow: string[]
+  lookingAroundCorner: string[]
+  nextWeekPriorities: string[]
+  otherNotableItems: string
+  okrNotes: string
+}
+
+function bulletArraysEqual(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((value, i) => value === b[i])
+}
+
+// Used by autosave to decide whether there's anything new to persist —
+// order-sensitive on the bullet arrays (a reorder is a real change).
+export function areReportSectionsEqual(a: BulletSections, b: BulletSections): boolean {
+  return (
+    bulletArraysEqual(a.whatMattersNow, b.whatMattersNow) &&
+    bulletArraysEqual(a.lookingAroundCorner, b.lookingAroundCorner) &&
+    bulletArraysEqual(a.nextWeekPriorities, b.nextWeekPriorities) &&
+    a.otherNotableItems === b.otherNotableItems &&
+    a.okrNotes === b.okrNotes
+  )
+}

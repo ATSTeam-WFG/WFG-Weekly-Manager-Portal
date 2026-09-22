@@ -153,6 +153,15 @@ function App() {
     async () => {},
   )
 
+  // Set only once finishSigningIn has fully completed for a user (profile
+  // fetched, roster/active checks passed) — used to recognize a LATER
+  // SIGNED_IN event as routine session maintenance for that SAME user,
+  // rather than a genuine new sign-in. See applySession's SIGNED_IN
+  // handling below for why this is needed alongside the TOKEN_REFRESHED
+  // check. Cleared on sign-out so a later, genuinely different sign-in is
+  // never mistaken for maintenance of the previous session.
+  const signedInUserIdRef = useRef<string | null>(null)
+
   function resetReportState() {
     setView('dashboard')
     setStatus('not_started')
@@ -252,6 +261,7 @@ function App() {
 
     setProfile(userProfile)
     setAuthStatus('signed-in')
+    signedInUserIdRef.current = userId
 
     const week = getCurrentReportingWeek()
     const outcome = await fetchWeekReport(userId, week.weekStartDate)
@@ -325,6 +335,7 @@ function App() {
         setReportsAnalyticsOpen(false)
         setUserManagementOpen(false)
         resetReportState()
+        signedInUserIdRef.current = null
         return
       }
 
@@ -348,6 +359,25 @@ function App() {
       // userEmail/managerId above are re-synced (idempotent: this is
       // already the same user), and that is the entire scope of this event.
       if (event === 'TOKEN_REFRESHED') {
+        return
+      }
+
+      // Supabase's own client re-checks the session whenever a hidden tab
+      // becomes visible again (GoTrueClient's _onVisibilityChanged calling
+      // _recoverAndRefresh) — exactly the same tab-return moment the
+      // TOKEN_REFRESHED case above exists for. But when the access token
+      // ISN'T yet close enough to its own expiry to need refreshing,
+      // _recoverAndRefresh emits SIGNED_IN instead of TOKEN_REFRESHED, for
+      // this SAME already-authenticated user, carrying the same still-valid
+      // session. Confirmed by manual QA: this was still reaching the full
+      // reset-and-reload path below on every tab switch, closing ReportForm
+      // and returning the manager to Dashboard even though nothing about
+      // their identity or session actually changed. signedInUserIdRef (set
+      // only once finishSigningIn has fully completed for a user) is what
+      // distinguishes this from a genuine new sign-in — a different user,
+      // or this same user's very first sign-in this session, never matches
+      // and correctly falls through to the full path below.
+      if (event === 'SIGNED_IN' && signedInUserIdRef.current === session.user.id) {
         return
       }
 
@@ -408,9 +438,18 @@ function App() {
     return false
   }
 
-  const handleSaveDraft = (data: ManagerReportSectionsV2) => {
+  // Awaitable so ReportForm's autosave/Back-to-Dashboard logic can know when
+  // a save has actually finished (and whether it succeeded) — otherwise
+  // behavior is unchanged: same optimistic update ordering, same
+  // resolveSaveStatus reconciliation inside saveReportV2. Errors are still
+  // surfaced via lockMessage exactly as before, then re-thrown so a caller
+  // that's awaiting this can react (e.g. stop scheduling further autosaves).
+  const handleSaveDraft = async (data: ManagerReportSectionsV2): Promise<void> => {
     const isNewReport = status === 'not_started'
-    if (checkManagerWriteLock(isNewReport)) return
+    if (checkManagerWriteLock(isNewReport)) {
+      const reason = getManagerWriteLockReason(isNewReport)!
+      throw new ManagerEditLockedError(MANAGER_WRITE_LOCK_MESSAGES[reason])
+    }
 
     setReportData(data)
     setStatus('draft')
@@ -418,20 +457,20 @@ function App() {
     // any legacy reference content has done its job.
     setLegacyReference(null)
 
-    if (managerId) {
-      const week = getCurrentReportingWeek()
-      saveReportV2(managerId, week.weekStartDate, data, 'draft', isNewReport)
-        .then((persistedStatus) => {
-          // Reconciles the optimistic 'draft' set above against reality: if
-          // the report had already been auto-submitted in the background
-          // (a stale-tab race), saveReportV2 preserves 'submitted' and
-          // returns it here rather than the 'draft' this call requested —
-          // the manager's content edits were still saved successfully.
-          if (persistedStatus !== 'draft') setStatus(persistedStatus)
-        })
-        .catch((err) => {
-          if (err instanceof ManagerEditLockedError) setLockMessage(err.message)
-        })
+    if (!managerId) return
+
+    const week = getCurrentReportingWeek()
+    try {
+      const persistedStatus = await saveReportV2(managerId, week.weekStartDate, data, 'draft', isNewReport)
+      // Reconciles the optimistic 'draft' set above against reality: if the
+      // report had already been auto-submitted in the background (a
+      // stale-tab race), saveReportV2 preserves 'submitted' and returns it
+      // here rather than the 'draft' this call requested — the manager's
+      // content edits were still saved successfully.
+      if (persistedStatus !== 'draft') setStatus(persistedStatus)
+    } catch (err) {
+      if (err instanceof ManagerEditLockedError) setLockMessage(err.message)
+      throw err
     }
   }
 
@@ -475,19 +514,34 @@ function App() {
   // existing row was still legacy-format, this is also the moment it
   // transitions to V2 (its legacy columns are never referenced here, so they
   // remain untouched and preserved).
-  const handleSaveChanges = (data: ManagerReportSectionsV2) => {
+  // `navigateToDashboard` defaults to true, preserving the exact existing
+  // manual "Save Changes" behavior for any caller that omits it. ReportForm's
+  // autosave passes `navigateToDashboard: false` so a silent background save
+  // never navigates the manager away mid-edit. Awaitable for the same reason
+  // as handleSaveDraft above.
+  const handleSaveChanges = async (
+    data: ManagerReportSectionsV2,
+    options: { navigateToDashboard?: boolean } = {},
+  ): Promise<void> => {
+    const { navigateToDashboard = true } = options
     // Always editing an existing (submitted) report — never a "new report".
-    if (checkManagerWriteLock(false)) return
+    if (checkManagerWriteLock(false)) {
+      const reason = getManagerWriteLockReason(false)!
+      throw new ManagerEditLockedError(MANAGER_WRITE_LOCK_MESSAGES[reason])
+    }
 
     setReportData(data)
     setLegacyReference(null)
-    setView('dashboard')
+    if (navigateToDashboard) setView('dashboard')
 
-    if (managerId) {
-      const week = getCurrentReportingWeek()
-      updateReportSectionsV2(managerId, week.weekStartDate, data).catch((err) => {
-        if (err instanceof ManagerEditLockedError) setLockMessage(err.message)
-      })
+    if (!managerId) return
+
+    const week = getCurrentReportingWeek()
+    try {
+      await updateReportSectionsV2(managerId, week.weekStartDate, data)
+    } catch (err) {
+      if (err instanceof ManagerEditLockedError) setLockMessage(err.message)
+      throw err
     }
   }
 

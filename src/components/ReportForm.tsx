@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import MicButton from './MicButton'
 import BulletListInput from './BulletListInput'
 import { useSpeechToText } from '../hooks/useSpeechToText'
 import { useAutoGrowTextarea } from '../hooks/useAutoGrowTextarea'
+import { useAutosave } from '../hooks/useAutosave'
 import type { ManagerReportSectionsV2, ReportSections } from '../types'
 import { getCurrentReportingWeek } from '../utils/week'
-import { capBullets, isWhatMattersNowValidForSubmit } from '../lib/reportValidation'
+import { capBullets, isWhatMattersNowValidForSubmit, areReportSectionsEqual } from '../lib/reportValidation'
+import { ManagerEditLockedError } from '../lib/reportsService'
 import './ReportForm.css'
 import './SubmittedReport.css'
 
@@ -25,10 +27,10 @@ interface ReportFormProps {
   // swallowed.
   lockMessage?: string | null
   onBack: () => void
-  onSaveDraft: (data: ManagerReportSectionsV2) => void
+  onSaveDraft: (data: ManagerReportSectionsV2) => Promise<void>
   onSubmit: (data: ManagerReportSectionsV2) => void
   isEditingSubmitted?: boolean
-  onSaveChanges?: (data: ManagerReportSectionsV2) => void
+  onSaveChanges?: (data: ManagerReportSectionsV2, options?: { navigateToDashboard?: boolean }) => Promise<void>
   // True only while a Submit is in flight (onSubmit was called and hasn't
   // resolved yet) — disables the Submit button so a second click can never
   // fire a duplicate submission, and shows a "Submitting…" label.
@@ -90,9 +92,30 @@ export default function ReportForm({
   // bleed into bullet 1 or any other field.
   const bulletVoice = { isSupported, activeField, errorField, errorMessage, onStart: start, onStop: stop }
 
+  // Autosaves through the SAME onSaveDraft/onSaveChanges persistence path
+  // used by the manual buttons below — never a second write implementation.
+  // `trigger === 'manual'` is the only case allowed to navigate away on a
+  // successful Save Changes (preserving that button's existing behavior);
+  // autosave and the Back-to-Dashboard dirty-save must never navigate here
+  // themselves — Back navigates explicitly, via handleBackClick, only after
+  // its own save succeeds.
+  const autosave = useAutosave<ManagerReportSectionsV2>({
+    data,
+    isEqual: areReportSectionsEqual,
+    isLockedError: (err) => err instanceof ManagerEditLockedError,
+    save: async (toSave, trigger) => {
+      if (isEditingSubmitted) {
+        await onSaveChanges?.(toSave, { navigateToDashboard: trigger === 'manual' })
+      } else {
+        await onSaveDraft(toSave)
+      }
+    },
+  })
+
   const clearFeedback = () => {
     setSavedMessage(false)
     setSubmitError(null)
+    autosave.notifyEditStarted()
   }
 
   const handleBulletsChange = (key: 'whatMattersNow' | 'lookingAroundCorner' | 'nextWeekPriorities', bullets: string[]) => {
@@ -113,35 +136,72 @@ export default function ReportForm({
     clearFeedback()
   }
 
+  // Manual Save Draft/Save Changes: shows the existing confirmation
+  // immediately (unchanged), and routes through the same single-flight
+  // autosave.saveNow so it cancels/absorbs any pending autosave timer and
+  // never runs concurrently with an in-flight autosave.
   const handleSave = () => {
-    onSaveDraft(data)
     setSavedMessage(true)
     setSubmitError(null)
+    void autosave.saveNow('manual')
   }
 
   const handleSaveChanges = () => {
-    onSaveChanges?.(data)
     setSavedMessage(true)
     setSubmitError(null)
+    void autosave.saveNow('manual')
   }
 
-  const handleSubmitClick = () => {
+  // Back to Dashboard: if there's nothing unsaved, saveNow('back') resolves
+  // immediately without calling onSaveDraft/onSaveChanges at all (see
+  // useAutosave's own dirty short-circuit), so navigation is effectively
+  // immediate. If there ARE unsaved changes, this awaits the same safe save
+  // used everywhere else and only navigates once it actually succeeds — on
+  // a lock or an ordinary error, this stays on the form so the manager
+  // still sees their content plus the existing lock/error messaging.
+  const handleBackClick = async () => {
+    const outcome = await autosave.saveNow('back')
+    if (outcome === 'success') {
+      onBack()
+    }
+  }
+
+  // Guards the brief async gap below (cancelPendingAndAwaitInFlight) before
+  // App.tsx's own isSubmitting prop has had a chance to re-render as true —
+  // without this, a second click landing inside that gap would pass the
+  // isSubmitting check below (still false) and could start a second
+  // concurrent submit attempt.
+  const submitClickInFlightRef = useRef(false)
+
+  const handleSubmitClick = async () => {
     // Defense-in-depth alongside disabling the button below: a second
     // click that somehow still fires (e.g. a queued event) can never start
     // a duplicate submission while one is already in flight.
-    if (isSubmitting) return
+    if (isSubmitting || submitClickInFlightRef.current) return
     if (!isWhatMattersNowValidForSubmit(data.whatMattersNow)) {
       setSubmitError('"01 — What Matters Now" needs 2–3 meaningful items before you can submit.')
       setSavedMessage(false)
       return
     }
     setSubmitError(null)
-    onSubmit(data)
+    submitClickInFlightRef.current = true
+    try {
+      // A background autosave draft write and the submit write both target
+      // the same report row with no coordination between them otherwise —
+      // if an autosave save is already in flight (or a timer is already
+      // armed) at the exact moment Submit is clicked, waiting here first
+      // guarantees the draft write fully lands before the submit write ever
+      // starts, so they can never race each other at the database.
+      await autosave.cancelPendingAndAwaitInFlight()
+      onSubmit(data)
+    } finally {
+      submitClickInFlightRef.current = false
+    }
   }
 
   return (
     <div className="report-form">
-      <button className="link-btn back-link" onClick={onBack}>
+      <button className="link-btn back-link" onClick={handleBackClick}>
         &larr; Back to Dashboard
       </button>
 
@@ -308,6 +368,11 @@ export default function ReportForm({
 
       <div className="report-form-actions">
         {savedMessage && <span className="saved-message">{isEditingSubmitted ? 'Changes saved' : 'Draft saved'}</span>}
+        {!savedMessage && autosave.status === 'saving' && <span className="autosave-status">Saving&hellip;</span>}
+        {!savedMessage && autosave.status === 'saved' && <span className="autosave-status autosave-status-saved">Saved</span>}
+        {!savedMessage && autosave.status === 'error' && (
+          <span className="autosave-status autosave-status-error">Couldn&apos;t save automatically — your changes are still here.</span>
+        )}
         {isEditingSubmitted ? (
           <button className="btn btn-primary" onClick={handleSaveChanges}>
             Save Changes

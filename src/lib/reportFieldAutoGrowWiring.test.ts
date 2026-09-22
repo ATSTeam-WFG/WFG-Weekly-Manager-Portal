@@ -121,9 +121,9 @@ describe('ReportForm.tsx — Other Notable Items / OKR Notes are taller and auto
     assert.match(reportFormSrc, /value=\{data\.okrNotes\}\s*\n\s*onChange=\{\(e\) => handleTextChange\('okrNotes', e\.target\.value\)\}/)
   })
 
-  test('submit-time validation (isWhatMattersNowValidForSubmit) and the Save Draft/Submit handlers are untouched', () => {
+  test('submit-time validation (isWhatMattersNowValidForSubmit) and the Submit handler are untouched; Save Draft now persists via the autosave hook\'s shared save path (see autosaveWiring.test.ts) rather than calling onSaveDraft directly', () => {
     assert.match(reportFormSrc, /isWhatMattersNowValidForSubmit\(data\.whatMattersNow\)/)
-    assert.match(reportFormSrc, /onSaveDraft\(data\)/)
+    assert.match(reportFormSrc, /onSaveDraft\(toSave\)/)
     assert.match(reportFormSrc, /onSubmit\(data\)/)
   })
 })

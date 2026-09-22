@@ -211,6 +211,21 @@
   margin-right: auto;
 }
 
+.autosave-status {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-gray);
+  margin-right: auto;
+}
+
+.autosave-status-saved {
+  color: var(--green);
+}
+
+.autosave-status-error {
+  color: var(--terracotta);
+}
+
 @media (max-width: 480px) {
   .report-form {
     padding: 20px 16px 80px;
@@ -238,7 +253,8 @@
     width: 100%;
   }
 
-  .saved-message {
+  .saved-message,
+  .autosave-status {
     margin-right: 0;
     text-align: center;
     order: -1;

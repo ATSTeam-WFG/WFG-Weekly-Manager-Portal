@@ -18,6 +18,23 @@
 // reportData/etc., unmounting ReportForm and destroying unsaved keystrokes,
 // and finishSigningIn() then reloaded the last-SAVED server state over it.
 // Fixed by treating TOKEN_REFRESHED as session maintenance only.
+//
+// A second, later incident this also covers: real manual QA proved the
+// TOKEN_REFRESHED fix alone was NOT sufficient — a manager on ReportForm
+// still got bounced back to Dashboard on some tab returns. Root cause:
+// GoTrueClient's same visibility-triggered recovery path
+// (_onVisibilityChanged -> _recoverAndRefresh, in
+// node_modules/@supabase/auth-js/src/GoTrueClient.ts) does not always emit
+// TOKEN_REFRESHED — when the access token isn't yet close enough to its own
+// expiry to need refreshing, it instead emits SIGNED_IN for the SAME
+// already-authenticated user (confirmed by reading _recoverAndRefresh's own
+// source: it calls _notifyAllSubscribers('SIGNED_IN', currentSession)
+// directly, without a preceding refresh, whenever the session is valid and
+// not near-expired). applySession had no way to tell that apart from a
+// genuine new sign-in, so it still ran the full reset-and-reload path.
+// Fixed by signedInUserIdRef: SIGNED_IN is now treated as maintenance ONLY
+// when it's for the exact same user finishSigningIn already fully
+// initialized — a different (or first) user still gets the full path.
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -85,15 +102,76 @@ describe('App.tsx — applySession: TOKEN_REFRESHED is session maintenance, not 
     assert.ok(tokenRefreshedIndex < passwordRecoveryIndex)
   })
 
-  test('SIGNED_IN and INITIAL_SESSION are not special-cased away from the full reset-and-reload path — only TOKEN_REFRESHED (and the already-separate PASSWORD_RECOVERY branch) short-circuit it', () => {
+  test('INITIAL_SESSION is never special-cased away from the full reset-and-reload path — a fresh page load always fully initializes', () => {
     const body = applySessionMatch![0]
-    assert.equal(/if \(event === 'SIGNED_IN'\)/.test(body), false, 'SIGNED_IN must not get its own early return — it should fall through to the normal full sign-in path')
     assert.equal(/if \(event === 'INITIAL_SESSION'\)/.test(body), false, 'INITIAL_SESSION must not get its own early return — it should fall through to the normal full initialization path')
   })
 
-  test('the unconditional resetReportState() + finishSigningIn() sequence still exists at the end of applySession, reachable by any event that is not TOKEN_REFRESHED or PASSWORD_RECOVERY (i.e. SIGNED_IN, INITIAL_SESSION)', () => {
+  test('SIGNED_IN has no BLANKET early return — it is never skipped unconditionally regardless of which user it is for', () => {
+    const body = applySessionMatch![0]
+    // A bare, unconditioned `if (event === 'SIGNED_IN')` would (re-)break
+    // genuine new sign-ins exactly like the bug this guards against. Only
+    // the user-id-conditioned form below is allowed to exist.
+    assert.equal(/if \(event === 'SIGNED_IN'\)\s*\{/.test(body), false, 'SIGNED_IN must never get an unconditional early return')
+  })
+
+  test('the unconditional resetReportState() + finishSigningIn() sequence still exists at the end of applySession, reachable by INITIAL_SESSION, a genuinely new/different-user SIGNED_IN, and any event other than TOKEN_REFRESHED/PASSWORD_RECOVERY/same-user SIGNED_IN', () => {
     const body = applySessionMatch![0]
     assert.match(body, /resetReportState\(\)\s*\n\s*setSelectedManager\(null\)\s*\n\s*\n\s*await finishSigningIn\(session\.user\.id, isPasswordChangeRequired\(session\.user\.app_metadata\)\)/)
+  })
+})
+
+describe('App.tsx — applySession: a same-user SIGNED_IN (tab-visibility session recovery) is ALSO session maintenance, not a new sign-in', () => {
+  const signedInBranchMatch = applySessionMatch?.[0].match(
+    /if \(event === 'SIGNED_IN' && signedInUserIdRef\.current === session\.user\.id\) \{([\s\S]*?)\n {6}\}/,
+  )
+
+  test('the same-user SIGNED_IN branch exists, conditioned on signedInUserIdRef matching this session\'s user id', () => {
+    assert.ok(signedInBranchMatch, 'could not locate the same-user SIGNED_IN branch')
+  })
+
+  test('it exits BEFORE resetReportState()/finishSigningIn() — never touches view, reportData, or selectedManager itself', () => {
+    assert.ok(signedInBranchMatch)
+    const body = signedInBranchMatch![1]
+    assert.match(body, /return/)
+    assert.equal(body.includes('resetReportState'), false)
+    assert.equal(body.includes('finishSigningIn'), false)
+    assert.equal(body.includes('setView'), false)
+    assert.equal(body.includes('setReportData'), false)
+    assert.equal(body.includes('setSelectedManager'), false)
+  })
+
+  test('it is checked AFTER the TOKEN_REFRESHED branch and BEFORE the PASSWORD_RECOVERY branch, and appears textually before the unconditional reset-and-reload fallback', () => {
+    const body = applySessionMatch![0]
+    const tokenRefreshedIndex = body.indexOf("if (event === 'TOKEN_REFRESHED')")
+    const signedInIndex = body.indexOf("if (event === 'SIGNED_IN' && signedInUserIdRef.current === session.user.id)")
+    const passwordRecoveryIndex = body.indexOf("if (event === 'PASSWORD_RECOVERY')")
+    const resetReportStateIndex = body.indexOf('resetReportState()', signedInIndex)
+    assert.ok([tokenRefreshedIndex, signedInIndex, passwordRecoveryIndex, resetReportStateIndex].every((i) => i !== -1))
+    assert.ok(tokenRefreshedIndex < signedInIndex)
+    assert.ok(signedInIndex < passwordRecoveryIndex)
+    assert.ok(signedInIndex < resetReportStateIndex)
+  })
+
+  test('signedInUserIdRef is only ever set inside finishSigningIn, at the exact point authStatus becomes signed-in (profile fetched, roster/active checks already passed)', () => {
+    const finishSigningInMatch = appSrc.match(/async function finishSigningIn\([\s\S]*?\n {2}\}/)
+    assert.ok(finishSigningInMatch, 'could not locate finishSigningIn')
+    assert.match(finishSigningInMatch[0], /setAuthStatus\('signed-in'\)\s*\n\s*signedInUserIdRef\.current = userId/)
+  })
+
+  test('signedInUserIdRef is cleared on sign-out, so a later genuinely different sign-in is never mistaken for maintenance of the previous session', () => {
+    const signedOutMatch = appSrc.match(/if \(!session\?\.user\) \{([\s\S]*?)\n {6}\}/)
+    assert.ok(signedOutMatch)
+    assert.ok(signedOutMatch[1].includes('signedInUserIdRef.current = null'))
+  })
+
+  test('a genuinely new or different user\'s SIGNED_IN still reaches the full path: the condition compares against session.user.id, so it can never match for a user other than the one already fully signed in', () => {
+    // This is the actual mechanism that lets a genuine new sign-in through:
+    // signedInUserIdRef.current only ever equals ONE specific user id at a
+    // time (or null before any sign-in), so a different session.user.id
+    // never satisfies the same-user condition and falls through below.
+    assert.ok(signedInBranchMatch)
+    assert.match(applySessionMatch![0], /if \(event === 'SIGNED_IN' && signedInUserIdRef\.current === session\.user\.id\)/)
   })
 })
 

@@ -174,9 +174,12 @@ describe('ReportForm.tsx — Submit is disabled while in flight, and a failure m
   })
 
   test('handleSubmitClick also guards against isSubmitting client-side, before the existing validation check', () => {
-    const fnMatch = reportFormSrc.match(/const handleSubmitClick = \(\) => \{([\s\S]*?)\n {2}\}/)
+    // handleSubmitClick is async (it awaits autosave.cancelPendingAndAwaitInFlight()
+    // before calling onSubmit — see autosaveWiring.test.ts's Submit-coordination
+    // describe block) — the isSubmitting guard itself is unchanged.
+    const fnMatch = reportFormSrc.match(/const handleSubmitClick = async \(\) => \{([\s\S]*?)\n {2}\}/)
     assert.ok(fnMatch, 'could not locate handleSubmitClick')
-    const guardIndex = fnMatch[1].indexOf('if (isSubmitting) return')
+    const guardIndex = fnMatch[1].indexOf('if (isSubmitting || submitClickInFlightRef.current) return')
     const validationIndex = fnMatch[1].indexOf('isWhatMattersNowValidForSubmit')
     assert.ok(guardIndex !== -1 && validationIndex !== -1 && guardIndex < validationIndex)
   })
