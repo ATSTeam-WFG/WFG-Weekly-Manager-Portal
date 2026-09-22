@@ -6,7 +6,7 @@
 // bare).
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { extractAiJson } from './executiveSummaryJson.ts'
+import { extractAiJson, assembleTextFromContentBlocks } from './executiveSummaryJson.ts'
 
 const VALID_JSON = '{"executiveSummary": "All good.", "keyPriorities": "Ship the thing."}'
 
@@ -65,5 +65,77 @@ describe('extractAiJson — outcome classification', () => {
       const result = extractAiJson(VALID_JSON, stopReason)
       assert.equal(result.outcome, 'ok')
     }
+  })
+})
+
+// Anthropic can legitimately split a single turn's output across more than
+// one `text` content block — reading only the first (e.g. content.find(...))
+// silently drops the rest. This is the fix for exactly that: collect every
+// text block, in original order, into the complete response.
+describe('assembleTextFromContentBlocks', () => {
+  test('a single text block returns its text unchanged', () => {
+    assert.equal(assembleTextFromContentBlocks([{ type: 'text', text: 'hello' }]), 'hello')
+  })
+
+  test('multiple text blocks are concatenated in their original order, with no inserted separator', () => {
+    const blocks = [
+      { type: 'text', text: 'First part. ' },
+      { type: 'text', text: 'Second part. ' },
+      { type: 'text', text: 'Third part.' },
+    ]
+    assert.equal(assembleTextFromContentBlocks(blocks), 'First part. Second part. Third part.')
+  })
+
+  test('non-text blocks (e.g. thinking, tool_use) are ignored, not concatenated or errored on', () => {
+    const blocks = [
+      { type: 'thinking', text: undefined },
+      { type: 'text', text: 'Real content.' },
+      { type: 'tool_use' },
+    ]
+    assert.equal(assembleTextFromContentBlocks(blocks), 'Real content.')
+  })
+
+  test('zero text blocks (including an empty content array) safely yields an empty string, not an error', () => {
+    assert.equal(assembleTextFromContentBlocks([]), '')
+    assert.equal(assembleTextFromContentBlocks([{ type: 'thinking' }, { type: 'tool_use' }]), '')
+  })
+
+  test('a text block splits mid-JSON across two blocks — assembling before extraction recovers the complete, valid object', () => {
+    const blocks = [
+      { type: 'text', text: '{"executiveSummary": "All good.", "keyPri' },
+      { type: 'text', text: 'orities": "Ship the thing."}' },
+    ]
+    const assembled = assembleTextFromContentBlocks(blocks)
+    const extraction = extractAiJson(assembled, 'end_turn')
+    assert.deepEqual(extraction, { outcome: 'ok', json: VALID_JSON })
+    assert.deepEqual(JSON.parse(extraction.json), {
+      executiveSummary: 'All good.',
+      keyPriorities: 'Ship the thing.',
+    })
+  })
+
+  test('reproduces the exact production symptom this fix addresses: reading only the first of two split blocks finds brace-like boundaries (a stray "}" inside a string value) but produces invalid JSON, while assembling both blocks first recovers the real, valid object', () => {
+    const blocks = [
+      { type: 'text', text: '{"executiveSummary": "Team discussed the {legacy} system migration", "keyPri' },
+      { type: 'text', text: 'orities": "Ship the thing."}' },
+    ]
+
+    // Old, buggy behavior: only the first block is read. It has an opening
+    // '{' and an incidental '}' from the word "{legacy}", so extractAiJson
+    // reports outcome 'ok' — a false positive — but the resulting slice is
+    // not valid, complete JSON.
+    const firstBlockOnly = blocks[0].text
+    const oldExtraction = extractAiJson(firstBlockOnly, 'end_turn')
+    assert.equal(oldExtraction.outcome, 'ok')
+    assert.throws(() => JSON.parse((oldExtraction as { json: string }).json), SyntaxError)
+
+    // Fixed behavior: assemble every text block first, then extract/parse.
+    const assembled = assembleTextFromContentBlocks(blocks)
+    const newExtraction = extractAiJson(assembled, 'end_turn')
+    assert.equal(newExtraction.outcome, 'ok')
+    assert.deepEqual(JSON.parse((newExtraction as { json: string }).json), {
+      executiveSummary: 'Team discussed the {legacy} system migration',
+      keyPriorities: 'Ship the thing.',
+    })
   })
 })

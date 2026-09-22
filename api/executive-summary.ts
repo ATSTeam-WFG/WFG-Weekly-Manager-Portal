@@ -8,7 +8,7 @@ import {
 import { computeSourceFingerprint } from '../src/lib/executiveAnalysisFingerprint.js'
 import { toISODate } from '../src/utils/week.js'
 import { authenticateAdmin } from './_lib/adminAuth.js'
-import { extractAiJson } from './_lib/executiveSummaryJson.js'
+import { extractAiJson, assembleTextFromContentBlocks } from './_lib/executiveSummaryJson.js'
 
 // Minimal local request/response typing so this file has no dependency on
 // @vercel/node (its transitive deps carry known vulnerabilities, and this is
@@ -232,22 +232,29 @@ Respond with ONLY a valid JSON object (no markdown fences, no commentary) with e
     messages: [{ role: 'user', content: prompt }],
   })
 
-  const textBlock = response.content.find((block) => block.type === 'text')
-  if (!textBlock || textBlock.type !== 'text') {
-    throw new Error('No text content returned from Anthropic.')
+  // Anthropic can legitimately split a single turn's output across more
+  // than one `text` content block (no tool use or extended thinking
+  // involved here) — reading only the first block would silently discard
+  // the rest. This collects every text block, in order, into the complete
+  // response; any other block type is ignored. See
+  // assembleTextFromContentBlocks's own header for why this matters.
+  const assembledText = assembleTextFromContentBlocks(response.content)
+
+  // Safe, non-sensitive metadata shared by both failure logs below — never
+  // the AI text itself, the prompt, or any report content. See
+  // executiveSummaryJson.ts's header.
+  const safeResponseMetadata = {
+    stopReason: response.stop_reason,
+    contentBlockTypes: response.content.map((block) => block.type),
+    textBlockLengths: response.content.filter((block) => block.type === 'text').map((block) => block.text.length),
+    assembledResponseLength: assembledText.length,
   }
 
-  const extraction = extractAiJson(textBlock.text, response.stop_reason)
+  const extraction = extractAiJson(assembledText, response.stop_reason)
   if (extraction.outcome !== 'ok') {
-    // SECURITY: never log textBlock.text, the prompt, or any report
-    // content here — only safe, non-sensitive metadata (lengths, counts,
-    // booleans, category labels). See executiveSummaryJson.ts's header.
     console.error('executive-summary: AI response could not be parsed as JSON.', {
       outcome: extraction.outcome,
-      stopReason: response.stop_reason,
-      responseLength: textBlock.text.length,
-      contentBlockCount: response.content.length,
-      contentBlockTypes: response.content.map((block) => block.type),
+      ...safeResponseMetadata,
       ...(extraction.outcome === 'no_json_object'
         ? { hasOpenBrace: extraction.hasOpenBrace, hasCloseBrace: extraction.hasCloseBrace }
         : {}),
@@ -272,10 +279,7 @@ Respond with ONLY a valid JSON object (no markdown fences, no commentary) with e
     // offending input (e.g. the specific unexpected character) — never let
     // that reach a log. Replaced here with a clean, generic error before it
     // can propagate to handler's catch, which logs the caught error as-is.
-    console.error('executive-summary: AI response contained JSON-like boundaries but failed to parse.', {
-      responseLength: textBlock.text.length,
-      contentBlockCount: response.content.length,
-    })
+    console.error('executive-summary: AI response contained JSON-like boundaries but failed to parse.', safeResponseMetadata)
     throw new Error('Could not parse the AI response as JSON.')
   }
 

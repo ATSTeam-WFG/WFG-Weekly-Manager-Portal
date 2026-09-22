@@ -13,6 +13,15 @@
 // leaving no complete JSON object for the old extractJson to find. Fixed
 // by raising max_tokens, checking stop_reason before ever inspecting the
 // text, and never logging the raw response/prompt/report content anywhere.
+//
+// A second, later incident this also covers: Anthropic can legitimately
+// split a single turn's output across more than one `text` content block
+// (unrelated to tool use or extended thinking) — the response only ever
+// read content.find(block => block.type === 'text'), silently discarding
+// any block after the first, which could leave a fragment that still
+// contained brace-like boundaries but was not valid, complete JSON. Fixed
+// by assembleTextFromContentBlocks (executiveSummaryJson.ts), which
+// concatenates every text block in order before extraction ever runs.
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -29,13 +38,19 @@ describe('executive-summary.ts — max_tokens and stop_reason handling', () => {
     assert.equal(src.includes('max_tokens: 8192'), false)
   })
 
-  test('extractAiJson is imported from the dependency-free helper module — the old inline extractJson no longer exists', () => {
-    assert.match(src, /import \{ extractAiJson \} from '\.\/_lib\/executiveSummaryJson\.js'/)
+  test('extractAiJson and assembleTextFromContentBlocks are both imported from the dependency-free helper module — the old inline extractJson no longer exists', () => {
+    assert.match(src, /import \{ extractAiJson, assembleTextFromContentBlocks \} from '\.\/_lib\/executiveSummaryJson\.js'/)
     assert.equal(/function extractJson\(/.test(src), false, 'the old inline extractJson must be fully removed, not left dead')
   })
 
-  test('response.stop_reason is passed into extractAiJson alongside the response text', () => {
-    assert.match(src, /extractAiJson\(textBlock\.text, response\.stop_reason\)/)
+  test('the response text is assembled from every text content block (never just the first) before extraction — the old content.find(...) single-block read no longer exists', () => {
+    assert.match(src, /const assembledText = assembleTextFromContentBlocks\(response\.content\)/)
+    assert.equal(/response\.content\.find\(/.test(src), false, 'must not read only the first text block — a real response can split its output across more than one')
+    assert.equal(src.includes('const textBlock'), false)
+  })
+
+  test('response.stop_reason is passed into extractAiJson alongside the assembled response text', () => {
+    assert.match(src, /extractAiJson\(assembledText, response\.stop_reason\)/)
   })
 
   test('a truncated outcome throws a message distinct from the generic no_json_object message', () => {
@@ -64,23 +79,38 @@ describe('executive-summary.ts — max_tokens and stop_reason handling', () => {
 describe('executive-summary.ts — no sensitive content ever reaches a log', () => {
   const generateMatch = src.match(/async function generateAnalysis\([\s\S]*?\n\}/)
 
-  test('every console.error inside generateAnalysis logs only safe metadata (lengths, counts, booleans, category labels) — never textBlock.text, prompt, or report content', () => {
+  test('every console.error inside generateAnalysis logs only safe metadata (lengths, counts, booleans, category labels) — never assembledText, textBlock.text, prompt, or report content', () => {
     assert.ok(generateMatch)
-    const logCalls = generateMatch[0].match(/console\.error\([^)]*\{[\s\S]*?\n {4}\}\)/g) ?? []
+    const logCalls = generateMatch[0].match(/console\.error\([^)]*\{[\s\S]*?\n {4}\}\)|console\.error\([^,]*, safeResponseMetadata\)/g) ?? []
     assert.ok(logCalls.length >= 2, 'expected at least two console.error metadata calls (parse-failure and JSON.parse-failure)')
     for (const call of logCalls) {
-      // textBlock.text.length (a safe integer) is fine — a bare
-      // textBlock.text reference (the raw text itself) is not.
+      // assembledText.length / textBlockLengths (safe integers/arrays of
+      // integers) are fine — a bare assembledText/textBlock.text reference
+      // (the raw text itself) is not.
+      assert.equal(/\bassembledText(?!\.length)\b/.test(call), false, `must never log the raw assembled response text itself: ${call}`)
       assert.equal(/textBlock\.text(?!\.length)\b/.test(call), false, `must never log the raw response text itself: ${call}`)
       assert.equal(call.includes('prompt'), false, `must never log the prompt: ${call}`)
     }
   })
 
-  test('the safe log metadata is limited to length/count/boolean/category fields, never the response body itself', () => {
+  test('the shared safeResponseMetadata object is limited to length/count/boolean/category fields, never the response body itself, and is reused by both failure logs (not duplicated ad hoc)', () => {
     assert.ok(generateMatch)
-    assert.match(generateMatch[0], /responseLength: textBlock\.text\.length/)
-    assert.match(generateMatch[0], /contentBlockCount: response\.content\.length/)
-    assert.match(generateMatch[0], /contentBlockTypes: response\.content\.map\(\(block\) => block\.type\)/)
+    const body = generateMatch[0]
+    assert.match(body, /const safeResponseMetadata = \{\s*\n\s*stopReason: response\.stop_reason,\s*\n\s*contentBlockTypes: response\.content\.map\(\(block\) => block\.type\),\s*\n\s*textBlockLengths: response\.content\.filter\(\(block\) => block\.type === 'text'\)\.map\(\(block\) => block\.text\.length\),\s*\n\s*assembledResponseLength: assembledText\.length,\s*\n\s*\}/)
+    // Reused (spread) at the extraction-failure log:
+    assert.match(body, /console\.error\('executive-summary: AI response could not be parsed as JSON\.', \{\s*\n\s*outcome: extraction\.outcome,\s*\n\s*\.\.\.safeResponseMetadata,/)
+    // Reused directly at the JSON.parse-failure log:
+    assert.match(body, /console\.error\('executive-summary: AI response contained JSON-like boundaries but failed to parse\.', safeResponseMetadata\)/)
+  })
+
+  test('safeResponseMetadata is computed once, before either failure path, so both logs are guaranteed consistent', () => {
+    assert.ok(generateMatch)
+    const body = generateMatch[0]
+    const metadataIndex = body.indexOf('const safeResponseMetadata = {')
+    const extractionIndex = body.indexOf('const extraction = extractAiJson(')
+    const parseIndex = body.indexOf('JSON.parse(extraction.json)')
+    assert.ok(metadataIndex !== -1 && extractionIndex !== -1 && parseIndex !== -1)
+    assert.ok(metadataIndex < extractionIndex && extractionIndex < parseIndex)
   })
 })
 
