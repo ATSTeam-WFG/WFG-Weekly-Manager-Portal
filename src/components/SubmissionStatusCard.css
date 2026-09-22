@@ -1,0 +1,226 @@
+.ra-status-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.ra-status-top-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.ra-status-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0;
+}
+
+.ra-status-pending-sentence {
+  font-size: 13px;
+  color: var(--espresso);
+  margin: 0 0 10px;
+}
+
+.ra-status-progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--soft-sand);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.ra-status-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--terracotta);
+  transition: width 0.2s ease;
+}
+
+.ra-status-progress-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--terracotta);
+  white-space: nowrap;
+}
+
+.ra-status-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+/* Compact legend — small color dots + counts, not the large stat tiles
+   (those live in the separate summary cards above this one on the page). */
+.ra-status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.ra-status-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted-gray);
+}
+
+.ra-status-legend-item strong {
+  color: var(--dark-charcoal);
+  font-weight: 700;
+}
+
+.ra-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.ra-status-dot-submitted {
+  background: var(--green);
+}
+
+.ra-status-dot-draft {
+  background: var(--amber);
+}
+
+.ra-status-dot-not-started {
+  background: var(--muted-gray);
+}
+
+.ra-status-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--terracotta);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-left: auto;
+}
+
+.ra-status-toggle-chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.ra-status-toggle-open .ra-status-toggle-chevron {
+  transform: rotate(180deg);
+}
+
+/* Always in the DOM (see SubmissionStatusCard.tsx's own comment) so print
+   shows the full detail regardless of on-screen collapse state — only the
+   ON-SCREEN visibility is gated by .ra-status-detail-open. */
+.ra-status-detail {
+  display: none;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--soft-sand);
+}
+
+.ra-status-detail-open {
+  display: block;
+}
+
+.ra-status-group {
+  margin-bottom: 16px;
+}
+
+.ra-status-group:last-child {
+  margin-bottom: 0;
+}
+
+.ra-status-group-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.ra-status-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted-gray);
+}
+
+.ra-status-group-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-gray);
+}
+
+/* Individual subtle items — never comma-separated prose, never a
+   per-name status badge (the group heading above already communicates
+   status). Understated on purpose: light border, no shadow. */
+.ra-status-name-list,
+.ra-status-name-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ra-status-name-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ra-status-name-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ra-status-name-item {
+  font-size: 13px;
+  color: var(--espresso);
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  padding: 6px 12px;
+  overflow-wrap: anywhere;
+}
+
+.ra-status-name-grid .ra-status-name-item {
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .ra-status-toggle {
+    margin-left: 0;
+  }
+
+  .ra-status-name-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .ra-status-name-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  /* The toggle is screen-only (no-print already handles it); force the
+     detail open regardless of on-screen collapse state whenever the card
+     itself is visible at all. */
+  .ra-status-detail {
+    display: block !important;
+  }
+}

@@ -1,43 +1,64 @@
-.report-period-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 24px;
+/* Page header: title/subtitle on their own row. */
+.ra-header-titles {
+  margin-bottom: 16px;
 }
 
-.report-period-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: inherit;
+.ra-header-titles h1 {
+  margin: 0 0 2px;
+}
+
+.ra-header-subtitle {
   font-size: 13px;
-  font-weight: 600;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--soft-sand);
-  background: var(--white);
   color: var(--muted-gray);
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  margin: 0;
 }
 
-.report-period-btn:hover {
-  border-color: var(--terracotta);
-  color: var(--terracotta);
-}
-
-.report-period-btn.active {
-  background: var(--terracotta);
-  border-color: var(--terracotta);
-  color: var(--white);
-}
-
-.reports-week-selector {
+/* Full content-width toolbar, its own row below the title — a three-column
+   grid (period dropdown left, date-navigation centered, Export/Print
+   right) so the left/right edges align with the content/cards below,
+   rather than sharing space with (and being compressed by) the title. */
+.ra-period-toolbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 20px;
 }
 
-.period-stats-grid {
-  grid-template-columns: repeat(3, 1fr);
+.ra-period-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  gap: 12px;
+}
+
+/* Scoped to this toolbar only (never touching the shared .week-nav-btn
+   used elsewhere, e.g. Admin Dashboard's own week selector) — matches the
+   period dropdown/Export-Print button's height for a consistent row. */
+.ra-period-toolbar .week-nav-btn {
+  width: 36px;
+  height: 36px;
+}
+
+.ra-period-select {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dark-charcoal);
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  padding: 9px 14px;
+  height: 38px;
+  width: 150px;
+  cursor: pointer;
+  justify-self: start;
+}
+
+.ra-period-select:focus {
+  outline: none;
+  border-color: var(--terracotta);
 }
 
 .ra-eyebrow {
@@ -49,74 +70,139 @@
   margin: 0 0 10px;
 }
 
-.ra-pending-complete {
-  background: rgba(22, 131, 75, 0.08);
-  border: 1px solid rgba(22, 131, 75, 0.25);
-  border-radius: 12px;
-  padding: 14px 18px;
-  color: var(--green);
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 24px;
+/* Four compact KPI tiles — a quick-scan summary row above the detailed
+   Submission Status card. Restrained WFG-toned backgrounds, no borders,
+   no shadow, matching the "no oversized controls" direction. Equal width,
+   one row on desktop; wraps on narrower screens (see media queries below). */
+.ra-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
-.ra-pending-card {
-  background: var(--white);
-  border: 1px solid var(--soft-sand);
-  border-left: 4px solid var(--amber);
-  border-radius: 12px;
-  padding: 18px 20px;
-  margin-bottom: 24px;
-}
-
-.ra-pending-intro {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--dark-charcoal);
-  margin: 0 0 12px;
-}
-
-.ra-pending-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.ra-kpi-card {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 14px 16px;
+  min-height: 64px;
+  box-sizing: border-box;
 }
 
-.ra-pending-item {
+/* Neutral WFG cream/sand treatment — same restrained tone as Not Started,
+   distinguished by icon and position (always first) rather than a
+   competing accent color. */
+.ra-kpi-card-total {
+  background: var(--warm-cream);
+}
+
+.ra-kpi-card-submitted {
+  background: rgba(22, 131, 75, 0.08);
+}
+
+.ra-kpi-card-draft {
+  background: rgba(217, 119, 6, 0.08);
+}
+
+.ra-kpi-card-not-started {
+  background: var(--warm-cream);
+}
+
+.ra-kpi-icon {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  background: var(--warm-cream);
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   border-radius: 999px;
-  padding: 6px 12px 6px 14px;
-  font-size: 13px;
+  font-size: 15px;
+  flex-shrink: 0;
 }
 
-.ra-pending-name {
-  color: var(--espresso);
-  font-weight: 600;
+.ra-kpi-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
-.ra-pending-tag {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-
-.ra-pending-tag-draft {
-  color: var(--amber);
-  background: rgba(217, 119, 6, 0.14);
-}
-
-.ra-pending-tag-not_started {
-  color: var(--muted-gray);
+.ra-kpi-card-total .ra-kpi-icon {
   background: var(--soft-sand);
+  color: var(--espresso);
+}
+
+.ra-kpi-card-submitted .ra-kpi-icon {
+  background: rgba(22, 131, 75, 0.16);
+  color: var(--green);
+}
+
+.ra-kpi-card-draft .ra-kpi-icon {
+  background: rgba(217, 119, 6, 0.16);
+  color: var(--amber);
+}
+
+.ra-kpi-card-not-started .ra-kpi-icon {
+  background: var(--soft-sand);
+  color: var(--muted-gray);
+}
+
+.ra-kpi-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.ra-kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  line-height: 1.1;
+}
+
+.ra-kpi-label {
+  font-size: 12px;
+  color: var(--muted-gray);
+}
+
+.ra-kpi-pct {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted-gray);
+}
+
+.ra-manager-reports-header {
+  margin-bottom: 10px;
+}
+
+.ra-manager-reports-header .ra-eyebrow {
+  margin-bottom: 2px;
+}
+
+.ra-manager-reports-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* The Total Managers count, moved here from its own standalone row above
+   the KPI cards — a subtle, right-aligned supporting badge rather than
+   text directly adjacent to the "Manager Reports" title. */
+.ra-manager-reports-total {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted-gray);
+  background: var(--warm-cream);
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.ra-manager-reports-subtitle {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0;
 }
 
 .period-manager-block {
@@ -155,21 +241,6 @@
   margin: 0 0 12px;
 }
 
-.period-week-section {
-  margin-bottom: 12px;
-}
-
-.period-week-section:last-child {
-  margin-bottom: 0;
-}
-
-.period-week-section h3 {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--dark-charcoal);
-  margin: 0 0 4px;
-}
-
 .print-generated {
   font-size: 12px;
   color: var(--muted-gray);
@@ -184,9 +255,51 @@
   display: none;
 }
 
-@media (max-width: 640px) {
-  .period-stats-grid {
+/* A tighter, more compact Executive Analysis card ON THIS PAGE ONLY — none
+   of its Generate/Edit/Regenerate/Revert/Print controls, AI logic, or
+   persisted-content rendering are touched; this only reduces padding/margin
+   so the card takes less vertical space, matching the page's "compact,
+   less vertical whitespace" direction. Scoped to .reports-analytics-page so
+   the standalone Weekly Summary page (which shares the same
+   ExecutiveAnalysisCard component and CSS classes) keeps its own existing
+   spacing, completely unaffected. */
+.reports-analytics-page .executive-summary-section {
+  margin-bottom: 20px;
+}
+
+.reports-analytics-page .executive-summary-content {
+  padding: 18px 20px;
+}
+
+.reports-analytics-page .executive-summary-block {
+  margin-bottom: 12px;
+}
+
+/* The full, always-current report content used for printing (see
+   ReportsAnalytics.tsx's own comment on `.ra-print-report-content`) is
+   redundant on screen — the interactive, searchable Manager Reports table
+   above it is what managers/admins actually use to browse content there. */
+.reports-analytics-page .ra-print-report-content {
+  display: none;
+}
+
+/* Print-only "Manager Reports" section heading — see the matching
+   @media print rule below, and the comment on this class in
+   ReportsAnalytics.tsx. Never shown on screen; the interactive page
+   already has its own "Manager Reports" heading (.ra-manager-reports-header). */
+.ra-print-manager-reports-heading {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .ra-kpi-row {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .ra-kpi-row {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -195,8 +308,23 @@
     padding: 16px;
   }
 
-  .ra-pending-card {
-    padding: 14px 16px;
+  .ra-period-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .ra-period-select {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .ra-period-nav {
+    justify-self: stretch;
+  }
+
+  /* Export/Print must never stretch full width, even when the toolbar
+     collapses to a single column — stays a compact, right-aligned button. */
+  .ra-period-toolbar .export-print-anchor {
+    justify-self: end;
   }
 }
 
@@ -215,7 +343,24 @@
     border-bottom: 2px solid var(--terracotta);
   }
 
-  .reports-analytics-page .admin-heading {
+  .reports-analytics-page .ra-header-titles {
+    display: none;
+  }
+
+  .reports-analytics-page .ra-kpi-row {
+    display: none;
+  }
+
+  /* This on-screen heading (eyebrow + "{N} Managers" badge + subtitle,
+     directly above the interactive, no-print ManagerReportsTable) is never
+     part of any print output — it duplicated into Complete Leadership
+     Report (the one mode with no scoping body class to otherwise catch it
+     as an unlisted direct child of .reports-analytics-page, the way the
+     other three modes' rules in print.css already do), landing detached
+     from the actual report content below it. The dedicated
+     .ra-print-manager-reports-heading below is the only "Manager Reports"
+     heading that ever prints. */
+  .reports-analytics-page .ra-manager-reports-header {
     display: none;
   }
 
@@ -223,17 +368,47 @@
     font-size: 14px;
   }
 
-  .reports-analytics-page .admin-stat-card,
-  .reports-analytics-page .period-manager-block,
+  /* Complete Leadership Report (bare window.print(), no scoping body
+     class) shows this in full; the two scoped modes further restrict it
+     via print.css's body-class rules. */
+  .reports-analytics-page .ra-print-report-content {
+    display: block;
+  }
+
+  /* Print-only heading immediately above .ra-print-report-content (see
+     ReportsAnalytics.tsx) — screen-hidden, shown only here. As a direct
+     child of .reports-analytics-page not named in the two scoped modes'
+     allow-lists in print.css, it's automatically excluded from those two
+     (and from Executive-Analysis-only), so it only ever appears ahead of
+     the actual manager report content in Complete Leadership Report. */
+  .reports-analytics-page .ra-print-manager-reports-heading {
+    display: block;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--dark-charcoal);
+    margin: 0 0 12px;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Each individual manager's full report block (which, across a longer
+     reporting period, can span many weeks) is intentionally NOT kept
+     whole via break-inside:avoid — forcing an entire long report onto one
+     page is what was producing large blank gaps at the bottom of the
+     previous page. Letting it flow/split naturally across the page break
+     keeps pagination compact. The smaller, individually-bounded pieces
+     below (a single week's content, one Executive Analysis section, the
+     status card) remain kept-together, since splitting those internally
+     would look broken while rarely being long enough to leave a gap. */
   .reports-analytics-page .period-week-block,
   .reports-analytics-page .executive-summary-block,
-  .reports-analytics-page .ra-pending-card,
-  .reports-analytics-page .ra-pending-complete {
+  .reports-analytics-page .ra-status-card {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
   .reports-analytics-page .period-manager-name,
+  .reports-analytics-page .weekly-summary-entry-name,
   .reports-analytics-page .ra-eyebrow {
     break-after: avoid;
     page-break-after: avoid;

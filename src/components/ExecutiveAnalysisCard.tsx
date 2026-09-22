@@ -43,7 +43,7 @@ const PRINT_MODE_FALLBACK_MS = 60_000
 // while editing is harmless, since the already-existing
 // .executive-summary-content--print-only rule (below) guarantees the
 // LAST-SAVED content is what actually renders for print either way.
-function printExecutiveAnalysisOnly(): void {
+export function printExecutiveAnalysisOnly(): void {
   document.body.classList.add(PRINT_EXECUTIVE_ANALYSIS_ONLY_CLASS)
 
   let cleaned = false
@@ -64,6 +64,15 @@ interface ExecutiveAnalysisCardProps {
   offset: number
   weekStartDates: string[]
   periodStartDate: string
+  // Hides this card's own standalone "Print Executive Analysis" button.
+  // Defaults to true, preserving existing behavior for any caller that
+  // omits it (WeeklySummary.tsx, which has no other print entry point for
+  // this content). Reports & Analytics passes false since its unified
+  // Export/Print menu already offers the identical action — via this same
+  // exported printExecutiveAnalysisOnly function, never a second
+  // implementation — so the standalone button there would just be a
+  // duplicate control.
+  showPrintButton?: boolean
 }
 
 function formatDate(iso: string) {
@@ -74,7 +83,13 @@ function formatDate(iso: string) {
 // & Analytics, so the persisted analysis for a given period is read, edited,
 // reverted, and regenerated through exactly one implementation — never a
 // second, independently-maintained copy of this logic.
-export default function ExecutiveAnalysisCard({ periodKey, offset, weekStartDates, periodStartDate }: ExecutiveAnalysisCardProps) {
+export default function ExecutiveAnalysisCard({
+  periodKey,
+  offset,
+  weekStartDates,
+  periodStartDate,
+  showPrintButton = true,
+}: ExecutiveAnalysisCardProps) {
   const [loading, setLoading] = useState(true)
   const [hasSubmissions, setHasSubmissions] = useState(false)
   const [analysis, setAnalysis] = useState<PersistedExecutiveAnalysis | null>(null)
@@ -85,6 +100,12 @@ export default function ExecutiveAnalysisCard({ periodKey, offset, weekStartDate
   const [actionStatus, setActionStatus] = useState<ActionStatus>('idle')
   const [error, setError] = useState<string | null>(null)
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
+  // Display-only: the underlying persisted analysis is never truncated or
+  // altered — this only toggles whether the on-screen VIEW-mode content
+  // shows a short preview or every section. Printing (and edit mode, via
+  // the existing print-only mechanism below) always uses the complete
+  // content regardless of this flag.
+  const [previewExpanded, setPreviewExpanded] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -93,6 +114,7 @@ export default function ExecutiveAnalysisCard({ periodKey, offset, weekStartDate
     setEditedSections(null)
     setError(null)
     setShowRegenerateConfirm(false)
+    setPreviewExpanded(false)
 
     async function load() {
       const [stats, persisted] = await Promise.all([
@@ -220,7 +242,7 @@ export default function ExecutiveAnalysisCard({ periodKey, offset, weekStartDate
   return (
     <div className="executive-summary-section">
       <div className="executive-summary-header no-print">
-        <h2>AI Executive Analysis</h2>
+        <h2>Executive Analysis</h2>
         <div className="executive-summary-actions">
           {analysis && mode === 'view' && (
             <button type="button" className="btn btn-secondary" onClick={handleEditClick} disabled={busy}>
@@ -242,7 +264,7 @@ export default function ExecutiveAnalysisCard({ periodKey, offset, weekStartDate
               {actionStatus === 'generating' ? 'Generating…' : analysis ? 'Regenerate' : 'Generate AI Analysis'}
             </button>
           )}
-          {analysis && (
+          {analysis && showPrintButton && (
             <button type="button" className="btn btn-secondary" onClick={printExecutiveAnalysisOnly} disabled={busy}>
               Print Executive Analysis
             </button>
@@ -299,12 +321,43 @@ export default function ExecutiveAnalysisCard({ periodKey, offset, weekStartDate
               Generated {formatDate(analysis.generatedAt)}
               {analysis.isEdited && analysis.editedAt ? ` · Edited ${formatDate(analysis.editedAt)}` : ''}
             </p>
-            {REPORTING_ANALYSIS_SECTIONS.map((section) => (
-              <div className="executive-summary-block" key={section.key}>
-                <h3>{section.title}</h3>
-                <p className="report-readonly-text">{analysis.sections[section.key]}</p>
+
+            {/* Collapsed-by-default screen preview — display-only, never
+                printed (no-print) and never alters analysis.sections
+                itself; only its own rendered text is visually clamped. */}
+            <div className={`executive-summary-preview no-print ${previewExpanded ? 'executive-summary-preview-hidden' : ''}`}>
+              <div className="executive-summary-block">
+                <h3>{REPORTING_ANALYSIS_SECTIONS[0].title}</h3>
+                <p className="report-readonly-text executive-summary-preview-text">
+                  {analysis.sections[REPORTING_ANALYSIS_SECTIONS[0].key]}
+                </p>
               </div>
-            ))}
+              <button type="button" className="executive-summary-preview-toggle" onClick={() => setPreviewExpanded(true)}>
+                View full analysis &darr;
+              </button>
+            </div>
+
+            {/* Always in the DOM with every section — visible on screen only
+                once expanded, but ALWAYS shown for print (see this class's
+                own @media print rule), so printing never depends on this
+                on-screen toggle's state. */}
+            <div className={`executive-summary-full ${previewExpanded ? 'executive-summary-full-open' : ''}`}>
+              {REPORTING_ANALYSIS_SECTIONS.map((section) => (
+                <div className="executive-summary-block" key={section.key}>
+                  <h3>{section.title}</h3>
+                  <p className="report-readonly-text">{analysis.sections[section.key]}</p>
+                </div>
+              ))}
+              {previewExpanded && (
+                <button
+                  type="button"
+                  className="executive-summary-preview-toggle no-print"
+                  onClick={() => setPreviewExpanded(false)}
+                >
+                  Hide full analysis &uarr;
+                </button>
+              )}
+            </div>
           </div>
 
           {mode === 'edit' && editedSections && (

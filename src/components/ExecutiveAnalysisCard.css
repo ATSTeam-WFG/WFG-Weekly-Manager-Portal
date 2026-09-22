@@ -79,6 +79,51 @@
   }
 }
 
+/* Collapsed-by-default preview (display-only — the stored analysis itself
+   is never truncated, only this rendered text is visually clamped). */
+.executive-summary-preview-hidden {
+  display: none;
+}
+
+.executive-summary-preview-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.executive-summary-preview-toggle {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--terracotta);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.executive-summary-preview-toggle:hover {
+  text-decoration: underline;
+}
+
+/* Always in the DOM with every section (see ExecutiveAnalysisCard.tsx) —
+   hidden on screen until expanded, but ALWAYS shown for print regardless of
+   the on-screen toggle state, so printing never depends on it. */
+.executive-summary-full {
+  display: none;
+}
+
+.executive-summary-full-open {
+  display: block;
+}
+
+@media print {
+  .executive-summary-full {
+    display: block !important;
+  }
+}
+
 @media (max-width: 480px) {
   .executive-summary-actions {
     width: 100%;

@@ -28,8 +28,22 @@ const weeklySummarySrc = readFileSync(path.join(dir, '..', 'components', 'Weekly
 const printCss = readFileSync(path.join(dir, '..', 'print.css'), 'utf8')
 
 describe('The dedicated Print Executive Analysis action exists only when appropriate', () => {
-  test('the button is rendered only when analysis exists — nothing to print otherwise', () => {
-    assert.match(cardSrc, /\{analysis && \(\s*\n\s*<button type="button" className="btn btn-secondary" onClick=\{printExecutiveAnalysisOnly\}/)
+  test('the button is rendered only when analysis exists AND showPrintButton is true — nothing to print otherwise, or when the caller has its own unified print control', () => {
+    assert.match(cardSrc, /\{analysis && showPrintButton && \(\s*\n\s*<button type="button" className="btn btn-secondary" onClick=\{printExecutiveAnalysisOnly\}/)
+  })
+
+  test('showPrintButton defaults to true — any existing caller that omits the prop (WeeklySummary.tsx) keeps this button exactly as before', () => {
+    assert.match(cardSrc, /showPrintButton = true,/)
+  })
+
+  test('ReportsAnalytics.tsx passes showPrintButton={false} — its unified Export/Print menu already offers the identical action', () => {
+    assert.match(reportsAnalyticsSrc, /<ExecutiveAnalysisCard[\s\S]*?showPrintButton=\{false\}[\s\S]*?\/>/)
+  })
+
+  test('WeeklySummary.tsx does not pass showPrintButton at all — relies on the default (true), preserving its own standalone button unchanged', () => {
+    const usageMatch = weeklySummarySrc.match(/<ExecutiveAnalysisCard[\s\S]*?\/>/)
+    assert.ok(usageMatch, 'could not locate <ExecutiveAnalysisCard> usage in WeeklySummary.tsx')
+    assert.equal(usageMatch[0].includes('showPrintButton'), false)
   })
 
   test('it is a distinct action from Edit/Regenerate/Revert — its own button, own handler, own label', () => {
@@ -124,26 +138,29 @@ describe('The print CSS isolation applies only during Executive-Analysis-only pr
 })
 
 describe('Existing page-level Print / Export PDF handlers remain unchanged', () => {
-  test('ReportsAnalytics.tsx handlePrint is still a bare window.print() — no class toggle added', () => {
-    const fnMatch = reportsAnalyticsSrc.match(/const handlePrint = \(\) => \{[\s\S]*?\n  \}/)
-    assert.ok(fnMatch, 'could not locate handlePrint in ReportsAnalytics.tsx')
-    assert.equal(fnMatch[0].replace(/\s+/g, ' ').trim(), 'const handlePrint = () => { window.print() }')
-  })
-
+  // ReportsAnalytics.tsx's old bare "Print / Export PDF" button was
+  // replaced by the unified ExportPrintMenu (see reportsAnalyticsPrintWiring.test.ts)
+  // — its "Complete Leadership Report" choice is the direct equivalent (a
+  // bare window.print(), no scoping class), covered there. WeeklySummary.tsx
+  // is unaffected by that redesign (it's scoped to Reports & Analytics only)
+  // and keeps its own unchanged button/handler, verified below.
   test('WeeklySummary.tsx handlePrint is still a bare window.print() — no class toggle added', () => {
     const fnMatch = weeklySummarySrc.match(/const handlePrint = \(\) => \{[\s\S]*?\n  \}/)
     assert.ok(fnMatch, 'could not locate handlePrint in WeeklySummary.tsx')
     assert.equal(fnMatch[0].replace(/\s+/g, ' ').trim(), 'const handlePrint = () => { window.print() }')
   })
 
-  test('neither page-level handlePrint references the new print-executive-analysis-only class', () => {
-    assert.equal(reportsAnalyticsSrc.includes('print-executive-analysis-only'), false)
+  test('WeeklySummary.tsx never references the new print-executive-analysis-only class', () => {
     assert.equal(weeklySummarySrc.includes('print-executive-analysis-only'), false)
   })
 
-  test('both page-level "Print / Export PDF" buttons are still wired to their own unchanged handlePrint', () => {
-    assert.match(reportsAnalyticsSrc, /onClick=\{handlePrint\}>\s*\n\s*Print \/ Export PDF/)
+  test('the WeeklySummary.tsx "Print / Export PDF" button is still wired to its own unchanged handlePrint', () => {
     assert.match(weeklySummarySrc, /onClick=\{handlePrint\}>\s*\n\s*Print \/ Export PDF/)
+  })
+
+  test('ReportsAnalytics.tsx no longer has its own standalone handlePrint — printing now goes through ExportPrintMenu', () => {
+    assert.equal(/const handlePrint = \(\) => \{/.test(reportsAnalyticsSrc), false)
+    assert.match(reportsAnalyticsSrc, /<ExportPrintMenu/)
   })
 })
 
@@ -156,5 +173,72 @@ describe('Existing saved-content print behavior during edit mode remains intact'
 
   test('the edit form itself remains no-print, unaffected by the new button', () => {
     assert.match(cardSrc, /executive-summary-content executive-summary-edit-form no-print/)
+  })
+})
+
+// Feature this covers: the current full Executive Analysis made the
+// dashboard unnecessarily long. In view mode it now defaults to a short
+// preview (the first section, Executive Summary, visually clamped via CSS
+// only — the stored analysis itself is never truncated/altered), with a
+// "View full analysis" toggle that reveals every section. Printing must
+// never depend on this on-screen toggle: the full-content block is always
+// in the DOM and is forced visible under @media print regardless of
+// on-screen collapse state.
+describe('ExecutiveAnalysisCard.tsx — collapsed-by-default preview, display-only, never altering the stored analysis', () => {
+  test('previewExpanded state defaults to false (collapsed) and is reset alongside the other per-period UI state', () => {
+    assert.match(cardSrc, /const \[previewExpanded, setPreviewExpanded\] = useState\(false\)/)
+    const effectMatch = cardSrc.match(/useEffect\(\(\) => \{[\s\S]*?\n {2}\}, \[periodKey, periodStartDate, weekStartDates\]\)/)
+    assert.ok(effectMatch, 'could not locate the per-period reset effect')
+    assert.match(effectMatch[0], /setPreviewExpanded\(false\)/)
+  })
+
+  test('the collapsed preview shows only the first section (Executive Summary) — the same real title from REPORTING_ANALYSIS_SECTIONS, never an invented label', () => {
+    assert.match(cardSrc, /<h3>\{REPORTING_ANALYSIS_SECTIONS\[0\]\.title\}<\/h3>/)
+    assert.match(cardSrc, /\{analysis\.sections\[REPORTING_ANALYSIS_SECTIONS\[0\]\.key\]\}/)
+  })
+
+  test('the preview text is only visually clamped via CSS (-webkit-line-clamp) — never sliced/truncated in JS, so the underlying string is never altered', () => {
+    assert.equal(/\.slice\(|\.substring\(|\.substr\(/.test(cardSrc), false, 'must never truncate the analysis text in JS')
+    assert.match(cardCss, /\.executive-summary-preview-text \{[\s\S]*?-webkit-line-clamp: 3;/)
+  })
+
+  test('"View full analysis" is rendered only in the collapsed preview, and sets previewExpanded(true)', () => {
+    const previewMatch = cardSrc.match(/<div className=\{`executive-summary-preview no-print[\s\S]*?<\/div>\s*\n {12}<\/div>/)
+    assert.ok(previewMatch, 'could not locate the preview block')
+    assert.match(previewMatch[0], /View full analysis/)
+    assert.match(previewMatch[0], /onClick=\{\(\) => setPreviewExpanded\(true\)\}/)
+  })
+
+  test('"Hide full analysis" is rendered only when expanded, inside the full-sections block, and sets previewExpanded(false)', () => {
+    assert.match(
+      cardSrc,
+      /\{previewExpanded && \(\s*\n\s*<button[\s\S]*?onClick=\{\(\) => setPreviewExpanded\(false\)\}[\s\S]*?Hide full analysis/,
+    )
+  })
+
+  test('the full-sections block renders every REPORTING_ANALYSIS_SECTIONS entry (all 7), not just the preview\'s one section', () => {
+    const fullBlockMatch = cardSrc.match(/<div className=\{`executive-summary-full[\s\S]*?\n {12}<\/div>/)
+    assert.ok(fullBlockMatch, 'could not locate the full-sections block')
+    assert.match(fullBlockMatch[0], /\{REPORTING_ANALYSIS_SECTIONS\.map\(\(section\) => \(/)
+  })
+
+  test('edit mode still exposes the complete editable analysis (all 7 sections), independent of previewExpanded — the existing edit form is untouched', () => {
+    const editFormMatch = cardSrc.match(/\{mode === 'edit' && editedSections && \([\s\S]*?\n {10}\)\}/)
+    assert.ok(editFormMatch, 'could not locate the edit form block')
+    assert.match(editFormMatch[0], /\{REPORTING_ANALYSIS_SECTIONS\.map\(\(section\) => \(/)
+    assert.equal(editFormMatch[0].includes('previewExpanded'), false, 'the edit form must never be gated by the preview/expand state')
+  })
+
+  test('printing always shows the complete analysis regardless of on-screen collapse state: .executive-summary-full is forced visible under @media print unconditionally', () => {
+    assert.match(cardCss, /\.executive-summary-full \{\s*\n\s*display: none;\s*\n\s*\}/)
+    assert.match(cardCss, /\.executive-summary-full-open \{\s*\n\s*display: block;\s*\n\s*\}/)
+    assert.match(
+      cardCss,
+      /@media print \{\s*\n\s*\.executive-summary-full \{\s*\n\s*display: block !important;\s*\n\s*\}\s*\n\s*\}/,
+    )
+  })
+
+  test('the collapsed preview itself is no-print — it never appears in any print output, full or scoped', () => {
+    assert.match(cardSrc, /className=\{`executive-summary-preview no-print/)
   })
 })

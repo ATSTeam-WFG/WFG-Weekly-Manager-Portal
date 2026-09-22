@@ -28,4 +28,30 @@
   body.print-executive-analysis-only .weekly-summary > *:not(.print-header):not(.executive-summary-section) {
     display: none !important;
   }
+
+  /* Weekly Summary only (see ReportsAnalytics.tsx's printWeeklySummaryOnly)
+     — reuses the exact same toggle-body-class-around-window.print() pattern
+     as above. Restricted to .reports-analytics-page only: this option is
+     only ever offered/enabled there while the Weekly period is selected
+     (see ExportPrintMenu's weeklySummaryAvailable prop), so it never needs
+     to apply to the standalone .weekly-summary page, which already prints
+     its own full content via its own unchanged "Print / Export PDF"
+     button. Leaves only .print-header and the always-in-DOM
+     .ra-print-report-content (every submitted manager's report for the
+     current week) visible — explicitly excludes the Submission Status
+     card and Executive Analysis, matching the existing standalone Weekly
+     Summary artifact, which never showed either of those either. */
+  body.print-weekly-summary-only .reports-analytics-page > *:not(.print-header):not(.ra-print-report-content) {
+    display: none !important;
+  }
+
+  /* Manager Reports only (see ReportsAnalytics.tsx's
+     printManagerReportsOnly) — same isolation as above, plus a
+     dynamically-injected sibling <style> (created by that same function)
+     that further filters .ra-print-report-content down to only the
+     manager(s) selected in the Export/Print menu, keyed off each report
+     block's own data-manager-id attribute. */
+  body.print-manager-reports-only .reports-analytics-page > *:not(.print-header):not(.ra-print-report-content) {
+    display: none !important;
+  }
 }

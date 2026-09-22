@@ -1,0 +1,132 @@
+.ra-manager-table-wrap {
+  margin-bottom: 24px;
+}
+
+.ra-manager-table-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.ra-manager-search {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 12px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--espresso);
+}
+
+.ra-manager-search:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+.ra-manager-status-filter {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--espresso);
+  cursor: pointer;
+}
+
+.ra-manager-table {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.ra-manager-table-header {
+  display: grid;
+  grid-template-columns: 1fr 140px 140px;
+  gap: 12px;
+  padding: 10px 18px;
+  background: var(--warm-cream);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-gray);
+}
+
+.ra-manager-table-row-group:not(:last-child) {
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.ra-manager-table-row {
+  display: grid;
+  grid-template-columns: 1fr 140px 140px;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 18px;
+}
+
+.ra-manager-table-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dark-charcoal);
+}
+
+.ra-manager-view-btn {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--terracotta);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.ra-manager-view-btn:hover {
+  text-decoration: underline;
+}
+
+.ra-manager-table-expanded {
+  padding: 4px 18px 18px;
+  background: var(--warm-cream);
+}
+
+.ra-manager-table-toggle-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.ra-manager-table-toggle {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--terracotta);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.ra-manager-table-toggle:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .ra-manager-table-controls {
+    flex-direction: column;
+  }
+
+  .ra-manager-table-header {
+    display: none;
+  }
+
+  .ra-manager-table-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
