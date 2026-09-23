@@ -4,6 +4,16 @@
   padding: 32px 24px 100px;
 }
 
+/* Widens ONLY the editable Manager Report Form to the approved 1080px
+   admin content frame, without touching the shared .report-form rule
+   above — SubmittedReport.tsx/HistoricalReportView.tsx/ManagerReportView.tsx
+   all also render a root className="report-form" and must stay exactly at
+   760px. This is the one property that needed to change (padding already
+   matched the target 32px/24px/100px). */
+.manager-report-form {
+  max-width: 1080px;
+}
+
 .back-link {
   display: inline-block;
   margin-bottom: 20px;
@@ -32,8 +42,9 @@
 .report-guidance-card {
   background: var(--warm-cream);
   border: 1px solid var(--soft-sand);
+  border-left: 4px solid var(--terracotta);
   border-radius: 12px;
-  padding: 16px 20px;
+  padding: 18px 24px;
   margin-bottom: 16px;
 }
 
@@ -43,7 +54,7 @@
   text-transform: uppercase;
   letter-spacing: 0.02em;
   color: var(--dark-charcoal);
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 }
 
 .report-guidance-list {
@@ -52,6 +63,17 @@
   color: var(--espresso);
   font-size: 13px;
   line-height: 1.6;
+}
+
+/* Uses the extra desktop width the guidance card now has room for — two
+   columns instead of one long single-column list of five short lines. */
+@media (min-width: 640px) {
+  .report-guidance-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 32px;
+    row-gap: 2px;
+  }
 }
 
 .report-leadership-expectations {
@@ -224,6 +246,16 @@
 
 .autosave-status-error {
   color: var(--terracotta);
+}
+
+/* Scoped to .manager-report-form (this form only) rather than the shared
+   .report-form, so SubmittedReport/HistoricalReportView/ManagerReportView
+   — already narrower at 760px and unaffected by the desktop widening above
+   — get no new behavior at this breakpoint either. */
+@media (max-width: 860px) {
+  .manager-report-form {
+    padding: 28px 20px 100px;
+  }
 }
 
 @media (max-width: 480px) {

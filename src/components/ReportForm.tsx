@@ -200,7 +200,7 @@ export default function ReportForm({
   }
 
   return (
-    <div className="report-form">
+    <div className="report-form manager-report-form">
       <button className="link-btn back-link" onClick={handleBackClick}>
         &larr; Back to Dashboard
       </button>

@@ -1,20 +1,40 @@
-.dashboard {
-  max-width: 760px;
+.dashboard-page {
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 40px 24px 80px;
+  padding: 32px 24px 100px;
 }
 
-.dashboard-heading h1 {
-  font-size: 28px;
+.md-page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.md-page-heading-text h1 {
+  font-size: 26px;
   font-weight: 700;
   color: var(--dark-charcoal);
   margin: 0 0 4px;
 }
 
-.dashboard-week {
-  font-size: 14px;
+.md-page-subtitle {
+  font-size: 13px;
   color: var(--muted-gray);
-  margin: 0 0 28px;
+  margin: 0;
+}
+
+.md-page-week {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--espresso);
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 999px;
+  padding: 7px 16px;
+  white-space: nowrap;
 }
 
 .reminder-banner {
@@ -80,8 +100,8 @@
   border: 1px solid var(--soft-sand);
   border-top: 4px solid var(--terracotta);
   border-radius: 16px;
-  padding: 32px;
-  margin-bottom: 24px;
+  padding: 28px 32px;
+  margin-bottom: 20px;
   box-shadow: 0 20px 40px -28px rgba(48, 42, 39, 0.35);
 }
 
@@ -89,25 +109,33 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .hero-week-label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--muted-gray);
 }
 
 .hero-deadline-block {
-  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--soft-sand);
 }
 
 .hero-deadline {
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: 600;
   color: var(--espresso);
-  margin: 0 0 8px;
+  margin: 0;
 }
 
 .hero-deadline strong {
@@ -116,12 +144,16 @@
 
 .hero-days-left {
   display: inline-block;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--terracotta);
   background: var(--soft-sand);
   padding: 4px 12px;
   border-radius: 999px;
+}
+
+.hero-action {
+  text-align: center;
 }
 
 .btn-large {
@@ -163,14 +195,13 @@
   border: 1px solid var(--soft-sand);
   border-radius: 12px;
   padding: 24px;
-  margin-bottom: 20px;
 }
 
 .history-card h2 {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--dark-charcoal);
-  margin: 0 0 16px;
+  margin: 0 0 12px;
 }
 
 .history-list {
@@ -184,7 +215,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 12px;
+  padding: 10px 12px;
   margin: 0 -12px;
   border-top: 1px solid var(--soft-sand);
   border-radius: 8px;
@@ -208,6 +239,29 @@
   color: var(--espresso);
 }
 
+.history-row-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.history-row-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-gray);
+  flex-shrink: 0;
+}
+
+.history-row-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 .history-empty {
   text-align: center;
   color: var(--muted-gray);
@@ -216,13 +270,28 @@
   margin: 0;
 }
 
-@media (max-width: 480px) {
-  .dashboard {
-    padding: 24px 16px 60px;
+@media (max-width: 860px) {
+  .md-page-heading {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
-  .dashboard-heading h1 {
+  .hero-card {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-page {
+    padding: 24px 16px 80px;
+  }
+
+  .md-page-heading-text h1 {
     font-size: 22px;
+  }
+
+  .md-page-week {
+    font-size: 12px;
   }
 
   .reminder-banner {
@@ -237,5 +306,11 @@
   .hero-card,
   .history-card {
     padding: 20px 16px;
+  }
+
+  .hero-deadline-block {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 }

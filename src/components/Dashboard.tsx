@@ -95,10 +95,13 @@ export default function Dashboard({
     lockReason === null && statusLoaded && !statusLoadError && !reminderDismissed && status !== 'submitted'
 
   return (
-    <div className="dashboard">
-      <div className="dashboard-heading">
-        <h1>Dashboard</h1>
-        <p className="dashboard-week">Week of {week.label}</p>
+    <div className="dashboard-page">
+      <div className="md-page-heading">
+        <div className="md-page-heading-text">
+          <h1>Dashboard</h1>
+          <p className="md-page-subtitle">Your weekly report and recent submissions</p>
+        </div>
+        <span className="md-page-week">Week of {week.label}</span>
       </div>
 
       {showReminder && (
@@ -160,12 +163,12 @@ export default function Dashboard({
         ) : lockReason ? (
           <p className="hero-lock-message">{MANAGER_WRITE_LOCK_MESSAGES[lockReason]}</p>
         ) : (
-          <>
+          <div className="hero-action">
             <button className="btn btn-primary btn-large" onClick={onAction}>
               {actionLabel}
             </button>
             {inLateEditWindow && <p className="hero-late-window-notice">You can still edit this report until 4:00 PM ET.</p>}
-          </>
+          </div>
         )}
 
         {!lockReason && !statusLoadError && <p className="hero-tip">Tip: Check in with your team before submitting this report.</p>}
@@ -191,7 +194,15 @@ export default function Dashboard({
                 }}
               >
                 <span className="history-week">{entry.weekLabel}</span>
-                <StatusBadge status={entry.status} />
+                <div className="history-row-right">
+                  <StatusBadge status={entry.status} />
+                  <span className="history-row-view" aria-hidden="true">
+                    View
+                    <svg className="history-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </span>
+                </div>
               </li>
             ))}
           </ul>
