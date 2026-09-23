@@ -32,10 +32,10 @@ const dir = path.dirname(fileURLToPath(import.meta.url))
 const src = readFileSync(path.join(dir, '..', 'executive-summary.ts'), 'utf8')
 
 describe('executive-summary.ts — max_tokens and stop_reason handling', () => {
-  test('max_tokens is 4096 (raised from 2000), not 8192, without evidence 4096 is insufficient', () => {
-    assert.match(src, /max_tokens: 4096/)
+  test('max_tokens is 8192 (raised from 4096, itself raised from 2000) — production logs confirmed stop_reason=max_tokens with a thinking block ahead of the text block eating into the previous ceiling', () => {
+    assert.match(src, /max_tokens: 8192/)
     assert.equal(src.includes('max_tokens: 2000'), false)
-    assert.equal(src.includes('max_tokens: 8192'), false)
+    assert.equal(src.includes('max_tokens: 4096'), false)
   })
 
   test('extractAiJson and assembleTextFromContentBlocks are both imported from the dependency-free helper module — the old inline extractJson no longer exists', () => {

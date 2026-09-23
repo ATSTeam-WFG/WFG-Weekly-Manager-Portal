@@ -220,15 +220,16 @@ Write a professional executive analysis using ONLY the information in the report
 Respond with ONLY a valid JSON object (no markdown fences, no commentary) with exactly these keys, each a string (a few sentences, or short lines starting with "- " for lists):
 {"executiveSummary": "...", "keyPriorities": "...", "majorWins": "...", "challengesRisks": "...", "challengeProgress": "...", "opportunities": "...", "prioritiesGoingForward": "..."}`
 
-  // 4096 (up from 2000): a real production period with more managers/weeks
-  // needs meaningfully more output across all 7 sections than the small
-  // datasets this pipeline was first built against — the previous ceiling
-  // was hit mid-generation for a larger real week, producing a truncated,
-  // unparseable response (see stop_reason handling below). Not raised
-  // further than this without evidence 4096 is itself insufficient.
+  // 8192 (up from 4096, itself up from 2000): production logs confirmed
+  // stop_reason=max_tokens on a real period, with the response containing a
+  // 'thinking' content block ahead of the 'text' block — the combined
+  // thinking+text output exceeded the previous 4096 ceiling before the JSON
+  // could complete, producing a truncated, unparseable response (see
+  // stop_reason handling below). Not raised further than this without
+  // evidence 8192 is itself insufficient.
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-5',
-    max_tokens: 4096,
+    max_tokens: 8192,
     messages: [{ role: 'user', content: prompt }],
   })
 
