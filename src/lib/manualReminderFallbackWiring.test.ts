@@ -32,7 +32,14 @@ describe('Prepare Reminders is reachable while REMINDER_ACTIONS_ENABLED stays fa
   })
 
   test('the per-row "Remind" button renders whenever that manager has not submitted — no flag gate', () => {
-    assert.match(dashboardSrc, /\{manager\.status !== 'submitted' && \(/)
+    // Step 2's redesign turned the old `&&`-render into a ternary (an em
+    // dash shows in the Reminder column for an already-submitted manager
+    // instead of nothing), but the same condition still gates it: no
+    // feature flag involved either way.
+    assert.match(dashboardSrc, /\{manager\.status !== 'submitted' \? \(/)
+    const buttonBlockMatch = dashboardSrc.match(/\{manager\.status !== 'submitted' \? \(([\s\S]*?)\) : \(/)
+    assert.ok(buttonBlockMatch, 'could not locate the conditional Remind button block')
+    assert.match(buttonBlockMatch[1], /className="manager-remind-btn"/)
   })
 
   test('featureFlags.ts itself is untouched — REMINDER_ACTIONS_ENABLED is still exactly false', () => {

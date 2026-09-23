@@ -1,0 +1,83 @@
+.admin-shell {
+  /* Approximates Header.css's own rendered height (16px*2 padding + 28px
+     logo + 1px border). Header.tsx/.css are untouched and define no
+     reusable height value of their own, so this is the one place that
+     estimate is declared — named and reused below (desktop min-height,
+     and the mobile off-canvas sidebar's top offset) rather than repeated
+     as a second, disconnected magic number. */
+  --admin-shell-header-height: 61px;
+  display: flex;
+  align-items: stretch;
+  min-height: calc(100vh - var(--admin-shell-header-height));
+}
+
+.admin-shell-menu-btn {
+  display: none;
+}
+
+.admin-shell-scrim {
+  display: none;
+}
+
+.admin-shell-content {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .admin-shell {
+    display: block;
+    min-height: 0;
+  }
+
+  .admin-shell-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 16px 16px 0;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--soft-sand);
+    background: var(--white);
+    color: var(--espresso);
+    cursor: pointer;
+  }
+
+  .admin-shell-menu-btn:hover {
+    border-color: var(--terracotta);
+    color: var(--terracotta);
+  }
+
+  .admin-shell-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(41, 37, 34, 0.5);
+    z-index: 99;
+  }
+
+  .admin-shell-sidebar-wrap {
+    position: fixed;
+    /* Starts below the existing global Header instead of at the true
+       viewport top, so opening the mobile panel never covers it — the
+       header itself stays visible and interactive. The scrim (below)
+       intentionally still covers the full viewport, per the approved
+       direction. */
+    top: var(--admin-shell-header-height);
+    left: 0;
+    bottom: 0;
+    width: 240px;
+    max-width: 80vw;
+    z-index: 100;
+    box-shadow: 0 0 40px rgba(48, 42, 39, 0.2);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+
+  .admin-shell-sidebar-wrap-open {
+    transform: translateX(0);
+  }
+}

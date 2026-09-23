@@ -1,38 +1,18 @@
+/* SHARED — Reports & Analytics still composes className="admin-dashboard
+   reports-analytics-page" and inherits this rule's max-width/padding for
+   its own screen layout; it has no override of its own. This file's own
+   Admin Dashboard component no longer uses .admin-dashboard as its root
+   (see .admin-dashboard-page below) but this rule must stay exactly as it
+   was for Reports & Analytics' sake. DO NOT MODIFY. */
 .admin-dashboard {
   max-width: 760px;
   margin: 0 auto;
   padding: 40px 24px 80px;
 }
 
-.admin-heading {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-bottom: 28px;
-}
-
-.admin-heading-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.admin-heading h1 {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--dark-charcoal);
-  margin: 0;
-}
-
-.week-selector {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
+/* SHARED — also used by Reports & Analytics' own period toolbar (with its
+   own scoped size override there; the base rule here is what it inherits
+   from). DO NOT MODIFY. */
 .week-nav-btn {
   display: inline-flex;
   align-items: center;
@@ -59,6 +39,7 @@
   cursor: not-allowed;
 }
 
+/* SHARED — also used by Reports & Analytics. DO NOT MODIFY. */
 .week-selector-label {
   display: inline-flex;
   align-items: center;
@@ -68,6 +49,7 @@
   white-space: nowrap;
 }
 
+/* SHARED — also used by Reports & Analytics. DO NOT MODIFY. */
 .week-current-badge {
   font-size: 11px;
   font-weight: 700;
@@ -79,80 +61,244 @@
   border-radius: 999px;
 }
 
-.admin-heading-actions {
+/* SHARED — also used by Reports & Analytics/ManagerReportsTable/Weekly
+   Summary. DO NOT MODIFY. Admin Dashboard's own loading state below uses
+   its own dedicated .adp-loading instead. */
+.admin-loading,
+.admin-empty-state {
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+  padding: 40px 0;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Admin Dashboard's own redesigned page — a new, dedicated root class
+   (never .admin-dashboard, which Reports & Analytics still depends on),
+   sized to match the other refined admin pages (Weekly Summary, User
+   Management) rather than the old narrow 760px layout. */
+.admin-dashboard-page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 24px 100px;
+}
+
+/* Top row: title/subtitle on the left, "My Weekly Report" (if present) +
+   the week-navigation control grouped on the right — one combined row
+   instead of two stacked ones. Reuses onPreviousWeek/onNextWeek/
+   isCurrentWeek/week calculations exactly as before; only the presentation
+   changed. */
+.adp-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.adp-header-titles h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.adp-header-subtitle {
+  font-size: 14px;
+  color: var(--muted-gray);
+  margin: 0;
+}
+
+.adp-top-row-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.my-report-btn {
+  white-space: nowrap;
   flex-shrink: 0;
 }
 
-.weekly-summary-btn,
-.reports-analytics-btn,
-.my-report-btn {
+.adp-week-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 999px;
+  padding: 6px 8px;
+}
+
+.adp-week-nav-btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--soft-sand);
+  background: var(--white);
+  color: var(--espresso);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.adp-week-nav-btn:hover:not(:disabled) {
+  background: var(--warm-cream);
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+
+.adp-week-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.adp-week-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dark-charcoal);
   white-space: nowrap;
 }
 
-.admin-stats-grid {
+/* Five KPI cards — equal white cards with a subtle border/shadow, restraint
+   coming from each card's own icon tint / value color rather than a
+   different full-card background per card (the same refined pattern
+   already used on Reports & Analytics / Weekly Summary / User Management). */
+.adp-kpi-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
   margin-bottom: 20px;
 }
 
-.admin-stat-card {
+.adp-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   background: var(--white);
   border: 1px solid var(--soft-sand);
   border-radius: 12px;
-  padding: 18px 12px;
-  text-align: center;
+  padding: 14px 16px;
+  min-height: 64px;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(48, 42, 39, 0.08);
 }
 
-.admin-stat-value {
-  display: block;
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--dark-charcoal);
-  margin-bottom: 4px;
+.adp-kpi-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  font-size: 15px;
+  flex-shrink: 0;
+  background: var(--soft-sand);
+  color: var(--espresso);
 }
 
-.admin-stat-submitted {
+/* The Total Managers icon is an inline SVG (unlike the other three, which
+   are plain text glyphs) — without an explicit size it renders at its
+   unconstrained intrinsic size, appearing much larger/heavier than the
+   others. Constraining it to the same visual weight as a text glyph at
+   this font-size, matching the identical rule already used for this same
+   icon elsewhere (Reports & Analytics/Weekly Summary/User Management KPI
+   cards, AdminSidebar's own nav icons). */
+.adp-kpi-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.adp-kpi-card-submitted .adp-kpi-icon {
+  background: rgba(22, 131, 75, 0.16);
   color: var(--green);
 }
 
-.admin-stat-draft {
+.adp-kpi-card-draft .adp-kpi-icon {
+  background: rgba(217, 119, 6, 0.16);
   color: var(--amber);
 }
 
-.admin-stat-not-started {
+.adp-kpi-card-not-started .adp-kpi-icon {
+  background: rgba(183, 101, 74, 0.14);
+  color: var(--terracotta);
+}
+
+.adp-kpi-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.adp-kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  line-height: 1.1;
+}
+
+.adp-kpi-card-completion .adp-kpi-value {
+  color: var(--terracotta);
+}
+
+.adp-kpi-label {
+  font-size: 12px;
   color: var(--muted-gray);
 }
 
-.admin-stat-attention {
-  color: var(--amber);
-}
-
-.admin-stat-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted-gray);
-}
-
-.admin-deadline-row {
+/* Friday Deadline strip — one clean horizontal row: icon, bold label,
+   divider, existing formatted deadline, existing status pill on the right. */
+.adp-deadline-strip {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   background: var(--white);
-  border: 1px solid var(--soft-sand);
-  border-top: 4px solid var(--terracotta);
+  border: 1px solid rgba(183, 101, 74, 0.35);
   border-radius: 12px;
   padding: 14px 20px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   font-size: 14px;
   color: var(--espresso);
 }
 
-.admin-days-left {
+.adp-deadline-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--terracotta);
+  flex-shrink: 0;
+}
+
+.adp-deadline-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.adp-deadline-label {
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.adp-deadline-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--soft-sand);
+}
+
+.adp-deadline-value {
+  color: var(--muted-gray);
+}
+
+.adp-deadline-status {
+  margin-left: auto;
   font-size: 13px;
   font-weight: 700;
   color: var(--terracotta);
@@ -162,29 +308,21 @@
   white-space: nowrap;
 }
 
-.admin-loading,
-.admin-empty-state {
+.adp-loading {
   text-align: center;
   color: var(--muted-gray);
   font-size: 14px;
   padding: 40px 0;
 }
 
-.manager-list-card {
+.adp-managers-card {
   background: var(--white);
   border: 1px solid var(--soft-sand);
   border-radius: 12px;
   padding: 24px;
 }
 
-.manager-list-card h2 {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--dark-charcoal);
-  margin: 0;
-}
-
-.manager-list-header {
+.adp-managers-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -192,11 +330,18 @@
   margin-bottom: 16px;
 }
 
+.adp-managers-header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0;
+}
+
 .manager-bulk-remind-btn {
   white-space: nowrap;
 }
 
-.manager-filter-row {
+.adp-filter-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -205,7 +350,7 @@
   border-bottom: 1px solid var(--soft-sand);
 }
 
-.manager-filter-btn {
+.adp-filter-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -221,68 +366,108 @@
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.manager-filter-btn:hover {
+.adp-filter-btn:hover {
   border-color: var(--terracotta);
   color: var(--terracotta);
 }
 
-.manager-filter-btn.active {
+.adp-filter-btn.active {
   background: var(--terracotta);
   border-color: var(--terracotta);
   color: var(--white);
 }
 
-.manager-filter-count {
+.adp-filter-count {
   font-size: 11px;
   font-weight: 700;
   opacity: 0.8;
 }
 
-.manager-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* Manager table — a div-based semantic table (role="table"/"row"/"cell"),
+   the same pattern already proven by Reports & Analytics' ManagerReportsTable
+   and User Management's employee table, which collapses cleanly to stacked
+   cards at narrow widths via CSS alone. */
+.adp-table {
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  overflow: hidden;
 }
 
-.manager-row {
-  display: flex;
+.adp-table-header-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.3fr 0.9fr 1fr;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--warm-cream);
+  border-bottom: 1px solid var(--soft-sand);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-gray);
+}
+
+/* Denser than the original row (14px vertical padding → 8px) so more
+   managers are visible on a typical desktop viewport without scrolling —
+   restored to the original, more generous padding on mobile below (this
+   density is a desktop-only refinement, per the approved direction). */
+.adp-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.3fr 0.9fr 1fr;
+  gap: 12px;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 12px;
-  margin: 0 -12px;
-  border-top: 1px solid var(--soft-sand);
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--soft-sand);
   border-left: 3px solid transparent;
-  border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 
-.manager-row:first-child {
-  border-top: none;
+.adp-row:last-child {
+  border-bottom: none;
 }
 
-.manager-row:hover,
-.manager-row:focus-visible {
+.adp-row:hover,
+.adp-row:focus-visible {
   background: var(--warm-cream);
   outline: none;
 }
 
-.manager-row.needs-attention {
+.adp-row.adp-row-needs-attention {
   border-left-color: var(--amber);
   background: rgba(217, 119, 6, 0.04);
 }
 
-.manager-row.needs-attention:hover,
-.manager-row.needs-attention:focus-visible {
+.adp-row.adp-row-needs-attention:hover,
+.adp-row.adp-row-needs-attention:focus-visible {
   background: rgba(217, 119, 6, 0.08);
 }
 
-.manager-row-main {
+.adp-cell-manager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.adp-manager-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--soft-sand);
+  color: var(--espresso);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.adp-manager-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  flex: 1;
+  gap: 1px;
   min-width: 0;
 }
 
@@ -301,92 +486,140 @@
   font-style: italic;
 }
 
-.manager-status-detail {
-  font-size: 12px;
-  color: var(--muted-gray);
+.adp-cell-submitted {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.adp-submitted-at {
+  font-size: 13px;
+  color: var(--espresso);
 }
 
 .submission-source-tag {
+  font-size: 11px;
   font-style: italic;
+  color: var(--muted-gray);
   opacity: 0.85;
 }
 
-.manager-row-action {
+.adp-dash {
+  color: var(--muted-gray);
+}
+
+.adp-view-link {
   font-size: 13px;
   font-weight: 600;
   color: var(--terracotta);
   white-space: nowrap;
 }
 
+/* Filled (not just outlined) so the reminder-eligible action reads clearly
+   at a glance in a dense table — same eligibility/click behavior as before,
+   only the visual weight changed. */
+/* Softened: a pale amber/cream chip with amber/brown text and a small
+   solid-amber dot as a subtle warning indicator — same clickable reminder
+   action, same eligibility/onClick, only the visual weight changed. */
 .manager-remind-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: inherit;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   padding: 5px 12px;
   border-radius: 999px;
-  border: 1px solid var(--amber);
-  background: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  background: rgba(217, 119, 6, 0.12);
   color: var(--amber);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .manager-remind-btn:hover {
-  background: rgba(217, 119, 6, 0.16);
+  background: rgba(217, 119, 6, 0.2);
+  border-color: rgba(217, 119, 6, 0.5);
+}
+
+.manager-remind-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--amber);
+  flex-shrink: 0;
+}
+
+@media (max-width: 1024px) {
+  .adp-kpi-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 @media (max-width: 640px) {
-  .admin-stats-grid {
+  .adp-kpi-row {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .admin-heading-top {
+  .adp-top-row {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .admin-heading-actions {
-    width: 100%;
+  .adp-top-row-right {
+    justify-content: space-between;
+  }
+
+  .adp-deadline-strip {
     flex-wrap: wrap;
   }
 
-  .admin-heading-actions .btn {
-    flex: 1;
-    min-width: 0;
+  .adp-deadline-status {
+    margin-left: 0;
+  }
+
+  /* Collapse the table into stacked manager cards: the header row (column
+     labels) is redundant once each cell wraps to its own line. */
+  .adp-table-header-row {
+    display: none;
+  }
+
+  .adp-row {
+    grid-template-columns: 1fr;
+    /* The desktop density reduction (8px above) is desktop-only — mobile
+       rows keep their original, more generous padding rather than becoming
+       artificially dense too. */
+    padding: 14px 16px;
+    gap: 6px;
   }
 }
 
 @media (max-width: 480px) {
-  .admin-dashboard {
-    padding: 24px 16px 60px;
+  .admin-dashboard-page {
+    padding: 24px 16px 80px;
   }
 
-  .admin-heading h1 {
+  .adp-header-titles h1 {
     font-size: 22px;
   }
 
-  .admin-deadline-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+  .adp-kpi-row {
+    grid-template-columns: 1fr;
   }
 
-  .manager-list-card {
+  .adp-managers-card {
     padding: 16px;
-    margin: 0 -4px;
   }
 
-  .manager-row {
+  /* Only at this narrow phone tier: the desktop nowrap (unchanged above)
+     could overflow a long date range plus the Current badge on a ~375–390px
+     screen. Allowing the label to wrap, and letting the badge drop onto its
+     own line when needed, keeps it visually grouped with the date text
+     (same element, same gap) with no clipping and no horizontal overflow —
+     Previous/Next themselves are untouched, so their sizing is unaffected. */
+  .adp-week-label {
+    white-space: normal;
     flex-wrap: wrap;
-    row-gap: 8px;
-  }
-
-  .manager-row-main {
-    flex-basis: 100%;
-  }
-
-  .manager-row-action {
-    margin-left: auto;
   }
 }

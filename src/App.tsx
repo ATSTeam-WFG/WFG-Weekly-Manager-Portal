@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import Header from './components/Header'
+import AdminShell, { type AdminDestination } from './components/AdminShell'
 import Login from './components/Login'
 import NoProfile from './components/NoProfile'
 import LinkExpired from './components/LinkExpired'
@@ -615,6 +616,42 @@ function App() {
   const roleLabel = isAdmin ? 'Admin' : 'Manager'
   const adminWeek = getReportingWeekByOffset(adminWeekOffset)
 
+  // Derived, never a separate state variable — the same three booleans
+  // App.tsx already owned before the shell existed remain the single source
+  // of truth for which of the four destinations is showing.
+  const currentAdminDestination: AdminDestination = userManagementOpen
+    ? 'user-management'
+    : reportsAnalyticsOpen
+      ? 'reports-analytics'
+      : weeklySummaryOpen
+        ? 'weekly-summary'
+        : 'dashboard'
+
+  // Each handler makes the destination change mutually exclusive by
+  // resetting the other two "open" flags itself, regardless of whatever
+  // combination was true before — the exact same three setters App.tsx
+  // already called from AdminDashboard's own former nav buttons.
+  const handleNavigateToDashboard = () => {
+    setWeeklySummaryOpen(false)
+    setReportsAnalyticsOpen(false)
+    setUserManagementOpen(false)
+  }
+  const handleNavigateToUserManagement = () => {
+    setWeeklySummaryOpen(false)
+    setReportsAnalyticsOpen(false)
+    setUserManagementOpen(true)
+  }
+  const handleNavigateToReportsAnalytics = () => {
+    setWeeklySummaryOpen(false)
+    setReportsAnalyticsOpen(true)
+    setUserManagementOpen(false)
+  }
+  const handleNavigateToWeeklySummary = () => {
+    setWeeklySummaryOpen(true)
+    setReportsAnalyticsOpen(false)
+    setUserManagementOpen(false)
+  }
+
   return (
     <div className="app-shell">
       <Header displayName={displayName} roleLabel={roleLabel} onSignOut={handleSignOut} />
@@ -627,24 +664,31 @@ function App() {
             weekLabel={adminWeek.label}
             onBack={() => setSelectedManager(null)}
           />
-        ) : weeklySummaryOpen ? (
-          <WeeklySummary week={adminWeek} weekOffset={adminWeekOffset} onBack={() => setWeeklySummaryOpen(false)} />
-        ) : reportsAnalyticsOpen ? (
-          <ReportsAnalytics onBack={() => setReportsAnalyticsOpen(false)} />
-        ) : userManagementOpen ? (
-          <UserManagement onBack={() => setUserManagementOpen(false)} currentUserEmail={userEmail} />
         ) : (
-          <AdminDashboard
-            week={adminWeek}
-            isCurrentWeek={adminWeekOffset === 0}
-            onPreviousWeek={() => setAdminWeekOffset((offset) => offset - 1)}
-            onNextWeek={() => setAdminWeekOffset((offset) => Math.min(0, offset + 1))}
-            onSelectManager={setSelectedManager}
-            onOpenWeeklySummary={() => setWeeklySummaryOpen(true)}
-            onOpenReportsAnalytics={() => setReportsAnalyticsOpen(true)}
-            onOpenUserManagement={() => setUserManagementOpen(true)}
-            onOpenMyReport={isSubmitter ? () => setMyReportOpen(true) : undefined}
-          />
+          <AdminShell
+            current={currentAdminDestination}
+            onNavigateDashboard={handleNavigateToDashboard}
+            onNavigateUserManagement={handleNavigateToUserManagement}
+            onNavigateReportsAnalytics={handleNavigateToReportsAnalytics}
+            onNavigateWeeklySummary={handleNavigateToWeeklySummary}
+          >
+            {weeklySummaryOpen ? (
+              <WeeklySummary week={adminWeek} weekOffset={adminWeekOffset} onBack={() => setWeeklySummaryOpen(false)} />
+            ) : reportsAnalyticsOpen ? (
+              <ReportsAnalytics onBack={() => setReportsAnalyticsOpen(false)} />
+            ) : userManagementOpen ? (
+              <UserManagement onBack={() => setUserManagementOpen(false)} currentUserEmail={userEmail} />
+            ) : (
+              <AdminDashboard
+                week={adminWeek}
+                isCurrentWeek={adminWeekOffset === 0}
+                onPreviousWeek={() => setAdminWeekOffset((offset) => offset - 1)}
+                onNextWeek={() => setAdminWeekOffset((offset) => Math.min(0, offset + 1))}
+                onSelectManager={setSelectedManager}
+                onOpenMyReport={isSubmitter ? () => setMyReportOpen(true) : undefined}
+              />
+            )}
+          </AdminShell>
         )
       ) : (
         <>

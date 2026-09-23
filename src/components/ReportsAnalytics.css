@@ -1,3 +1,21 @@
+/* Cross-page desktop alignment: this page's root carries the SHARED,
+   protected .admin-dashboard class (760px max-width — DO NOT MODIFY, see
+   AdminDashboard.css) alongside its own .reports-analytics-page class.
+   Rather than touching that shared rule, this page-scoped override widens
+   just this page's frame to match Admin Dashboard/User Management/Weekly
+   Summary's 1080px frame. Element+class selector (not just .admin-dashboard's
+   plain class) so it reliably wins over the shared rule regardless of CSS
+   import order, without raising specificity above the shared rule enough to
+   also override the @media print block below (that block is print-only, so
+   it never competes with this screen-only rule in the first place — the
+   print layout, "max-width:100%", is completely unaffected). */
+@media screen {
+  div.reports-analytics-page {
+    max-width: 1080px;
+    padding: 32px 24px 100px;
+  }
+}
+
 /* Page header: title/subtitle on their own row. */
 .ra-header-titles {
   margin-bottom: 16px;

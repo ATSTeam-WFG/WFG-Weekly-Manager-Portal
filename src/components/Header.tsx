@@ -1,4 +1,5 @@
 import wfgLogo from '../assets/wfg-logo.png'
+import { getInitials } from '../utils/initials'
 import './Header.css'
 
 interface HeaderProps {
@@ -12,13 +13,19 @@ export default function Header({ displayName, roleLabel, onSignOut }: HeaderProp
     <header className="header">
       <div className="header-brand">
         <img src={wfgLogo} alt="WFG" className="header-logo" />
+        <span className="header-divider" aria-hidden="true" />
         <span className="header-title">Weekly Manager Report</span>
       </div>
 
       <div className="header-right">
         <div className="header-user">
-          <span className="header-user-name">{displayName}</span>
-          <span className="header-user-role">{roleLabel}</span>
+          <span className="header-user-avatar" aria-hidden="true">
+            {getInitials(displayName)}
+          </span>
+          <div className="header-user-text">
+            <span className="header-user-name">{displayName}</span>
+            <span className="header-user-role">{roleLabel}</span>
+          </div>
         </div>
 
         <button type="button" className="sign-out-btn" onClick={onSignOut}>

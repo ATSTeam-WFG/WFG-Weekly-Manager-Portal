@@ -1,5 +1,10 @@
 .weekly-summary {
-  max-width: 960px;
+  /* Cross-page desktop alignment: matches Admin Dashboard/User
+     Management's 1080px outer content frame so Back link/title/content
+     begin on the same left edge across all admin-adjacent pages. Padding
+     already matched (32px/24px/100px) — only the max-width differed. The
+     existing 480px override below (padding only) is unaffected. */
+  max-width: 1080px;
   margin: 0 auto;
   padding: 32px 24px 100px;
 }

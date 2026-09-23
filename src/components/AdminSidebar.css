@@ -1,0 +1,188 @@
+/* Admin-shell-specific — a new, dedicated class family, never touching the
+   shared .admin-dashboard/.week-nav-btn/.week-selector-label classes that
+   Reports & Analytics also relies on. */
+.admin-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 220px;
+  flex-shrink: 0;
+  padding: 20px 12px;
+  background: var(--white);
+  border-right: 1px solid var(--soft-sand);
+  /* Pins the sidebar to the actual viewport rather than letting it stretch
+     to match .admin-shell's height (which follows the TALLEST flex
+     sibling — i.e. the current Dashboard page's own content, which can be
+     taller than one screen). Without this, the decoration below (pushed to
+     the bottom of THIS element via margin-top:auto) was anchoring to the
+     bottom of that much-taller stretched box instead of the visible bottom
+     of the screen — exactly the "floating block with excess space
+     underneath" symptom. Reuses the same header-height custom property
+     already declared on .admin-shell (AdminShell.css) — inherited here,
+     not redeclared. Nav item position/dimensions are unaffected; only
+     where the whole sidebar container's edges sit changed. */
+  position: sticky;
+  top: var(--admin-shell-header-height, 61px);
+  height: calc(100vh - var(--admin-shell-header-height, 61px));
+  overflow-y: auto;
+}
+
+.admin-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: none;
+  border-left: 3px solid transparent;
+  background: none;
+  color: var(--espresso);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-sidebar-item:hover {
+  background: var(--warm-cream);
+}
+
+/* Active destination: subtle warm/terracotta background, a terracotta
+   accent on the left edge, and stronger (bolder, terracotta-tinted) text. */
+.admin-sidebar-item-active,
+.admin-sidebar-item-active:hover {
+  background: rgba(183, 101, 74, 0.1);
+  border-left-color: var(--terracotta);
+  color: var(--terracotta);
+  font-weight: 700;
+}
+
+.admin-sidebar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.admin-sidebar-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.admin-sidebar-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Decorative only (aria-hidden, see AdminSidebar.tsx) — one unified
+   bottom-anchored composition (landscape + text together, not two stacked
+   blocks): pushed to the bottom of the sidebar's flex column via
+   margin-top:auto (normal document flow, never position:absolute/fixed, so
+   it can never overlap the nav buttons above it), with the hill shapes as
+   an absolutely-positioned background layer filling this same box and the
+   text sitting near its bottom edge (padding-bottom below, plus the
+   sidebar's own 20px padding = ~28px total breathing room under the
+   tagline). Built entirely from CSS shapes/gradients layered in existing
+   WFG palette tones (no image asset, no external dependency). */
+.admin-sidebar-decoration {
+  margin-top: auto;
+  position: relative;
+  height: 260px;
+  overflow: hidden;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 8px 8px;
+}
+
+/* A full-coverage background layer inside the composition above, rather
+   than a separate box stacked before the text — the soft top-to-bottom
+   fade means the hills read as emerging from low in the composition, not
+   starting at a hard edge near the top. */
+.admin-sidebar-landscape {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 0%, var(--warm-cream) 62%);
+}
+
+.admin-sidebar-hill {
+  position: absolute;
+  left: -15%;
+  width: 130%;
+  border-radius: 50%;
+}
+
+.admin-sidebar-hill-back {
+  bottom: -80px;
+  height: 150px;
+  background: var(--soft-sand);
+}
+
+.admin-sidebar-hill-mid {
+  bottom: -90px;
+  height: 130px;
+  background: rgba(22, 131, 75, 0.14);
+}
+
+.admin-sidebar-hill-front {
+  bottom: -100px;
+  height: 110px;
+  background: rgba(183, 101, 74, 0.12);
+}
+
+.admin-sidebar-decoration-words {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--espresso);
+  text-align: center;
+  letter-spacing: 0.02em;
+  margin: 0 0 6px;
+}
+
+.admin-sidebar-decoration-tagline {
+  position: relative;
+  z-index: 1;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--terracotta);
+  text-align: center;
+  margin: 0;
+}
+
+/* Hidden whenever it would crowd out navigation: a short desktop window,
+   or the narrow off-canvas mobile/tablet panel. Threshold raised alongside
+   the block's own larger size, so it still only ever appears where there's
+   comfortably enough height for it. */
+@media (max-height: 760px) {
+  .admin-sidebar-decoration {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .admin-sidebar {
+    /* Reset the new desktop-only sticky/viewport-height treatment above —
+       the off-canvas panel is already a fixed-position container (see
+       AdminShell.css's .admin-shell-sidebar-wrap), so this element should
+       behave exactly as it already did there: a plain block filling that
+       panel, no independent sticky/scroll behavior of its own. */
+    position: static;
+    width: 100%;
+    height: 100%;
+    border-right: none;
+  }
+
+  .admin-sidebar-decoration {
+    display: none;
+  }
+}
