@@ -86,6 +86,60 @@ describe('Submitted manager source cards remain, unchanged, as the drill-down/ve
     assert.ok(existsSync(path.join(componentsDir, 'SubmittedManagerCard.tsx')))
     assert.ok(existsSync(path.join(componentsDir, 'ReportContentView.tsx')))
   })
+
+  test('(on-screen requirement) the Submitted Manager Reports heading and list are never marked no-print themselves — they remain fully visible on screen unconditionally; their exclusion from PRINT is governed entirely by the print.css body-class rule, not by hiding them on screen', () => {
+    assert.equal(/className="ws-manager-reports-header no-print"/.test(weeklySummarySrc), false)
+    assert.equal(/className="ws-manager-list no-print"/.test(weeklySummarySrc), false)
+  })
+})
+
+// The six specific proof points requested for this print-scope fix, each
+// isolated into its own test so a regression in any one is immediately
+// attributable.
+describe('Print-scope fix — the six required proofs', () => {
+  test('1. Submitted Manager Reports remain visible on screen (not conditionally rendered, not gated by any new on-screen flag)', () => {
+    assert.match(weeklySummarySrc, /\{data\.entries\.map\(\(entry\) => \(/)
+    assert.match(weeklySummarySrc, /<SubmittedManagerCard/)
+  })
+
+  test('2. Submitted Manager Reports are excluded from print — .ws-manager-reports-header and .ws-manager-list are direct children of .weekly-summary, and print.css\'s isolation rule hides every direct child except .print-header/.executive-summary-section once printExecutiveAnalysisOnly\'s body class is set', () => {
+    assert.match(weeklySummarySrc, /<div className="ws-manager-reports-header">/)
+    assert.match(weeklySummarySrc, /<div className="ws-manager-list">/)
+    assert.match(
+      printCss,
+      /\.weekly-summary > \*:not\(\.print-header\):not\(\.executive-summary-section\) \{\s*\n\s*display: none !important;\s*\n\s*\}/,
+    )
+  })
+
+  test('3. The consolidated ATS analysis is included in print — .executive-summary-section is explicitly exempted from the hide rule', () => {
+    assert.match(
+      printCss,
+      /body\.print-executive-analysis-only \.weekly-summary > \*:not\(\.print-header\):not\(\.executive-summary-section\)/,
+    )
+  })
+
+  test('4. The WFG print header/week remains included in print — .print-header is explicitly exempted from the hide rule, and still renders the real week label', () => {
+    assert.match(
+      printCss,
+      /body\.print-executive-analysis-only \.weekly-summary > \*:not\(\.print-header\)/,
+    )
+    assert.match(weeklySummarySrc, /<p className="print-week">Week of \{week\.label\}<\/p>/)
+  })
+
+  test('5. There is still exactly one print action, labeled "Print Weekly Summary"', () => {
+    const printButtonMatches = [...weeklySummarySrc.matchAll(/className="btn btn-primary no-print"/g)]
+    assert.equal(printButtonMatches.length, 1, 'expected exactly one print-related button')
+    assert.match(weeklySummarySrc, />\s*Print Weekly Summary\s*</)
+  })
+
+  test('6. Reports & Analytics print behavior is unchanged — ExportPrintMenu.tsx and ReportsAnalytics.tsx are untouched, and its half of the shared isolation rule is unchanged', () => {
+    assert.match(raExportMenuSrc, /key: 'executive-analysis', label: 'Executive Analysis only'/)
+    assert.match(raExportMenuSrc, /key: 'complete', label: 'Complete Leadership Report'/)
+    assert.match(
+      printCss,
+      /body\.print-executive-analysis-only \.reports-analytics-page > \*:not\(\.print-header\):not\(\.executive-summary-section\),/,
+    )
+  })
 })
 
 describe('Weekly Summary export/print: exactly one action — "Print Weekly Summary"', () => {
@@ -98,29 +152,52 @@ describe('Weekly Summary export/print: exactly one action — "Print Weekly Summ
     assert.equal(weeklySummarySrc.includes('WeeklySummaryExportMenu'), false)
   })
 
-  test('WeeklySummary.tsx renders exactly one print action: a plain "Print Weekly Summary" button, not a dropdown/menu/popover', () => {
-    assert.match(weeklySummarySrc, /<button type="button" className="btn btn-primary no-print" onClick=\{printCompleteWeeklySummary\}>\s*\n\s*Print Weekly Summary\s*\n\s*<\/button>/)
+  // Production requirement (print-scope fix): printing must include only
+  // the letterhead and the consolidated ATS analysis — never the KPI row or
+  // individual submitted manager reports. printExecutiveAnalysisOnly
+  // (imported unmodified from ExecutiveAnalysisCard.tsx) already implements
+  // exactly this isolation for Reports & Analytics; Weekly Summary's single
+  // button now calls it directly rather than a bare window.print(), while
+  // keeping its own label "Print Weekly Summary" — never "Executive
+  // Analysis only". This is reuse of an existing mechanism, not a second,
+  // separately-labeled print choice, and no dropdown/menu/popover is
+  // reintroduced.
+  test('WeeklySummary.tsx renders exactly one print action: a plain "Print Weekly Summary" button calling the reused printExecutiveAnalysisOnly, not a dropdown/menu/popover', () => {
+    assert.match(weeklySummarySrc, /<button type="button" className="btn btn-primary no-print" onClick=\{printExecutiveAnalysisOnly\}>\s*\n\s*Print Weekly Summary\s*\n\s*<\/button>/)
     assert.equal(weeklySummarySrc.includes('role="menu"'), false)
     assert.equal(weeklySummarySrc.includes('ws-export'), false)
   })
 
-  test('"Executive Analysis only" is no longer an offered print action in WeeklySummary.tsx — printExecutiveAnalysisOnly may only appear in an explanatory comment about its removal, never imported or called', () => {
+  test('"Executive Analysis only" is never the visible label of any button/action in WeeklySummary.tsx — only ever mentioned in an explanatory comment', () => {
     assert.equal(/>\s*Executive Analysis only\s*</.test(weeklySummarySrc), false)
-    assert.equal(/^import .*printExecutiveAnalysisOnly/m.test(weeklySummarySrc), false)
-    assert.equal(/[^.]\bprintExecutiveAnalysisOnly\(/.test(weeklySummarySrc), false)
   })
 
-  test('printCompleteWeeklySummary is still a bare window.print() — no scoping body class, no second print mechanism introduced', () => {
-    assert.match(weeklySummarySrc, /function printCompleteWeeklySummary\(\): void \{\s*\n\s*window\.print\(\)\s*\n\}/)
+  test('printExecutiveAnalysisOnly is imported directly from ExecutiveAnalysisCard.tsx — no second, independent print implementation, no local printCompleteWeeklySummary function remains', () => {
+    assert.match(weeklySummarySrc, /import ExecutiveAnalysisCard, \{ printExecutiveAnalysisOnly \} from '\.\/ExecutiveAnalysisCard'/)
+    assert.equal(/function printExecutiveAnalysisOnly\(/.test(weeklySummarySrc), false)
+    assert.equal(/function printCompleteWeeklySummary\(/.test(weeklySummarySrc), false)
   })
 })
 
-describe('Printed Weekly Summary preserves the ATS consolidated structure', () => {
-  test('the single print action is a full-page window.print() (no body-class scoping), so the consolidated ATS content (ordinary DOM inside ExecutiveAnalysisCard/AtsReportView) prints exactly as it renders on screen, along with every manager report', () => {
-    assert.equal(weeklySummarySrc.includes('classList.add'), false)
+describe('Printed Weekly Summary preserves the ATS consolidated structure and excludes manager reports/KPIs', () => {
+  test('the print action toggles the print-executive-analysis-only body class (via the reused printExecutiveAnalysisOnly), so print.css\'s isolation rule — not a bare window.print() — governs what appears in print', () => {
+    assert.match(executiveCardSrc, /document\.body\.classList\.add\(PRINT_EXECUTIVE_ANALYSIS_ONLY_CLASS\)/)
+    assert.equal(weeklySummarySrc.includes('classList.add'), false, 'the class toggle lives in ExecutiveAnalysisCard.tsx, not duplicated here')
   })
 
-  test('the KPI row and on-screen heading remain hidden under print, unchanged — no new print.css rule was required for the consolidated content itself', () => {
+  test('print.css: the isolation rule is scoped to .weekly-summary (in addition to .reports-analytics-page) and hides every direct child except .print-header and .executive-summary-section — excluding the KPI row, the consolidated-summary label, and the entire submitted-manager-reports section', () => {
+    assert.match(
+      printCss,
+      /body\.print-executive-analysis-only \.reports-analytics-page > \*:not\(\.print-header\):not\(\.executive-summary-section\),\s*\n\s*body\.print-executive-analysis-only \.weekly-summary > \*:not\(\.print-header\):not\(\.executive-summary-section\) \{\s*\n\s*display: none !important;\s*\n\s*\}/,
+    )
+  })
+
+  test('the consolidated ATS analysis (.executive-summary-section, i.e. ExecutiveAnalysisCard\'s own root) and the WFG letterhead (.print-header) are the only two selectors exempted from the hide rule — both are direct children of .weekly-summary', () => {
+    assert.match(weeklySummarySrc, /<div className="print-header">/)
+    assert.match(executiveCardSrc, /<div className="executive-summary-section">/)
+  })
+
+  test('the KPI row and on-screen heading remain hidden under print unconditionally too (belt-and-suspenders with the body-class rule above) — unchanged from before', () => {
     const weeklySummaryCss = readFileSync(path.join(componentsDir, 'WeeklySummary.css'), 'utf8')
     const mediaPrintMatch = weeklySummaryCss.match(/@media print \{([\s\S]*)\n\}\s*$/)
     assert.ok(mediaPrintMatch)
@@ -140,12 +217,11 @@ describe('Reports & Analytics print/export options remain untouched', () => {
     assert.equal(/from ['"]\.\/ReportsAnalytics['"]/.test(weeklySummarySrc), false)
   })
 
-  test('print.css: the Executive-Analysis-only isolation rule is scoped only to .reports-analytics-page now — the .weekly-summary variant was removed since Weekly Summary no longer offers that print choice, but the Reports & Analytics rule body/selector is otherwise byte-identical to before', () => {
+  test('print.css: the Reports & Analytics half of the Executive-Analysis-only isolation rule (its selector, its display: none !important body) is unchanged — only a second, comma-separated .weekly-summary selector was added alongside it', () => {
     assert.match(
       printCss,
-      /body\.print-executive-analysis-only \.reports-analytics-page > \*:not\(\.print-header\):not\(\.executive-summary-section\) \{\s*\n\s*display: none !important;\s*\n\s*\}/,
+      /body\.print-executive-analysis-only \.reports-analytics-page > \*:not\(\.print-header\):not\(\.executive-summary-section\),/,
     )
-    assert.equal(printCss.includes('.print-executive-analysis-only .weekly-summary'), false)
   })
 
   test('print.css: the Weekly-Summary-only and Manager-Reports-only isolation rules (Reports & Analytics\' own weekly-mode print choices) are untouched', () => {

@@ -2,28 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import wfgLogo from '../assets/wfg-logo.png'
 import { fetchManagersForWeek, fetchWeeklySummary, type ManagerSummary, type WeeklySummaryData } from '../lib/adminService'
 import { supabase } from '../lib/supabaseClient'
-import ExecutiveAnalysisCard from './ExecutiveAnalysisCard'
+import ExecutiveAnalysisCard, { printExecutiveAnalysisOnly } from './ExecutiveAnalysisCard'
 import SubmittedManagerCard from './SubmittedManagerCard'
 import type { ReportingWeek } from '../utils/week'
 import { AI_EXECUTIVE_SUMMARY_ENABLED } from '../config/featureFlags'
 import './AdminDashboard.css'
 import './SubmittedReport.css'
 import './WeeklySummary.css'
-
-// The single Weekly Summary print action — a bare window.print() of the
-// complete page (letterhead, KPIs hidden via the existing @media print
-// rules, the consolidated ATS content, and every submitted manager report).
-// Weekly Summary previously offered a second choice ("Executive Analysis
-// only", reusing ExecutiveAnalysisCard's printExecutiveAnalysisOnly) via a
-// two-item dropdown menu; now that the ATS consolidated view IS this page's
-// primary leadership-facing content, printing anything less than the whole
-// page no longer makes sense here, so that second choice — and the
-// dropdown/popover it required — were removed. Reports & Analytics' own
-// "Executive Analysis only" print option (via its separate ExportPrintMenu)
-// is untouched.
-function printCompleteWeeklySummary(): void {
-  window.print()
-}
 
 interface WeeklySummaryProps {
   week: ReportingWeek
@@ -89,7 +74,17 @@ export default function WeeklySummary({ week, weekOffset, onBack }: WeeklySummar
           <h1>Weekly Summary</h1>
           <p className="weekly-summary-week">Week of {week.label}</p>
         </div>
-        <button type="button" className="btn btn-primary no-print" onClick={printCompleteWeeklySummary}>
+        {/* Production requirement: printing must include only the WFG
+            letterhead and the consolidated ATS analysis — never the KPI row,
+            never individual submitted manager reports. printExecutiveAnalysisOnly
+            (imported, unmodified, from ExecutiveAnalysisCard.tsx) already
+            implements exactly this isolation via its print-executive-
+            analysis-only body class (see print.css's matching rule, scoped
+            to .weekly-summary below) — reused here rather than building a
+            second print mechanism. The user-facing action is still labeled
+            "Print Weekly Summary", never "Executive Analysis only": this is
+            an internal implementation reuse, not a second menu choice. */}
+        <button type="button" className="btn btn-primary no-print" onClick={printExecutiveAnalysisOnly}>
           Print Weekly Summary
         </button>
       </div>

@@ -258,9 +258,14 @@ async function generateAnalysis(
     })
     .join('\n\n')
 
+  // Generalized from a legacy field name ("challengeProgress" — a fixed
+  // 7-key section that no longer exists in the ATS output shape) to speak
+  // about topics generally, since a topic's progress-across-weeks note now
+  // belongs inside that topic's own statusSummary/bullets, not a dedicated
+  // top-level field.
   const progressInstruction = isMultiWeek
-    ? 'For "challengeProgress": weeks are already given in chronological order (earliest first) within each manager\'s block. Compare each manager\'s earlier-week challenges against their later-week updates. For each distinct challenge you can trace across weeks, classify it as Resolved / Finished, Still Active / Pending, or Status Unclear, and briefly say why. This is your interpretation of the report text, not a confirmed system status — say so explicitly, and do not claim something is resolved unless a later report\'s content actually supports that conclusion.'
-    : 'Only one reporting week is available for this period, so a true before/after comparison is not possible. For "challengeProgress", state plainly that there is not enough historical data in this period to assess challenge progress, rather than inventing a comparison.'
+    ? 'When a topic carries over from an earlier week in this period (weeks are given in chronological order, earliest first, within each manager\'s block), compare the earlier report against the later one and note in that topic\'s status summary or bullets whether it is Resolved/Finished, Still Active/Pending, or Status Unclear, with a brief reason. This is your interpretation of the report text, not a confirmed system status — say so explicitly, and do not claim something is resolved unless a later report\'s content actually supports that conclusion.'
+    : 'Only one reporting week is available for this period, so a true before/after comparison is not possible — do not invent a comparison or claim a topic has progressed when only a single week of data exists.'
 
   const prompt = `You are helping a title insurance company's leadership team review manager reports for the ${periodKey} reporting period: ${rangeLabel}.
 
@@ -270,18 +275,25 @@ ${managerBlocks}
 
 Write a concise, leadership-friendly written report using ONLY the information in the reports above, in the following structure:
 - An opening paragraph covering the most important movement this period — what changed, and the overall picture a leader needs going in.
-- A dynamic set of topics: identify the distinct initiatives, themes, risks, or decisions that genuinely came up across these reports this period. Never force a topic that isn't really there, and never reuse a fixed/generic set of topic names — derive every topic strictly from what these reports actually contain. The number of topics should reflect what the reports actually support, not a fixed count.
+- A dynamic set of topics: identify the distinct initiatives, themes, risks, or decisions that genuinely came up across these reports this period. Never force a topic that isn't really there, and never reuse a fixed/generic set of topic names — derive every topic strictly from what these reports actually contain. Combine related updates from multiple managers under one shared topic whenever they are genuinely the same initiative or theme, rather than repeating it separately per manager. The number of topics should reflect what the reports actually support, not a fixed count.
 - For each topic, provide: a short title; a 1-2 sentence status summary; a list of concise, meaningful progress/metric/win/risk/decision bullets grounded only in the reports above (aim for 3-5 when the source material genuinely supports that many distinct facts — but use fewer, even just 1 or 2, when fewer material facts are available; never invent or pad a bullet just to reach a count); and a "next" line naming the immediate priority, action, blocker, or decision for that topic, grounded in the reports.
 
+This report has a firm length budget: it must read at roughly 1-1.5 printed pages, no more. This is a prioritization and synthesis requirement, not a formatting one — decide what materially matters and leave out the rest, rather than shrinking, compressing, or cutting off anything you do include. To stay within this budget:
+- Prioritize, in this rough order of importance: material risks, operational issues, or blockers (especially anything that could affect revenue, service, claims, or customer experience); decisions or issues that genuinely need leadership visibility; significant wins, meaningful metrics, and real business opportunities; and immediate next actions the reports actually support.
+- Identify only the topics that materially mattered this period — typically no more than 5-6. Do not create a separate topic for every minor or routine item a manager happened to mention.
+- Omit routine, background, or business-as-usual details that would not materially change a leader's understanding of the period, even if a manager reported them.
+- Avoid transaction-level detail and naming individual managers, customers, or files, except where a specific name is strategically important to a decision, risk, or accomplishment worth attributing.
+- If the reports collectively contain more material than reasonably fits this budget, consolidate closely related points together and keep only the items with the greatest leadership/business significance — never invent, and never omit something materially significant merely to shorten the report.
+
 Follow these rules strictly:
-- Do not invent facts, names, deadlines, decisions, commitments, or next steps that are not explicitly stated or clearly supported above.
+- Do not invent facts, numbers, trends, names, deadlines, decisions, commitments, blockers, or next steps that are not explicitly stated or clearly supported above.
 - Do not invent or restate specific numeric statistics (how many managers submitted, missed, or the completion percentage) — those figures are reported separately from verified application data; focus only on the qualitative content of the reports.
 - Clearly distinguish your own inference from something a manager explicitly stated. If the evidence is insufficient to draw a conclusion, say the status is unclear rather than guessing.
 - Only describe a topic as shared across managers if multiple managers genuinely raised it; do not force connections that aren't there.
 - Do not identify a manager by name when summarizing a general, organization-wide theme; but if a specific challenge, risk, commitment, or accomplishment belongs to one manager, keep that attribution clear.
 - Avoid repetition between topics and between bullets within a topic.
 - ${progressInstruction}
-- Keep the tone factual and concise, suitable for a leadership meeting. Target a consolidated result of roughly 1-1.5 pages overall — say little or nothing for a topic that has little to report, rather than padding it.
+- Keep the tone factual and concise, suitable for a leadership meeting — say little or nothing for a topic that has little to report, rather than padding it.
 
 Respond with ONLY a valid JSON object (no markdown fences, no commentary) matching exactly this shape: {"openingParagraph": "...", "topics": [{"title": "...", "statusSummary": "...", "bullets": ["...", "..."], "next": "..."}]}`
 

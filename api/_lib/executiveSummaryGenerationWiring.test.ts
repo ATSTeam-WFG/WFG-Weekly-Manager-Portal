@@ -191,8 +191,85 @@ describe('executive-summary.ts — ATS prompt guidance (Phase 3 correction: neve
     assert.equal(/"topics": \["[A-Z]/.test(src), false, 'must not hard-code example topic names in the prompt')
   })
 
-  test('the prompt still forbids inventing facts, names, deadlines, decisions, commitments, or next steps not supported by the reports', () => {
-    assert.match(src, /Do not invent facts, names, deadlines, decisions, commitments, or next steps that are not explicitly stated or clearly supported above/)
+  test('the prompt explicitly forbids inventing facts, numbers, trends, names, deadlines, decisions, commitments, blockers, or next steps not supported by the reports', () => {
+    assert.match(src, /Do not invent facts, numbers, trends, names, deadlines, decisions, commitments, blockers, or next steps that are not explicitly stated or clearly supported above/)
+  })
+})
+
+// Weekly Summary print-scope + ATS length requirement: Weekly Summary
+// reuses this exact shared generation (see weeklySummaryAtsFormatWiring.
+// test.ts) with no second AI pipeline, so its own 1-1.5-page requirement is
+// satisfied here, in the one shared prompt — never by a second call, a
+// second schema, or client-side truncation of the generated topics/bullets.
+describe('executive-summary.ts — ATS length/synthesis requirement (targets 1-1.5 printed pages via prioritization, never via truncation or reduced content)', () => {
+  test('the prompt states a firm 1-1.5 page length budget and explicitly frames it as a prioritization/synthesis requirement, not a formatting one', () => {
+    assert.match(src, /This report has a firm length budget: it must read at roughly 1-1\.5 printed pages, no more\./)
+    assert.match(src, /This is a prioritization and synthesis requirement, not a formatting one — decide what materially matters and leave out the rest, rather than shrinking, compressing, or cutting off anything you do include\./)
+  })
+
+  test('the prompt gives an explicit priority order: risks/operational issues/blockers (incl. revenue/service/claims/customer experience) first, then leadership-visibility decisions, then wins/metrics/opportunities, then supported next actions', () => {
+    assert.match(
+      src,
+      /Prioritize, in this rough order of importance: material risks, operational issues, or blockers \(especially anything that could affect revenue, service, claims, or customer experience\); decisions or issues that genuinely need leadership visibility; significant wins, meaningful metrics, and real business opportunities; and immediate next actions the reports actually support\./,
+    )
+  })
+
+  test('the prompt caps topic count guidance at "typically no more than 5-6" without forcing a fixed count, and instructs combining related manager updates under one shared topic', () => {
+    assert.match(src, /typically no more than 5-6/)
+    assert.match(
+      src,
+      /Combine related updates from multiple managers under one shared topic whenever they are genuinely the same initiative or theme, rather than repeating it separately per manager\./,
+    )
+  })
+
+  test('the prompt instructs omitting routine/background detail and avoiding transaction-level detail/excessive names unless strategically important', () => {
+    assert.match(
+      src,
+      /Omit routine, background, or business-as-usual details that would not materially change a leader's understanding of the period, even if a manager reported them\./,
+    )
+    assert.match(
+      src,
+      /Avoid transaction-level detail and naming individual managers, customers, or files, except where a specific name is strategically important to a decision, risk, or accomplishment worth attributing\./,
+    )
+  })
+
+  test('the prompt instructs consolidating when material exceeds the budget, while explicitly forbidding invention and forbidding omission of materially significant items just to shorten the report', () => {
+    assert.match(
+      src,
+      /If the reports collectively contain more material than reasonably fits this budget, consolidate closely related points together and keep only the items with the greatest leadership\/business significance — never invent, and never omit something materially significant merely to shorten the report\./,
+    )
+  })
+
+  test('the topics JSON schema has no maxItems (confirmed unsupported by Anthropic structured output) — the page-length budget is enforced entirely through prompt guidance, never a schema-level cap or client-side truncation', () => {
+    const schemaMatch = src.match(/const ATS_REPORT_SCHEMA = \{[\s\S]*?\n\} as const/)
+    assert.ok(schemaMatch)
+    assert.equal(schemaMatch[0].includes('maxItems'), false)
+    const generateMatch = src.match(/async function generateAnalysis\([\s\S]*?\n\}/)
+    assert.ok(generateMatch)
+    assert.equal(/\.slice\(0,|\.slice\(-|topics\.length = /.test(generateMatch[0]), false, 'must never client-side truncate the generated topics/bullets')
+  })
+
+  test('progressInstruction no longer references the legacy "challengeProgress" field name (which does not exist in the ATS shape) — it speaks generically about a topic carrying over between weeks instead', () => {
+    const progressInstructionMatch = src.match(/const progressInstruction = isMultiWeek[\s\S]*?\n\n/)
+    assert.ok(progressInstructionMatch, 'could not locate the progressInstruction declaration')
+    assert.equal(progressInstructionMatch[0].includes('challengeProgress'), false, 'must not reference the legacy field name in the actual instruction text')
+    assert.match(
+      progressInstructionMatch[0],
+      /When a topic carries over from an earlier week in this period \(weeks are given in chronological order, earliest first, within each manager\\'s block\), compare the earlier report against the later one and note in that topic\\'s status summary or bullets whether it is Resolved\/Finished, Still Active\/Pending, or Status Unclear/,
+    )
+  })
+
+  test('every topic still requires a 1-2 sentence status summary, selective 3-5-when-supported bullets, and a grounded Next line — the per-topic structure requirements are unchanged by the length/synthesis strengthening', () => {
+    assert.match(src, /a 1-2 sentence status summary/)
+    assert.match(
+      src,
+      /aim for 3-5 when the source material genuinely supports that many distinct facts — but use fewer, even just 1 or 2, when fewer material facts are available; never invent or pad a bullet just to reach a count/,
+    )
+    assert.match(src, /a "next" line naming the immediate priority, action, blocker, or decision for that topic, grounded in the reports/)
+  })
+
+  test('the never-invent rule explicitly names numbers, trends, and blockers (not just the broader "facts") — precision matters for a safety-critical anti-fabrication instruction', () => {
+    assert.match(src, /Do not invent facts, numbers, trends, names, deadlines, decisions, commitments, blockers, or next steps that are not explicitly stated or clearly supported above\./)
   })
 })
 

@@ -294,12 +294,21 @@ describe('Nothing here touches the completed, production-tested Reports & Analyt
     assert.match(weeklySummarySrc, /import '\.\/AdminDashboard\.css'\s*\nimport '\.\/SubmittedReport\.css'\s*\nimport '\.\/WeeklySummary\.css'/)
   })
 
-  test('printCompleteWeeklySummary (the "Complete Weekly Summary" menu choice) is still a bare window.print() — no scoping body class introduced, no second print mechanism', () => {
-    assert.match(weeklySummarySrc, /function printCompleteWeeklySummary\(\): void \{\s*\n\s*window\.print\(\)\s*\n\}/)
-  })
+  // printCompleteWeeklySummary (the original bare window.print()) no longer
+  // exists — the print-scope fix rewired Weekly Summary's single print
+  // button to reuse printExecutiveAnalysisOnly instead, so its output
+  // excludes the KPI row and every submitted manager report. See
+  // weeklySummaryAtsFormatWiring.test.ts for that mechanism's own coverage.
 
-  test('src/print.css is not read/imported by anything in this feature\'s new files (global print.css is off-limits per the freeze)', () => {
-    assert.equal(weeklySummarySrc.includes('print.css'), false)
+  // The original "print.css is off-limits" freeze applied only to this
+  // feature's initial build. It was legitimately lifted by the later Weekly
+  // Summary ATS format phase and the print-scope fix, both of which modify
+  // print.css's Executive-Analysis-only isolation rule so it also applies
+  // to .weekly-summary (see weeklySummaryAtsFormatWiring.test.ts) —
+  // WeeklySummary.tsx's own explanatory comments now legitimately reference
+  // print.css by name. SubmittedManagerCard.tsx remains untouched by either
+  // phase, so its own freeze still holds.
+  test('SubmittedManagerCard.tsx does not read/import print.css — unaffected by either later phase', () => {
     assert.equal(managerCardSrc.includes('print.css'), false)
   })
 })
