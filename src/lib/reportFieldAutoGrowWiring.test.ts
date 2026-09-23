@@ -81,11 +81,12 @@ describe('BulletListInput.tsx — bullet rows are auto-growing textareas, one lo
     assert.match(bulletListSrc, /\{bullets\.length < max && \(/)
   })
 
-  test('the voice/mic wiring (append-to-existing transcript, one mic active at a time) is preserved inside BulletRow', () => {
+  test('BulletRow no longer renders its own per-row mic button — Voice is now one section-level control owned by ReportForm.tsx (see sectionVoiceWiring.test.ts); each row still reports its own focus up to the parent instead', () => {
     const bulletRowMatch = bulletListSrc.match(/function BulletRow\([\s\S]*?\n\}/)
     assert.ok(bulletRowMatch)
-    assert.match(bulletRowMatch[0], /const handleVoiceResult = \(transcript: string\) => \{/)
-    assert.match(bulletRowMatch[0], /isListening=\{voice\.activeField === fieldId\}/)
+    assert.equal(/<MicButton/.test(bulletRowMatch[0]), false, 'BulletRow must not render its own MicButton any more')
+    assert.equal(bulletListSrc.includes("import MicButton from './MicButton'"), false, 'MicButton is no longer used anywhere in BulletListInput.tsx')
+    assert.match(bulletRowMatch[0], /onFocus=\{onFocus\}/)
   })
 })
 

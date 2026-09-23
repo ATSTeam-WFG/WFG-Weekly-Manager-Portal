@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import MicButton from './MicButton'
 import BulletListInput from './BulletListInput'
 import { useSpeechToText } from '../hooks/useSpeechToText'
@@ -58,6 +58,14 @@ const WHAT_MATTERS_GUIDANCE = [
   'Signal what is around the corner',
 ]
 
+// Shared between each bulleted section's BulletListInput idPrefix and its
+// own section-level Voice button's fieldId/isListening check below — one
+// constant per section so the two can never drift out of sync with each
+// other.
+const WHAT_MATTERS_ID_PREFIX = 'what-matters-now'
+const LOOKING_AROUND_ID_PREFIX = 'looking-around-corner'
+const NEXT_WEEK_ID_PREFIX = 'next-week-priorities'
+
 export default function ReportForm({
   initialData,
   legacyReference,
@@ -87,10 +95,32 @@ export default function ReportForm({
   const { isSupported, activeField, errorField, errorMessage, start, stop } = useSpeechToText()
   // One shared speech-recognition session (see useSpeechToText) powers every
   // mic button on this form — both the two free-text sections below and
-  // every individual bullet row. Only one field can ever be listening at
-  // once, which is exactly what guarantees dictation for bullet 2 can never
-  // bleed into bullet 1 or any other field.
-  const bulletVoice = { isSupported, activeField, errorField, errorMessage, onStart: start, onStop: stop }
+  // each of the three bulleted sections' single section-level Voice button.
+  // Only one field can ever be listening at once.
+  const bulletVoiceError = { errorField, errorMessage }
+
+  // Each bulleted section has exactly one Voice button (in its own section
+  // header, below) rather than one per bullet row. Dictation always targets
+  // whichever bullet in that section is currently focused — tracked here,
+  // defaulting to the first bullet (index 0) until the manager focuses a
+  // different one (see BulletListInput's onBulletFocus). Independent per
+  // section, so Section 01 can never affect Section 02/03's target.
+  const [whatMattersActiveIndex, setWhatMattersActiveIndex] = useState(0)
+  const [lookingAroundActiveIndex, setLookingAroundActiveIndex] = useState(0)
+  const [nextWeekActiveIndex, setNextWeekActiveIndex] = useState(0)
+
+  // Clamps each section's own active index back in range whenever Add/
+  // Remove changes that section's own bullet count — never lets a stale
+  // index point past the end of a now-shorter array.
+  useEffect(() => {
+    setWhatMattersActiveIndex((i) => Math.min(i, Math.max(0, data.whatMattersNow.length - 1)))
+  }, [data.whatMattersNow.length])
+  useEffect(() => {
+    setLookingAroundActiveIndex((i) => Math.min(i, Math.max(0, data.lookingAroundCorner.length - 1)))
+  }, [data.lookingAroundCorner.length])
+  useEffect(() => {
+    setNextWeekActiveIndex((i) => Math.min(i, Math.max(0, data.nextWeekPriorities.length - 1)))
+  }, [data.nextWeekPriorities.length])
 
   // Autosaves through the SAME onSaveDraft/onSaveChanges persistence path
   // used by the manual buttons below — never a second write implementation.
@@ -132,6 +162,23 @@ export default function ReportForm({
     setData((prev) => {
       const current = prev[key].trim()
       return { ...prev, [key]: current ? `${current} ${transcript}` : transcript }
+    })
+    clearFeedback()
+  }
+
+  // Same existing append behavior as handleVoiceResult above — appended to
+  // (never replaces) whatever is already typed in the targeted bullet.
+  const handleSectionBulletVoiceResult = (
+    key: 'whatMattersNow' | 'lookingAroundCorner' | 'nextWeekPriorities',
+    index: number,
+    transcript: string,
+  ) => {
+    setData((prev) => {
+      const bullets = [...prev[key]]
+      const targetIndex = Math.min(index, Math.max(0, bullets.length - 1))
+      const current = (bullets[targetIndex] ?? '').trim()
+      bullets[targetIndex] = current ? `${current} ${transcript}` : transcript
+      return { ...prev, [key]: bullets }
     })
     clearFeedback()
   }
@@ -242,9 +289,8 @@ export default function ReportForm({
             <li key={line}>{line}</li>
           ))}
         </ul>
+        <p className="report-leadership-expectations">Be Decisive | Be Proactive | Be Engaged | Be Reliable | Be Prospective</p>
       </div>
-
-      <p className="report-leadership-expectations">Be Decisive | Be Proactive | Be Engaged | Be Reliable | Be Prospective</p>
 
       {!isSupported && (
         <p className="voice-unsupported-notice">
@@ -253,18 +299,32 @@ export default function ReportForm({
       )}
 
       <div className="report-section">
-        <label className="report-section-label" htmlFor="what-matters-now-0">
-          01 — What Matters Now
-        </label>
+        <div className="report-section-header">
+          <label className="report-section-label" htmlFor="what-matters-now-0">
+            01 — What Matters Now
+          </label>
+          <MicButton
+            isListening={activeField?.startsWith(`${WHAT_MATTERS_ID_PREFIX}-`) ?? false}
+            isSupported={isSupported}
+            fieldLabel="What Matters Now"
+            onStart={() =>
+              start(`${WHAT_MATTERS_ID_PREFIX}-${whatMattersActiveIndex}`, (transcript) =>
+                handleSectionBulletVoiceResult('whatMattersNow', whatMattersActiveIndex, transcript),
+              )
+            }
+            onStop={stop}
+          />
+        </div>
         <p className="report-section-helper">
           The 2–3 most important things — significant results, decisions, changes, or developments.
         </p>
         <BulletListInput
-          idPrefix="what-matters-now"
+          idPrefix={WHAT_MATTERS_ID_PREFIX}
           bullets={data.whatMattersNow}
           onChange={(bullets) => handleBulletsChange('whatMattersNow', bullets)}
           max={3}
-          voice={bulletVoice}
+          voice={bulletVoiceError}
+          onBulletFocus={setWhatMattersActiveIndex}
         />
         {submitError && <p className="voice-error-message">{submitError}</p>}
       </div>
@@ -274,18 +334,32 @@ export default function ReportForm({
           <label className="report-section-label" htmlFor="looking-around-corner-0">
             02 — Looking Around the Corner
           </label>
-          <span className="report-section-context">Next 4 weeks</span>
+          <div className="report-section-header-right">
+            <MicButton
+              isListening={activeField?.startsWith(`${LOOKING_AROUND_ID_PREFIX}-`) ?? false}
+              isSupported={isSupported}
+              fieldLabel="Looking Around the Corner"
+              onStart={() =>
+                start(`${LOOKING_AROUND_ID_PREFIX}-${lookingAroundActiveIndex}`, (transcript) =>
+                  handleSectionBulletVoiceResult('lookingAroundCorner', lookingAroundActiveIndex, transcript),
+                )
+              }
+              onStop={stop}
+            />
+            <span className="report-section-context">Next 4 weeks</span>
+          </div>
         </div>
         <p className="report-section-helper">
           What do you see developing over the next four weeks that could create an opportunity, risk, decision, or
           need for action?
         </p>
         <BulletListInput
-          idPrefix="looking-around-corner"
+          idPrefix={LOOKING_AROUND_ID_PREFIX}
           bullets={data.lookingAroundCorner}
           onChange={(bullets) => handleBulletsChange('lookingAroundCorner', bullets)}
           max={3}
-          voice={bulletVoice}
+          voice={bulletVoiceError}
+          onBulletFocus={setLookingAroundActiveIndex}
         />
       </div>
 
@@ -294,17 +368,31 @@ export default function ReportForm({
           <label className="report-section-label" htmlFor="next-week-priorities-0">
             03 — Next Week - High-Impact Priorities
           </label>
-          <span className="report-section-context">Up to 3 priorities</span>
+          <div className="report-section-header-right">
+            <MicButton
+              isListening={activeField?.startsWith(`${NEXT_WEEK_ID_PREFIX}-`) ?? false}
+              isSupported={isSupported}
+              fieldLabel="Next Week High-Impact Priorities"
+              onStart={() =>
+                start(`${NEXT_WEEK_ID_PREFIX}-${nextWeekActiveIndex}`, (transcript) =>
+                  handleSectionBulletVoiceResult('nextWeekPriorities', nextWeekActiveIndex, transcript),
+                )
+              }
+              onStop={stop}
+            />
+            <span className="report-section-context">Up to 3 priorities</span>
+          </div>
         </div>
         <p className="report-section-helper">
           What actions will your team drive that will materially advance WFG or an important business outcome?
         </p>
         <BulletListInput
-          idPrefix="next-week-priorities"
+          idPrefix={NEXT_WEEK_ID_PREFIX}
           bullets={data.nextWeekPriorities}
           onChange={(bullets) => handleBulletsChange('nextWeekPriorities', bullets)}
           max={3}
-          voice={bulletVoice}
+          voice={bulletVoiceError}
+          onBulletFocus={setNextWeekActiveIndex}
         />
       </div>
 

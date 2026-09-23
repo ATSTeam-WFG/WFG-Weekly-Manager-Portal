@@ -4,14 +4,15 @@
   padding: 32px 24px 100px;
 }
 
-/* Widens ONLY the editable Manager Report Form to the approved 1080px
-   admin content frame, without touching the shared .report-form rule
-   above — SubmittedReport.tsx/HistoricalReportView.tsx/ManagerReportView.tsx
-   all also render a root className="report-form" and must stay exactly at
-   760px. This is the one property that needed to change (padding already
-   matched the target 32px/24px/100px). */
+/* A focused document/report-entry width for the editable Manager Report
+   Form — narrower than the Admin/Dashboard 1080px frame on purpose, so the
+   long-form textareas/bullets read as a comfortable document column rather
+   than stretching across an oversized desktop area. Kept as its own class
+   (not a change to the shared .report-form rule above) — SubmittedReport.
+   tsx/HistoricalReportView.tsx/ManagerReportView.tsx all also render a root
+   className="report-form" and must stay exactly at 760px. */
 .manager-report-form {
-  max-width: 1080px;
+  max-width: 800px;
 }
 
 .back-link {
@@ -44,17 +45,17 @@
   border: 1px solid var(--soft-sand);
   border-left: 4px solid var(--terracotta);
   border-radius: 12px;
-  padding: 18px 24px;
+  padding: 20px 24px 18px;
   margin-bottom: 16px;
 }
 
 .report-guidance-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: var(--dark-charcoal);
-  margin: 0 0 10px;
+  letter-spacing: 0.04em;
+  color: var(--terracotta);
+  margin: 0 0 12px;
 }
 
 .report-guidance-list {
@@ -76,12 +77,17 @@
   }
 }
 
+/* Along the bottom of the same guidance card, set off from the bullets by
+   a subtle divider — reuses the existing leadership-expectations copy
+   exactly as-is, just repositioned/restyled; no new content. */
 .report-leadership-expectations {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--muted-gray);
   text-align: center;
-  margin: 0 0 24px;
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--soft-sand);
 }
 
 .report-section-context {
@@ -158,6 +164,16 @@
 
 .report-section-header .report-section-label {
   margin-bottom: 0;
+}
+
+/* Groups a section's one Voice button together with its existing context
+   badge (e.g. "Next 4 weeks") on the header's right side, so the two don't
+   get pushed apart by space-between with three children. */
+.report-section-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .report-section-label {

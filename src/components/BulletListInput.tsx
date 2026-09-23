@@ -1,18 +1,10 @@
-import MicButton from './MicButton'
 import { useAutoGrowTextarea } from '../hooks/useAutoGrowTextarea'
 import { sanitizeBulletValue } from '../lib/reportValidation'
 import './BulletListInput.css'
 
 interface BulletListInputVoice {
-  isSupported: boolean
-  // Which field id (across the whole form, not just this list) is
-  // currently listening — compared against this row's own field id so only
-  // one bullet's mic ever shows as active, exactly like the rest of the form.
-  activeField: string | null
   errorField: string | null
   errorMessage: string | null
-  onStart: (fieldId: string, onFinalResult: (transcript: string) => void) => void
-  onStop: () => void
 }
 
 interface BulletListInputProps {
@@ -22,8 +14,14 @@ interface BulletListInputProps {
   max: number
   placeholder?: string
   // Optional — omitted entirely (e.g. in a future non-voice context), no
-  // mic button renders at all, matching MicButton's own isSupported gate.
+  // per-row error message ever renders, matching the section-level Voice
+  // button's own isSupported gate one level up in ReportForm.tsx.
   voice?: BulletListInputVoice
+  // Reports which row is currently focused, up to the parent — the parent
+  // (ReportForm.tsx) owns the single section-level Voice button and needs
+  // to know which bullet index dictation should target. Purely a focus
+  // notification; this component never reads it back.
+  onBulletFocus?: (index: number) => void
 }
 
 interface BulletRowProps {
@@ -33,6 +31,7 @@ interface BulletRowProps {
   placeholder?: string
   onChange: (value: string) => void
   onRemove: () => void
+  onFocus: () => void
   voice?: BulletListInputVoice
 }
 
@@ -42,16 +41,8 @@ interface BulletRowProps {
 // directly in the parent (whose bullet count changes via Add/Remove) would
 // violate React's rules of hooks. Each row keeps its own auto-grow ref,
 // sized to its own content only.
-function BulletRow({ fieldId, index, bullet, placeholder, onChange, onRemove, voice }: BulletRowProps) {
+function BulletRow({ fieldId, bullet, placeholder, onChange, onRemove, onFocus, voice }: BulletRowProps) {
   const textareaRef = useAutoGrowTextarea(bullet)
-
-  // Voice transcript is appended to (never replaces) whatever is already
-  // typed in this bullet — same append behavior as the existing free-text
-  // sections.
-  const handleVoiceResult = (transcript: string) => {
-    const current = bullet.trim()
-    onChange(current ? `${current} ${transcript}` : transcript)
-  }
 
   return (
     <div className="bullet-list-row">
@@ -63,6 +54,7 @@ function BulletRow({ fieldId, index, bullet, placeholder, onChange, onRemove, vo
           rows={2}
           value={bullet}
           onChange={(e) => onChange(sanitizeBulletValue(e.target.value))}
+          onFocus={onFocus}
           onKeyDown={(e) => {
             // A bullet is one logical item, stored newline-delimited from
             // its siblings (see reportValidation.ts's sanitizeBulletValue
@@ -76,15 +68,6 @@ function BulletRow({ fieldId, index, bullet, placeholder, onChange, onRemove, vo
           placeholder={placeholder ?? 'Type here...'}
         />
         <div className="bullet-list-actions">
-          {voice && (
-            <MicButton
-              isListening={voice.activeField === fieldId}
-              isSupported={voice.isSupported}
-              fieldLabel={`item ${index + 1}`}
-              onStart={() => voice.onStart(fieldId, handleVoiceResult)}
-              onStop={voice.onStop}
-            />
-          )}
           <button type="button" className="bullet-list-remove" onClick={onRemove} aria-label="Remove this item">
             &times;
           </button>
@@ -101,8 +84,12 @@ function BulletRow({ fieldId, index, bullet, placeholder, onChange, onRemove, vo
 // all three bulleted sections of the V2 Manager report form. Fully
 // controlled: the parent owns `bullets` and receives every change via
 // onChange, so ReportForm's submit-time validation always sees the current
-// array directly, with no internal state to fall out of sync.
-export default function BulletListInput({ idPrefix, bullets, onChange, max, placeholder, voice }: BulletListInputProps) {
+// array directly, with no internal state to fall out of sync. Voice is a
+// single section-level control owned by ReportForm.tsx (see its own
+// MicButton next to each section's label) — this component only reports
+// which bullet is focused via onBulletFocus and displays a per-row error
+// message when that bullet's fieldId is the one that errored.
+export default function BulletListInput({ idPrefix, bullets, onChange, max, placeholder, voice, onBulletFocus }: BulletListInputProps) {
   const handleBulletChange = (index: number, value: string) => {
     const next = [...bullets]
     next[index] = value
@@ -129,6 +116,7 @@ export default function BulletListInput({ idPrefix, bullets, onChange, max, plac
           placeholder={placeholder}
           onChange={(value) => handleBulletChange(index, value)}
           onRemove={() => handleRemove(index)}
+          onFocus={() => onBulletFocus?.(index)}
           voice={voice}
         />
       ))}

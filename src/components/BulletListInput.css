@@ -1,13 +1,13 @@
 .bullet-list-input {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .bullet-list-row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .bullet-list-row-main {
@@ -17,7 +17,7 @@
      middle of a tall box instead of keeping them pinned near the first
      line, where they visually belong. */
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
 }
 
 .bullet-list-text {
@@ -50,17 +50,22 @@
 .bullet-list-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
   flex-shrink: 0;
+  /* Nudges the remove button down slightly so it reads as aligned with the
+     textarea's own first line of padding, rather than glued to its top
+     edge. Voice is no longer rendered per row — it's now the section's own
+     single header-level control (see ReportForm.tsx) — so this only ever
+     holds the one remove button. */
+  margin-top: 2px;
 }
 
 .bullet-list-remove {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid var(--soft-sand);
-  background: var(--white);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: none;
   color: var(--muted-gray);
   font-size: 16px;
   line-height: 1;
@@ -92,22 +97,9 @@
   text-decoration: underline;
 }
 
-@media (max-width: 480px) {
-  .bullet-list-row-main {
-    flex-wrap: wrap;
-    row-gap: 8px;
-  }
-
-  .bullet-list-actions {
-    flex-basis: 100%;
-    justify-content: flex-end;
-  }
-}
-
 @media print {
   .bullet-list-remove,
-  .bullet-list-add,
-  .bullet-list-actions .mic-button {
+  .bullet-list-add {
     display: none;
   }
 }
