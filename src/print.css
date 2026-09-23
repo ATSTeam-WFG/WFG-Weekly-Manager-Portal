@@ -17,15 +17,18 @@
   /* Executive-Analysis-only print/export (see ExecutiveAnalysisCard.tsx's
      printExecutiveAnalysisOnly, which toggles this body class around
      window.print() and always removes it afterward). Hides every other
-     direct child of the Reports & Analytics / Weekly Summary page — stats,
-     the pending-manager list, and every individual manager's report
-     content — leaving only .print-header (WFG branding + reporting
-     week/date) and the Executive Analysis card (.executive-summary-section:
-     its heading, badge/metadata, and current saved content) visible. The
-     page-level "Print / Export PDF" buttons never add this class, so their
-     own full-page print behavior is completely unaffected. */
-  body.print-executive-analysis-only .reports-analytics-page > *:not(.print-header):not(.executive-summary-section),
-  body.print-executive-analysis-only .weekly-summary > *:not(.print-header):not(.executive-summary-section) {
+     direct child of the Reports & Analytics page — stats, the
+     pending-manager list, and every individual manager's report content —
+     leaving only .print-header (WFG branding + reporting week/date) and the
+     Executive Analysis card (.executive-summary-section: its heading,
+     badge/metadata, and current saved content) visible. The page-level
+     "Print / Export PDF" buttons never add this class, so their own
+     full-page print behavior is completely unaffected. Scoped to
+     .reports-analytics-page only — Weekly Summary no longer offers this as
+     a separate print choice (its single "Print Weekly Summary" action
+     always prints the complete page, ATS consolidated content included;
+     see WeeklySummary.tsx), so it has no need for this isolation rule. */
+  body.print-executive-analysis-only .reports-analytics-page > *:not(.print-header):not(.executive-summary-section) {
     display: none !important;
   }
 

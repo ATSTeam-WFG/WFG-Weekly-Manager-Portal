@@ -25,11 +25,8 @@ const managerCardSrc = readFileSync(path.join(dir, '..', 'components', 'Submitte
 const managerCardCss = readFileSync(path.join(dir, '..', 'components', 'SubmittedManagerCard.css'), 'utf8')
 const reportContentViewSrc = readFileSync(path.join(dir, '..', 'components', 'ReportContentView.tsx'), 'utf8')
 const adminServiceSrc = readFileSync(path.join(dir, '..', 'lib', 'adminService.ts'), 'utf8')
-const exportMenuSrc = readFileSync(path.join(dir, '..', 'components', 'WeeklySummaryExportMenu.tsx'), 'utf8')
-const exportMenuCss = readFileSync(path.join(dir, '..', 'components', 'WeeklySummaryExportMenu.css'), 'utf8')
 const executiveCardSrc = readFileSync(path.join(dir, '..', 'components', 'ExecutiveAnalysisCard.tsx'), 'utf8')
 const raExportMenuSrc = readFileSync(path.join(dir, '..', 'components', 'ExportPrintMenu.tsx'), 'utf8')
-const printCss = readFileSync(path.join(dir, '..', 'print.css'), 'utf8')
 
 describe('WeeklySummary.tsx — four KPI cards, derived from the same fetchWeeklySummary data, no new service calls', () => {
   test('all four cards exist, reading data.totalManagers/submittedCount/completionPct and a derived notStartedCount', () => {
@@ -259,80 +256,11 @@ describe('WeeklySummary.tsx — the standalone Executive Analysis print button i
   })
 })
 
-describe('WeeklySummaryExportMenu.tsx — one compact top-right control replacing both old print buttons, with exactly two choices', () => {
-  test('the trigger reads "Export / Print" and opens an anchored popover, mirroring (but not reusing) Reports & Analytics\' own ExportPrintMenu visual language', () => {
-    assert.match(exportMenuSrc, /Export \/ Print/)
-    assert.match(exportMenuSrc, /className="ws-export-anchor"/)
-  })
-
-  test('exactly two choices exist: "Complete Weekly Summary" and "Executive Analysis only" — no manager-selection step, no radio/confirm sub-flow like Reports & Analytics\' four-choice menu', () => {
-    assert.match(exportMenuSrc, /Complete Weekly Summary/)
-    assert.match(exportMenuSrc, /Executive Analysis only/)
-    assert.equal(exportMenuSrc.includes('radio'), false)
-    assert.equal(exportMenuSrc.includes('checkbox'), false)
-    assert.equal(exportMenuSrc.includes('Select All'), false)
-  })
-
-  test('selecting either option calls its own distinct callback prop and then closes the menu', () => {
-    assert.match(exportMenuSrc, /onClick=\{\(\) => handleSelect\(onCompleteWeeklySummary\)\}/)
-    assert.match(exportMenuSrc, /onClick=\{\(\) => handleSelect\(onExecutiveAnalysisOnly\)\}/)
-    assert.match(exportMenuSrc, /const handleSelect = \(action: \(\) => void\) => \{\s*\n\s*action\(\)\s*\n\s*closeMenu\(\)\s*\n\s*\}/)
-  })
-
-  test('clicking the backdrop scrim also closes the menu', () => {
-    assert.match(exportMenuSrc, /className="ws-export-scrim no-print" onClick=\{closeMenu\}/)
-  })
-
-  test('pressing Escape also closes the menu — a keydown listener attached only while open, cleaned up on close/unmount', () => {
-    const effectMatch = exportMenuSrc.match(/useEffect\(\(\) => \{([\s\S]*?)\n\s*\}, \[isOpen\]\)/)
-    assert.ok(effectMatch, 'could not locate the Escape-handling useEffect')
-    assert.match(effectMatch[1], /if \(!isOpen\) return/)
-    assert.match(effectMatch[1], /if \(e\.key === 'Escape'\) closeMenu\(\)/)
-    assert.match(effectMatch[1], /window\.addEventListener\('keydown', handleKeyDown\)/)
-    assert.match(effectMatch[1], /return \(\) => window\.removeEventListener\('keydown', handleKeyDown\)/)
-  })
-})
-
-describe('WeeklySummaryExportMenu.tsx — the menu can never appear in printed output, independent of React state (the same lesson from Reports & Analytics\' earlier Export/Print modal bug)', () => {
-  test('the trigger button, the backdrop scrim, and the popover panel are all explicitly no-print in JSX', () => {
-    assert.match(exportMenuSrc, /className="btn btn-primary no-print" onClick=\{\(\) => setIsOpen\(true\)\}/)
-    assert.match(exportMenuSrc, /className="ws-export-scrim no-print"/)
-    assert.match(exportMenuSrc, /className="ws-export-panel no-print"/)
-  })
-
-  test('WeeklySummaryExportMenu.css declares no @media print overrides of its own — protection comes only from the existing global .no-print convention', () => {
-    assert.equal(/@media print/.test(exportMenuCss), false)
-  })
-
-  test('doubly protected: the menu also sits inside .weekly-summary-heading, which WeeklySummary.css already force-hides under @media print regardless of body class', () => {
-    const headingStart = weeklySummarySrc.indexOf('<div className="weekly-summary-heading">')
-    const headingEnd = weeklySummarySrc.indexOf('{loading ? (', headingStart)
-    assert.ok(headingStart !== -1 && headingEnd !== -1)
-    const headingBody = weeklySummarySrc.slice(headingStart, headingEnd)
-    assert.match(headingBody, /<WeeklySummaryExportMenu/)
-    assert.match(weeklySummaryCss, /@media print \{[\s\S]*?\.weekly-summary-heading \{\s*\n\s*display: none;\s*\n\s*\}/)
-  })
-})
-
-describe('WeeklySummary.tsx — "Executive Analysis only" reuses the existing exported print action rather than duplicating business logic; "Complete Weekly Summary" needs no new print.css rule', () => {
-  test('printExecutiveAnalysisOnly is imported directly from ExecutiveAnalysisCard.tsx — no second, independent implementation in this feature', () => {
-    assert.match(weeklySummarySrc, /import ExecutiveAnalysisCard, \{ printExecutiveAnalysisOnly \} from '\.\/ExecutiveAnalysisCard'/)
-    assert.match(weeklySummarySrc, /onExecutiveAnalysisOnly=\{printExecutiveAnalysisOnly\}/)
-    assert.equal(/function printExecutiveAnalysisOnly\(/.test(weeklySummarySrc), false)
-    assert.equal(/function printExecutiveAnalysisOnly\(/.test(exportMenuSrc), false)
-  })
-
-  test('the existing print.css rule scoping Executive-Analysis-only mode to .weekly-summary is untouched and still applies — no new print.css rule was needed for this menu', () => {
-    assert.match(
-      printCss,
-      /body\.print-executive-analysis-only \.weekly-summary > \*:not\(\.print-header\):not\(\.executive-summary-section\)/,
-    )
-  })
-
-  test('printCompleteWeeklySummary sets no body class (bare window.print()) — the exact same mechanism the old page-level button already used, so no new print.css rule was needed for it either', () => {
-    assert.doesNotMatch(weeklySummarySrc, /classList\.add/)
-  })
-})
+// WeeklySummaryExportMenu.tsx/.css (the old two-choice "Export / Print"
+// dropdown) were removed entirely in the Weekly Summary ATS format phase —
+// see weeklySummaryAtsFormatWiring.test.ts for the single-button
+// replacement's own coverage (a plain "Print Weekly Summary" button, no
+// dropdown/popover/scrim/Escape-handling, since only one action remains).
 
 describe('Nothing here touches the completed, production-tested Reports & Analytics release or any shared/business-logic file', () => {
   test('ReportsAnalytics.tsx is not imported by, and does not import, anything from this feature', () => {
@@ -340,22 +268,17 @@ describe('Nothing here touches the completed, production-tested Reports & Analyt
     assert.equal(/from ['"]\.\/ReportsAnalytics/.test(managerCardSrc), false)
   })
 
-  test('none of Reports & Analytics\' own dedicated components are imported here — this feature has its own, separate SubmittedManagerCard/WeeklySummaryExportMenu rather than reusing ManagerReportsTable/SubmissionStatusCard/ExportPrintMenu', () => {
-    for (const src of [weeklySummarySrc, managerCardSrc, exportMenuSrc]) {
+  test('none of Reports & Analytics\' own dedicated components are imported here — this feature has its own, separate SubmittedManagerCard rather than reusing ManagerReportsTable/SubmissionStatusCard/ExportPrintMenu', () => {
+    for (const src of [weeklySummarySrc, managerCardSrc]) {
       assert.equal(src.includes('ManagerReportsTable'), false)
       assert.equal(src.includes('SubmissionStatusCard'), false)
       assert.equal(/from ['"]\.\/ExportPrintMenu['"]/.test(src), false)
     }
   })
 
-  test('Reports & Analytics\' own ExportPrintMenu.tsx is untouched by this feature — no reference to this new Weekly Summary export menu or its print actions', () => {
-    // onWeeklySummaryOnly is RA's own, pre-existing prop name (its "Weekly
-    // Summary only" print mode) — unrelated to this feature's new component,
-    // so this checks for THIS feature's additions specifically, not that
-    // substring.
-    assert.equal(raExportMenuSrc.includes('WeeklySummaryExportMenu'), false)
+  test('Reports & Analytics\' own ExportPrintMenu.tsx is untouched by this feature — no reference to Weekly Summary\'s own print action', () => {
     assert.equal(raExportMenuSrc.includes('printCompleteWeeklySummary'), false)
-    assert.equal(raExportMenuSrc.includes('Complete Weekly Summary'), false)
+    assert.equal(raExportMenuSrc.includes('Print Weekly Summary'), false)
     // Still exactly its own original four choices.
     assert.match(raExportMenuSrc, /key: 'executive-analysis', label: 'Executive Analysis only'/)
     assert.match(raExportMenuSrc, /key: 'complete', label: 'Complete Leadership Report'/)

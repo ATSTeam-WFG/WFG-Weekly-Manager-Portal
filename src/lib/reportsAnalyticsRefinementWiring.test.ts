@@ -265,11 +265,16 @@ describe('ReportsAnalytics.tsx — the three new print functions reuse the exact
 describe('print.css — the two new scoped print modes, added alongside the untouched Executive-Analysis-only rule', () => {
   const mediaPrintMatch = printCss.match(/@media print \{([\s\S]*)\}\s*$/)
 
-  test('the existing Executive-Analysis-only rule is byte-for-byte unchanged', () => {
+  // The .weekly-summary variant of this selector was removed in the Weekly
+  // Summary ATS format phase (Weekly Summary no longer offers "Executive
+  // Analysis only" as a separate print choice — see
+  // weeklySummaryAtsFormatWiring.test.ts). The .reports-analytics-page
+  // variant this describe block cares about is unaffected.
+  test('the existing Executive-Analysis-only rule, scoped to .reports-analytics-page, is unchanged', () => {
     assert.ok(mediaPrintMatch)
     assert.match(
       mediaPrintMatch![1],
-      /body\.print-executive-analysis-only \.reports-analytics-page > \*:not\(\.print-header\):not\(\.executive-summary-section\),\s*\n\s*body\.print-executive-analysis-only \.weekly-summary > \*:not\(\.print-header\):not\(\.executive-summary-section\) \{\s*\n\s*display: none !important;\s*\n\s*\}/,
+      /body\.print-executive-analysis-only \.reports-analytics-page > \*:not\(\.print-header\):not\(\.executive-summary-section\) \{\s*\n\s*display: none !important;\s*\n\s*\}/,
     )
   })
 

@@ -40,7 +40,7 @@ describe('The dedicated Print Executive Analysis action exists only when appropr
     assert.match(reportsAnalyticsSrc, /<ExecutiveAnalysisCard[\s\S]*?showPrintButton=\{false\}[\s\S]*?\/>/)
   })
 
-  test('WeeklySummary.tsx also passes showPrintButton={false} — its own unified Export/Print menu (WeeklySummaryExportMenu, added in the Weekly Summary refinement) offers the identical "Executive Analysis only" action, so the standalone button here would just be a duplicate control', () => {
+  test('WeeklySummary.tsx also passes showPrintButton={false} — its single "Print Weekly Summary" action already prints the complete page including this card\'s content, so the standalone button here would just be a duplicate control', () => {
     const usageMatch = weeklySummarySrc.match(/<ExecutiveAnalysisCard[\s\S]*?\/>/)
     assert.ok(usageMatch, 'could not locate <ExecutiveAnalysisCard> usage in WeeklySummary.tsx')
     assert.match(usageMatch[0], /showPrintButton=\{false\}/)
@@ -116,7 +116,17 @@ describe('The print CSS isolation applies only during Executive-Analysis-only pr
     const mediaPrintMatch = printCss.match(/@media print \{([\s\S]*)\}\s*$/)
     assert.ok(mediaPrintMatch, 'could not locate the @media print block')
     assert.match(mediaPrintMatch[1], /body\.print-executive-analysis-only \.reports-analytics-page > \*:not\(\.print-header\):not\(\.executive-summary-section\)/)
-    assert.match(mediaPrintMatch[1], /body\.print-executive-analysis-only \.weekly-summary > \*:not\(\.print-header\):not\(\.executive-summary-section\)/)
+  })
+
+  // Weekly Summary ATS format phase: this isolation rule's .weekly-summary
+  // variant was removed — Weekly Summary no longer offers "Executive
+  // Analysis only" as a separate print choice (see
+  // weeklySummaryAtsFormatWiring.test.ts). Reports & Analytics' own
+  // .reports-analytics-page variant, asserted above, is untouched.
+  test('the isolation rule no longer applies to .weekly-summary', () => {
+    const mediaPrintMatch = printCss.match(/@media print \{([\s\S]*)\}\s*$/)
+    assert.ok(mediaPrintMatch)
+    assert.equal(/print-executive-analysis-only \.weekly-summary/.test(mediaPrintMatch[1]), false)
   })
 
   test('the class name used in the CSS matches the class name toggled by printExecutiveAnalysisOnly exactly', () => {
@@ -142,26 +152,27 @@ describe('Existing page-level print handlers were consolidated into per-page Exp
   // replaced by the unified ExportPrintMenu (see reportsAnalyticsRefinementWiring.test.ts)
   // — its "Complete Leadership Report" choice is the direct equivalent (a
   // bare window.print(), no scoping class), covered there. WeeklySummary.tsx
-  // later underwent the same consolidation into its own, separate
-  // WeeklySummaryExportMenu (see weeklySummaryRefinementWiring.test.ts) —
-  // both pages still end up calling a bare window.print() for their
-  // "complete" choice, just no longer via a single standalone button.
+  // briefly had its own two-choice WeeklySummaryExportMenu, then (see the
+  // Weekly Summary ATS format phase, weeklySummaryAtsFormatWiring.test.ts)
+  // was reduced to a single "Print Weekly Summary" action, since a second,
+  // narrower print choice no longer makes sense once the ATS consolidated
+  // view is this page's primary content. Both pages still end up calling a
+  // bare window.print() for their "complete"/only print action.
   test('WeeklySummary.tsx printCompleteWeeklySummary is still a bare window.print() — no class toggle added', () => {
     const fnMatch = weeklySummarySrc.match(/function printCompleteWeeklySummary\(\): void \{[\s\S]*?\n\}/)
     assert.ok(fnMatch, 'could not locate printCompleteWeeklySummary in WeeklySummary.tsx')
     assert.equal(fnMatch[0].replace(/\s+/g, ' ').trim(), 'function printCompleteWeeklySummary(): void { window.print() }')
   })
 
-  test('WeeklySummary.tsx never defines its own print-executive-analysis-only class toggle — it reuses the imported printExecutiveAnalysisOnly function instead', () => {
+  test('WeeklySummary.tsx never defines a print-executive-analysis-only class toggle of its own — that print mode is retired here (see weeklySummaryAtsFormatWiring.test.ts), and it does not import or call printExecutiveAnalysisOnly since it no longer offers that choice (the name may only appear in an explanatory comment about its removal)', () => {
     assert.equal(/classList\.add\(.*print-executive-analysis-only/.test(weeklySummarySrc), false)
-    assert.match(weeklySummarySrc, /import ExecutiveAnalysisCard, \{ printExecutiveAnalysisOnly \} from '\.\/ExecutiveAnalysisCard'/)
+    assert.equal(/^import .*printExecutiveAnalysisOnly/m.test(weeklySummarySrc), false)
+    assert.equal(/[^.]\bprintExecutiveAnalysisOnly\(/.test(weeklySummarySrc), false)
   })
 
-  test('neither page has its own standalone handlePrint anymore — printing on both goes through their respective Export/Print menu', () => {
+  test('ReportsAnalytics.tsx still has no standalone handlePrint — printing there goes through its own ExportPrintMenu, unchanged by the Weekly Summary ATS format phase', () => {
     assert.equal(/const handlePrint = \(\) => \{/.test(reportsAnalyticsSrc), false)
-    assert.equal(/const handlePrint = \(\) => \{/.test(weeklySummarySrc), false)
     assert.match(reportsAnalyticsSrc, /<ExportPrintMenu/)
-    assert.match(weeklySummarySrc, /<WeeklySummaryExportMenu/)
   })
 })
 

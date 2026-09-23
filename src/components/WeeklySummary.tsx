@@ -2,19 +2,25 @@ import { useEffect, useMemo, useState } from 'react'
 import wfgLogo from '../assets/wfg-logo.png'
 import { fetchManagersForWeek, fetchWeeklySummary, type ManagerSummary, type WeeklySummaryData } from '../lib/adminService'
 import { supabase } from '../lib/supabaseClient'
-import ExecutiveAnalysisCard, { printExecutiveAnalysisOnly } from './ExecutiveAnalysisCard'
+import ExecutiveAnalysisCard from './ExecutiveAnalysisCard'
 import SubmittedManagerCard from './SubmittedManagerCard'
-import WeeklySummaryExportMenu from './WeeklySummaryExportMenu'
 import type { ReportingWeek } from '../utils/week'
 import { AI_EXECUTIVE_SUMMARY_ENABLED } from '../config/featureFlags'
 import './AdminDashboard.css'
 import './SubmittedReport.css'
 import './WeeklySummary.css'
 
-// The existing "Complete Weekly Summary" print action — unchanged behavior,
-// just given the same module-scope-function shape ReportsAnalytics.tsx uses
-// for its own print actions, now that it's one of two choices in a menu
-// rather than the page's only print button.
+// The single Weekly Summary print action — a bare window.print() of the
+// complete page (letterhead, KPIs hidden via the existing @media print
+// rules, the consolidated ATS content, and every submitted manager report).
+// Weekly Summary previously offered a second choice ("Executive Analysis
+// only", reusing ExecutiveAnalysisCard's printExecutiveAnalysisOnly) via a
+// two-item dropdown menu; now that the ATS consolidated view IS this page's
+// primary leadership-facing content, printing anything less than the whole
+// page no longer makes sense here, so that second choice — and the
+// dropdown/popover it required — were removed. Reports & Analytics' own
+// "Executive Analysis only" print option (via its separate ExportPrintMenu)
+// is untouched.
 function printCompleteWeeklySummary(): void {
   window.print()
 }
@@ -83,10 +89,9 @@ export default function WeeklySummary({ week, weekOffset, onBack }: WeeklySummar
           <h1>Weekly Summary</h1>
           <p className="weekly-summary-week">Week of {week.label}</p>
         </div>
-        <WeeklySummaryExportMenu
-          onCompleteWeeklySummary={printCompleteWeeklySummary}
-          onExecutiveAnalysisOnly={printExecutiveAnalysisOnly}
-        />
+        <button type="button" className="btn btn-primary no-print" onClick={printCompleteWeeklySummary}>
+          Print Weekly Summary
+        </button>
       </div>
 
       {loading ? (
@@ -140,20 +145,31 @@ export default function WeeklySummary({ week, weekOffset, onBack }: WeeklySummar
           </div>
 
           {AI_EXECUTIVE_SUMMARY_ENABLED && (
-            // showPrintButton=false hides this card's own standalone "Print
-            // Executive Analysis" button — the unified Export/Print menu
-            // above already offers the identical action via the same
-            // exported printExecutiveAnalysisOnly function (never a second
-            // print implementation). The prop already existed for exactly
-            // this purpose (see Reports & Analytics' own use of it);
-            // ExecutiveAnalysisCard.tsx/.css themselves are untouched.
-            <ExecutiveAnalysisCard
-              periodKey="weekly"
-              offset={weekOffset}
-              weekStartDates={[week.weekStartDate]}
-              periodStartDate={week.weekStartDate}
-              showPrintButton={false}
-            />
+            <>
+              {/* Labels the shared ExecutiveAnalysisCard's persisted weekly
+                  ATS analysis as the consolidated, leadership-facing portion
+                  of Weekly Summary — presentation only, reusing the exact
+                  same persisted artifact and rendering (AtsReportView) that
+                  Reports & Analytics still refers to as "Executive
+                  Analysis". No second AI generation/persistence path is
+                  introduced, and the card's own internal heading/behavior
+                  are unchanged. */}
+              <p className="ws-eyebrow">Consolidated Weekly Summary</p>
+              {/* showPrintButton=false hides this card's own standalone
+                  "Print Executive Analysis" button — the single "Print
+                  Weekly Summary" action above already prints the complete
+                  page, including this card's current content. The prop
+                  already existed for exactly this purpose (see Reports &
+                  Analytics' own use of it); ExecutiveAnalysisCard.tsx/.css
+                  themselves are untouched. */}
+              <ExecutiveAnalysisCard
+                periodKey="weekly"
+                offset={weekOffset}
+                weekStartDates={[week.weekStartDate]}
+                periodStartDate={week.weekStartDate}
+                showPrintButton={false}
+              />
+            </>
           )}
 
           <div className="ws-manager-reports-header">
