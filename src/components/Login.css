@@ -1,30 +1,65 @@
 .login-page {
+  position: relative;
+  overflow: hidden;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
+  background: var(--warm-cream);
+}
+
+/* Very subtle layered wave treatment across the lower portion of the
+   viewport — two flat, low-contrast Soft Sand ellipses (same technique as
+   AdminSidebar's decorative landscape, but a single cream/sand tone family
+   only, not the previous terracotta tint, for a much quieter effect).
+   Contained by .login-page's own overflow:hidden so they can never cause
+   horizontal scroll; pointer-events:none and z-index:0 keep them purely
+   decorative and behind the card, never intercepting any interaction. */
+.login-page::before,
+.login-page::after {
+  content: '';
+  position: absolute;
+  left: -10%;
+  width: 140%;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-page::before {
+  bottom: -260px;
+  height: 300px;
+  background: rgba(233, 221, 210, 0.35);
+}
+
+.login-page::after {
+  bottom: -230px;
+  height: 220px;
+  background: rgba(233, 221, 210, 0.55);
 }
 
 .login-card {
+  position: relative;
+  z-index: 1;
   width: 100%;
-  max-width: 400px;
+  max-width: 440px;
   background: var(--white);
   border: 1px solid var(--soft-sand);
   border-top: 4px solid var(--terracotta);
   border-radius: 16px;
-  padding: 40px 36px;
+  padding: 44px 40px;
   box-shadow: 0 20px 40px -28px rgba(48, 42, 39, 0.35);
   text-align: center;
 }
 
 .login-logo {
-  height: 36px;
+  height: 52px;
   margin-bottom: 24px;
 }
 
 .login-card h1 {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--dark-charcoal);
   margin: 0 0 6px;
@@ -56,7 +91,7 @@
   background: var(--warm-cream);
   border: 1px solid var(--soft-sand);
   border-radius: 8px;
-  padding: 10px 14px;
+  padding: 12px 14px;
   margin-bottom: 18px;
 }
 
@@ -101,6 +136,21 @@
   margin: 0 0 24px;
 }
 
+@media (max-width: 860px) {
+  .login-page::before,
+  .login-page::after {
+    height: 220px;
+  }
+
+  .login-page::before {
+    bottom: -180px;
+  }
+
+  .login-page::after {
+    bottom: -200px;
+  }
+}
+
 @media (max-width: 480px) {
   .login-page {
     padding: 16px;
@@ -108,5 +158,18 @@
 
   .login-card {
     padding: 32px 24px;
+  }
+
+  .login-page::before,
+  .login-page::after {
+    height: 160px;
+  }
+
+  .login-page::before {
+    bottom: -130px;
+  }
+
+  .login-page::after {
+    bottom: -145px;
   }
 }
