@@ -76,6 +76,79 @@ describe('executive-summary.ts — max_tokens and stop_reason handling', () => {
   })
 })
 
+describe('executive-summary.ts — structured output reliability layer (Phase 2B)', () => {
+  // Production incident this covers: a real generation attempt hit
+  // stop_reason=max_tokens with the response containing an adaptive
+  // 'thinking' content block ahead of the 'text' block — nothing in this
+  // file ever requested thinking, so that budget consumption was
+  // uncontrolled. Fixed by explicitly disabling thinking and by
+  // constraining the response to the exact expected shape via Anthropic's
+  // native structured-output feature — both are an ADDITIONAL reliability
+  // layer, not a replacement for the existing truncation/parse safeguards
+  // (see the two describe blocks above, both still exercised unmodified).
+
+  test('thinking is explicitly disabled on the Anthropic request', () => {
+    assert.match(src, /thinking: \{ type: 'disabled' \}/)
+  })
+
+  test('output_config.format requests native json_schema structured output', () => {
+    assert.match(src, /output_config: \{ format: \{ type: 'json_schema', schema: EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA \} \}/)
+  })
+
+  test('the structured-output schema requires exactly the same 7 keys as ReportingAnalysisSections, each typed as a string, with no additional properties allowed', () => {
+    const schemaMatch = src.match(/const EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA = \{[\s\S]*?\n\} as const/)
+    assert.ok(schemaMatch, 'could not locate EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA')
+    const schemaBody = schemaMatch[0]
+
+    const expectedKeys = [
+      'executiveSummary',
+      'keyPriorities',
+      'majorWins',
+      'challengesRisks',
+      'challengeProgress',
+      'opportunities',
+      'prioritiesGoingForward',
+    ]
+
+    // Every key appears as a string-typed property.
+    for (const key of expectedKeys) {
+      assert.match(schemaBody, new RegExp(`${key}: \\{ type: 'string' \\}`), `expected ${key} to be a required string property`)
+    }
+    // Exactly 7 properties — no extra, no missing (guards against schema
+    // drift from ReportingAnalysisSections without needing a second,
+    // independently-maintained key list).
+    const propertyMatches = schemaBody.match(/^\s{4}\w+: \{ type: 'string' \}/gm) ?? []
+    assert.equal(propertyMatches.length, expectedKeys.length, `expected exactly ${expectedKeys.length} schema properties, found ${propertyMatches.length}`)
+
+    // required lists exactly these 7 keys, in the same order.
+    const requiredMatch = schemaBody.match(/required: \[([\s\S]*?)\]/)
+    assert.ok(requiredMatch, 'could not locate the schema\'s required array')
+    const requiredKeys = requiredMatch[1].match(/'(\w+)'/g)?.map((k) => k.slice(1, -1)) ?? []
+    assert.deepEqual(requiredKeys, expectedKeys)
+
+    // Additional properties are explicitly forbidden.
+    assert.match(schemaBody, /additionalProperties: false/)
+  })
+
+  test('the schema constant is defined once, at module scope, and reused by the single Anthropic call — never redefined ad hoc inline', () => {
+    const definitionCount = (src.match(/const EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA = /g) ?? []).length
+    assert.equal(definitionCount, 1)
+    assert.match(src, /schema: EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA/)
+  })
+
+  test('max_tokens, thinking, and output_config are all set on the same single anthropic.messages.create call — still exactly one Anthropic request per generation', () => {
+    const callMatch = src.match(/const response = await anthropic\.messages\.create\(\{[\s\S]*?\n {2}\}\)/)
+    assert.ok(callMatch, 'could not locate the anthropic.messages.create call')
+    const call = callMatch[0]
+    assert.match(call, /model: 'claude-sonnet-5'/)
+    assert.match(call, /max_tokens: 8192/)
+    assert.match(call, /thinking: \{ type: 'disabled' \}/)
+    assert.match(call, /output_config: \{ format: \{ type: 'json_schema', schema: EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA \} \}/)
+    const createCallCount = (src.match(/anthropic\.messages\.create\(/g) ?? []).length
+    assert.equal(createCallCount, 1, 'expected exactly one Anthropic call — this phase must not introduce a second/multi-pass call')
+  })
+})
+
 describe('executive-summary.ts — no sensitive content ever reaches a log', () => {
   const generateMatch = src.match(/async function generateAnalysis\([\s\S]*?\n\}/)
 

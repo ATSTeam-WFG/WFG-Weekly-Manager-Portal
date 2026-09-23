@@ -35,6 +35,36 @@ interface ReportingAnalysisSections {
   prioritiesGoingForward: string
 }
 
+// Mirrors ReportingAnalysisSections exactly (same 7 keys, same order) —
+// passed to Anthropic's native structured-output feature (output_config.
+// format below) so the API itself constrains the response to this exact
+// shape, rather than relying solely on the prose instruction in the prompt.
+// additionalProperties: false rejects any extra key the model might add.
+// This does NOT replace extractAiJson/the truncation check below — both
+// stay exactly as-is as a second, independent safety net.
+const EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA = {
+  type: 'object',
+  properties: {
+    executiveSummary: { type: 'string' },
+    keyPriorities: { type: 'string' },
+    majorWins: { type: 'string' },
+    challengesRisks: { type: 'string' },
+    challengeProgress: { type: 'string' },
+    opportunities: { type: 'string' },
+    prioritiesGoingForward: { type: 'string' },
+  },
+  required: [
+    'executiveSummary',
+    'keyPriorities',
+    'majorWins',
+    'challengesRisks',
+    'challengeProgress',
+    'opportunities',
+    'prioritiesGoingForward',
+  ],
+  additionalProperties: false,
+} as const
+
 const PERIOD_KEYS: ReportPeriodKey[] = ['weekly', 'bi-weekly', 'monthly', 'quarterly', 'half-yearly', 'yearly']
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -227,9 +257,26 @@ Respond with ONLY a valid JSON object (no markdown fences, no commentary) with e
   // could complete, producing a truncated, unparseable response (see
   // stop_reason handling below). Not raised further than this without
   // evidence 8192 is itself insufficient.
+  //
+  // thinking: disabled — the production incident above traced the failure
+  // specifically to an adaptive 'thinking' content block consuming part of
+  // this same max_tokens budget, with no explicit thinking configuration
+  // ever requested. Disabling it removes that consumer entirely, leaving
+  // the full 8192 budget available for the actual JSON output.
+  //
+  // output_config.format: json_schema — Anthropic's native structured
+  // output, constraining the response to EXACTLY the 7
+  // ReportingAnalysisSections keys (see EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA
+  // above), each a required string, no additional properties. This is an
+  // added reliability layer, not a replacement for assembleTextFromContent
+  // Blocks/extractAiJson below — both stay exactly as they were, as a
+  // second, independent safety net against a truncated or malformed
+  // response either way.
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-5',
     max_tokens: 8192,
+    thinking: { type: 'disabled' },
+    output_config: { format: { type: 'json_schema', schema: EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA } },
     messages: [{ role: 'user', content: prompt }],
   })
 
