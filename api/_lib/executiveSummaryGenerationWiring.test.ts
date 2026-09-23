@@ -98,21 +98,47 @@ describe('executive-summary.ts — structured output reliability layer (Phase 2B
     assert.match(src, /output_config: \{ format: \{ type: 'json_schema', schema: ATS_REPORT_SCHEMA \} \}/)
   })
 
-  test('the structured-output schema requires openingParagraph (string) plus a dynamic topics array (1-8 items), each topic with title/statusSummary/bullets(1-5)/next and no additional properties', () => {
+  // Production incident this describe block additionally covers: the first
+  // real ATS generation attempt failed with a 400 from Anthropic —
+  // "output_config.format.schema: For 'array' type, property 'maxItems' is
+  // not supported" — confirmed against Anthropic's own JSON Schema
+  // limitations documentation as a genuine, documented constraint of
+  // output_config.format (`minItems` supported only for values 0 or 1;
+  // `maxItems`, and any `minItems` >= 2, explicitly unsupported on any
+  // array). Fixed by removing `maxItems` entirely from both array
+  // properties below, while keeping `minItems: 1` (one of the two
+  // documented-supported values) on both.
+  test('the structured-output schema requires openingParagraph (string) plus a dynamic topics array (minItems: 1, no maxItems), each topic with title/statusSummary/bullets(minItems: 1, no maxItems)/next and no additional properties', () => {
     const schemaMatch = src.match(/const ATS_REPORT_SCHEMA = \{[\s\S]*?\n\} as const/)
     assert.ok(schemaMatch, 'could not locate ATS_REPORT_SCHEMA')
     const schemaBody = schemaMatch[0]
 
     assert.match(schemaBody, /openingParagraph: \{ type: 'string' \}/)
-    assert.match(schemaBody, /topics: \{\s*\n\s*type: 'array',\s*\n\s*minItems: 1,\s*\n\s*maxItems: 8,/)
+    assert.match(schemaBody, /topics: \{\s*\n\s*type: 'array',\s*\n\s*minItems: 1,\s*\n\s*items: \{/)
     assert.match(schemaBody, /title: \{ type: 'string' \}/)
     assert.match(schemaBody, /statusSummary: \{ type: 'string' \}/)
-    assert.match(schemaBody, /bullets: \{\s*\n\s*type: 'array',\s*\n\s*minItems: 1,\s*\n\s*maxItems: 5,/)
+    assert.match(schemaBody, /bullets: \{\s*\n\s*type: 'array',\s*\n\s*minItems: 1,\s*\n\s*items: \{ type: 'string' \},/)
     assert.match(schemaBody, /next: \{ type: 'string' \}/)
 
-    // Dynamic topic count is expressed structurally (minItems/maxItems on
-    // the array), never a fixed/hard-coded topic count or topic name.
-    assert.equal(/topics: \{[\s\S]*?minItems: 8/.test(schemaBody), false, 'topics must allow a range, not a fixed count')
+    // maxItems must not appear anywhere in the schema — Anthropic's
+    // output_config.format.schema does not support it on any array (see
+    // this test's own header comment); a regression here would reproduce
+    // the exact production 400 error.
+    assert.equal(schemaBody.includes('maxItems'), false, 'maxItems is not supported by Anthropic structured output and must not appear in this schema')
+
+    // minItems is only ever set to 1 (one of the two documented-supported
+    // values, 0 or 1) — never a higher value, which would also be rejected.
+    const minItemsValues = [...schemaBody.matchAll(/minItems: (\d+)/g)].map((m) => Number(m[1]))
+    assert.ok(minItemsValues.length >= 2, 'expected minItems on both the topics and bullets arrays')
+    for (const value of minItemsValues) {
+      assert.ok(value === 0 || value === 1, `minItems must be 0 or 1 (Anthropic-supported values), found ${value}`)
+    }
+
+    // Dynamic topic count and dynamic bullet count are still fully
+    // supported — the array simply has no upper structural bound anymore;
+    // never a fixed/hard-coded topic count or topic name.
+    assert.equal(/topics: \{[\s\S]*?maxItems/.test(schemaBody), false)
+    assert.equal(/bullets: \{[\s\S]*?maxItems/.test(schemaBody), false)
 
     // required lists exactly these 2 top-level keys; topic-level required
     // lists exactly its 4 keys. Additional properties forbidden at both

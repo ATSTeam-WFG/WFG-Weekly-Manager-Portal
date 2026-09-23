@@ -47,14 +47,27 @@ interface VercelResponse {
 // format below) so the API itself constrains the response to this exact
 // shape, rather than relying solely on the prose instruction in the prompt.
 // additionalProperties: false rejects any extra key the model might add.
-// bullets allows 1-5 items deliberately, not a fixed count: factual
-// grounding takes priority over reaching a target bullet count (see the
-// prompt below and the matching bounds in the SQL validator). topics itself
-// is bounded 1-8 — a backstop supporting the ~1-1.5 page content target,
-// never a fixed/hard-coded set of topic names (topics are always derived
-// from that period's actual manager reports). This does NOT replace
-// extractAiJson/the truncation check below — both stay exactly as-is as a
-// second, independent safety net.
+//
+// maxItems is deliberately NOT set on either array below. A production
+// generation attempt failed with a 400 from Anthropic:
+// "output_config.format.schema: For 'array' type, property 'maxItems' is
+// not supported" — confirmed against Anthropic's own JSON Schema
+// limitations documentation (platform.claude.com/docs/en/build-with-claude/
+// structured-outputs#json-schema-limitations): `minItems` is supported ONLY
+// for the values 0 or 1; "array constraints beyond minItems of 0 or 1"
+// (which includes maxItems, and any minItems >= 2) are explicitly listed as
+// unsupported and rejected with a 400 before generation ever runs. The
+// `minItems: 1` on both arrays below is exactly one of the two supported
+// values, so it's kept. The upper bounds this schema can no longer express
+// (previously maxItems: 8 on topics, maxItems: 5 on bullets) are still
+// enforced by the layers that already existed for exactly this purpose:
+// prompt guidance below (topic count driven by what the reports actually
+// support; "aim for 3-5 bullets when supported, fewer when not, never
+// invent filler") and the SQL validator at persist time (bullets 1-5 — see
+// supabase/migrations/20260923_executive_analysis_ats_shape.sql), which
+// remains the authoritative write-time gate exactly as before. This does
+// NOT replace extractAiJson/the truncation check below — both stay exactly
+// as-is as a second, independent safety net.
 const ATS_REPORT_SCHEMA = {
   type: 'object',
   properties: {
@@ -62,7 +75,6 @@ const ATS_REPORT_SCHEMA = {
     topics: {
       type: 'array',
       minItems: 1,
-      maxItems: 8,
       items: {
         type: 'object',
         properties: {
@@ -71,7 +83,6 @@ const ATS_REPORT_SCHEMA = {
           bullets: {
             type: 'array',
             minItems: 1,
-            maxItems: 5,
             items: { type: 'string' },
           },
           next: { type: 'string' },
@@ -290,10 +301,10 @@ Respond with ONLY a valid JSON object (no markdown fences, no commentary) matchi
   //
   // output_config.format: json_schema — Anthropic's native structured
   // output, constraining the response to the ATS shape (see
-  // ATS_REPORT_SCHEMA above): openingParagraph plus a dynamic 1-8 element
-  // topics array, each topic a required title/statusSummary/bullets(1-5)/
-  // next, no additional properties. A dynamic-length array is fully
-  // expressible via minItems/maxItems, so this dynamic topic count is not a
+  // ATS_REPORT_SCHEMA above): openingParagraph plus a dynamic (minItems: 1,
+  // no upper bound expressible — see that constant's own comment) topics
+  // array, each topic a required title/statusSummary/bullets(minItems: 1)/
+  // next, no additional properties. This dynamic topic count is not a
   // structural obstacle to staying a single structured-output call — kept
   // single-call here deliberately (no two-pass architecture) unless real
   // evidence later proves this schema-bounded call insufficient, the same
