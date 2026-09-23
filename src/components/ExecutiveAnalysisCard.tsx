@@ -9,10 +9,13 @@ import {
   revertToOriginal,
   ExecutiveSummaryError,
   REPORTING_ANALYSIS_SECTIONS,
+  isAtsShapedSections,
   type PersistedExecutiveAnalysis,
-  type ReportingAnalysisSections,
+  type ExecutiveAnalysisSections,
 } from '../lib/executiveSummaryService'
 import type { ReportPeriodKey } from '../utils/reportPeriods'
+import AtsReportView from './AtsReportView'
+import AtsTopicsEditForm from './AtsTopicsEditForm'
 import './ExecutiveAnalysisCard.css'
 
 type Mode = 'view' | 'edit'
@@ -79,6 +82,19 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// AtsReportView takes a fully-formatted period descriptor rather than
+// deciding the wording itself (see that component's own header) — only this
+// caller knows whether a given analysis is a single reporting week (where
+// "Week Ending [date]" reads naturally) or a longer aggregate period (where
+// its own already-human-readable range/label, e.g. "Q4 2026 (Oct 1 – Dec
+// 31)" or "October 2026", reads better than forcing "Week Ending" onto it).
+function buildAtsPeriodLabel(analysis: PersistedExecutiveAnalysis): string {
+  if (analysis.periodKey === 'weekly') {
+    return `Week Ending ${formatDate(analysis.periodEndDate)}`
+  }
+  return analysis.periodLabel
+}
+
 // The single shared AI-analysis card used by both Weekly Summary and Reports
 // & Analytics, so the persisted analysis for a given period is read, edited,
 // reverted, and regenerated through exactly one implementation — never a
@@ -96,7 +112,7 @@ export default function ExecutiveAnalysisCard({
   const [isStale, setIsStale] = useState(false)
 
   const [mode, setMode] = useState<Mode>('view')
-  const [editedSections, setEditedSections] = useState<ReportingAnalysisSections | null>(null)
+  const [editedSections, setEditedSections] = useState<ExecutiveAnalysisSections | null>(null)
   const [actionStatus, setActionStatus] = useState<ActionStatus>('idle')
   const [error, setError] = useState<string | null>(null)
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
@@ -202,8 +218,12 @@ export default function ExecutiveAnalysisCard({
     setError(null)
   }
 
-  const handleSectionChange = (key: keyof ReportingAnalysisSections, value: string) => {
-    setEditedSections((prev) => (prev ? { ...prev, [key]: value } : prev))
+  // Legacy edit form only — editedSections is only ever this fixed-key shape
+  // when mode==='edit' was entered for a legacy-shaped analysis (see
+  // handleEditClick, which seeds editedSections directly from
+  // analysis.sections, whichever shape it is).
+  const handleSectionChange = (key: string, value: string) => {
+    setEditedSections((prev) => (prev && !isAtsShapedSections(prev) ? { ...prev, [key]: value } : prev))
   }
 
   const handleSaveChanges = async () => {
@@ -324,30 +344,54 @@ export default function ExecutiveAnalysisCard({
 
             {/* Collapsed-by-default screen preview — display-only, never
                 printed (no-print) and never alters analysis.sections
-                itself; only its own rendered text is visually clamped. */}
+                itself; only its own rendered text is visually clamped.
+                Legacy shows its first fixed section (Executive Summary);
+                ATS shows the opening paragraph in the same role. */}
             <div className={`executive-summary-preview no-print ${previewExpanded ? 'executive-summary-preview-hidden' : ''}`}>
-              <div className="executive-summary-block">
-                <h3>{REPORTING_ANALYSIS_SECTIONS[0].title}</h3>
-                <p className="report-readonly-text executive-summary-preview-text">
-                  {analysis.sections[REPORTING_ANALYSIS_SECTIONS[0].key]}
-                </p>
-              </div>
+              {isAtsShapedSections(analysis.sections) ? (
+                <div className="executive-summary-block">
+                  <h3>Opening Summary</h3>
+                  <p className="report-readonly-text executive-summary-preview-text">{analysis.sections.openingParagraph}</p>
+                </div>
+              ) : (
+                <div className="executive-summary-block">
+                  <h3>{REPORTING_ANALYSIS_SECTIONS[0].title}</h3>
+                  <p className="report-readonly-text executive-summary-preview-text">
+                    {analysis.sections[REPORTING_ANALYSIS_SECTIONS[0].key]}
+                  </p>
+                </div>
+              )}
               <button type="button" className="executive-summary-preview-toggle" onClick={() => setPreviewExpanded(true)}>
                 View full analysis &darr;
               </button>
             </div>
 
-            {/* Always in the DOM with every section — visible on screen only
-                once expanded, but ALWAYS shown for print (see this class's
-                own @media print rule), so printing never depends on this
-                on-screen toggle's state. */}
+            {/* Always in the DOM with the complete content — visible on
+                screen only once expanded, but ALWAYS shown for print (see
+                this class's own @media print rule), so printing never
+                depends on this on-screen toggle's state. Legacy renders its
+                fixed 7 sections unchanged; ATS reuses the shared,
+                read-only AtsReportView (unmodified from Phase 1). */}
             <div className={`executive-summary-full ${previewExpanded ? 'executive-summary-full-open' : ''}`}>
-              {REPORTING_ANALYSIS_SECTIONS.map((section) => (
-                <div className="executive-summary-block" key={section.key}>
-                  <h3>{section.title}</h3>
-                  <p className="report-readonly-text">{analysis.sections[section.key]}</p>
-                </div>
-              ))}
+              {isAtsShapedSections(analysis.sections) ? (
+                <AtsReportView
+                  report={analysis.sections}
+                  periodLabel={buildAtsPeriodLabel(analysis)}
+                  // No leaderName: Executive Analysis aggregates every
+                  // manager's reports rather than belonging to one leader —
+                  // never fabricate a placeholder name for this line.
+                />
+              ) : (
+                (() => {
+                  const legacySections = analysis.sections
+                  return REPORTING_ANALYSIS_SECTIONS.map((section) => (
+                    <div className="executive-summary-block" key={section.key}>
+                      <h3>{section.title}</h3>
+                      <p className="report-readonly-text">{legacySections[section.key]}</p>
+                    </div>
+                  ))
+                })()
+              )}
               {previewExpanded && (
                 <button
                   type="button"
@@ -363,17 +407,24 @@ export default function ExecutiveAnalysisCard({
           {mode === 'edit' && editedSections && (
             <div className="executive-summary-content executive-summary-edit-form no-print">
               <span className="ai-generated-badge">Editing Analysis</span>
-              {REPORTING_ANALYSIS_SECTIONS.map((section) => (
-                <div className="executive-summary-block" key={section.key}>
-                  <h3>{section.title}</h3>
-                  <textarea
-                    className="executive-summary-edit-textarea"
-                    value={editedSections[section.key]}
-                    onChange={(e) => handleSectionChange(section.key, e.target.value)}
-                    rows={4}
-                  />
-                </div>
-              ))}
+              {isAtsShapedSections(editedSections) ? (
+                <AtsTopicsEditForm report={editedSections} onChange={setEditedSections} />
+              ) : (
+                (() => {
+                  const legacyEditedSections = editedSections
+                  return REPORTING_ANALYSIS_SECTIONS.map((section) => (
+                    <div className="executive-summary-block" key={section.key}>
+                      <h3>{section.title}</h3>
+                      <textarea
+                        className="executive-summary-edit-textarea"
+                        value={legacyEditedSections[section.key]}
+                        onChange={(e) => handleSectionChange(section.key, e.target.value)}
+                        rows={4}
+                      />
+                    </div>
+                  ))
+                })()
+              )}
               <div className="executive-summary-edit-actions">
                 <button type="button" className="btn btn-primary" onClick={handleSaveChanges} disabled={busy}>
                   {actionStatus === 'saving' ? 'Saving…' : 'Save Changes'}

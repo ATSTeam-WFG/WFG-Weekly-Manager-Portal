@@ -86,54 +86,52 @@ describe('executive-summary.ts — structured output reliability layer (Phase 2B
   // native structured-output feature — both are an ADDITIONAL reliability
   // layer, not a replacement for the existing truncation/parse safeguards
   // (see the two describe blocks above, both still exercised unmodified).
+  // Phase 3 (ATS migration) swaps the SCHEMA this reliability layer
+  // constrains the response to — thinking/max_tokens/single-call/truncation
+  // handling are all otherwise untouched.
 
   test('thinking is explicitly disabled on the Anthropic request', () => {
     assert.match(src, /thinking: \{ type: 'disabled' \}/)
   })
 
-  test('output_config.format requests native json_schema structured output', () => {
-    assert.match(src, /output_config: \{ format: \{ type: 'json_schema', schema: EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA \} \}/)
+  test('output_config.format requests native json_schema structured output, using the ATS schema', () => {
+    assert.match(src, /output_config: \{ format: \{ type: 'json_schema', schema: ATS_REPORT_SCHEMA \} \}/)
   })
 
-  test('the structured-output schema requires exactly the same 7 keys as ReportingAnalysisSections, each typed as a string, with no additional properties allowed', () => {
-    const schemaMatch = src.match(/const EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA = \{[\s\S]*?\n\} as const/)
-    assert.ok(schemaMatch, 'could not locate EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA')
+  test('the structured-output schema requires openingParagraph (string) plus a dynamic topics array (1-8 items), each topic with title/statusSummary/bullets(1-5)/next and no additional properties', () => {
+    const schemaMatch = src.match(/const ATS_REPORT_SCHEMA = \{[\s\S]*?\n\} as const/)
+    assert.ok(schemaMatch, 'could not locate ATS_REPORT_SCHEMA')
     const schemaBody = schemaMatch[0]
 
-    const expectedKeys = [
-      'executiveSummary',
-      'keyPriorities',
-      'majorWins',
-      'challengesRisks',
-      'challengeProgress',
-      'opportunities',
-      'prioritiesGoingForward',
-    ]
+    assert.match(schemaBody, /openingParagraph: \{ type: 'string' \}/)
+    assert.match(schemaBody, /topics: \{\s*\n\s*type: 'array',\s*\n\s*minItems: 1,\s*\n\s*maxItems: 8,/)
+    assert.match(schemaBody, /title: \{ type: 'string' \}/)
+    assert.match(schemaBody, /statusSummary: \{ type: 'string' \}/)
+    assert.match(schemaBody, /bullets: \{\s*\n\s*type: 'array',\s*\n\s*minItems: 1,\s*\n\s*maxItems: 5,/)
+    assert.match(schemaBody, /next: \{ type: 'string' \}/)
 
-    // Every key appears as a string-typed property.
-    for (const key of expectedKeys) {
-      assert.match(schemaBody, new RegExp(`${key}: \\{ type: 'string' \\}`), `expected ${key} to be a required string property`)
-    }
-    // Exactly 7 properties — no extra, no missing (guards against schema
-    // drift from ReportingAnalysisSections without needing a second,
-    // independently-maintained key list).
-    const propertyMatches = schemaBody.match(/^\s{4}\w+: \{ type: 'string' \}/gm) ?? []
-    assert.equal(propertyMatches.length, expectedKeys.length, `expected exactly ${expectedKeys.length} schema properties, found ${propertyMatches.length}`)
+    // Dynamic topic count is expressed structurally (minItems/maxItems on
+    // the array), never a fixed/hard-coded topic count or topic name.
+    assert.equal(/topics: \{[\s\S]*?minItems: 8/.test(schemaBody), false, 'topics must allow a range, not a fixed count')
 
-    // required lists exactly these 7 keys, in the same order.
-    const requiredMatch = schemaBody.match(/required: \[([\s\S]*?)\]/)
-    assert.ok(requiredMatch, 'could not locate the schema\'s required array')
-    const requiredKeys = requiredMatch[1].match(/'(\w+)'/g)?.map((k) => k.slice(1, -1)) ?? []
-    assert.deepEqual(requiredKeys, expectedKeys)
-
-    // Additional properties are explicitly forbidden.
-    assert.match(schemaBody, /additionalProperties: false/)
+    // required lists exactly these 2 top-level keys; topic-level required
+    // lists exactly its 4 keys. Additional properties forbidden at both
+    // levels.
+    const requiredMatches = schemaBody.match(/required: \[([\s\S]*?)\]/g) ?? []
+    assert.equal(requiredMatches.length, 2, 'expected exactly two required arrays: top-level and per-topic')
+    // Per-topic required (nested inside properties.topics.items) appears
+    // first in source order; the top-level required (openingParagraph,
+    // topics) closes the outer object and appears last.
+    assert.match(requiredMatches[0], /'title', 'statusSummary', 'bullets', 'next'/)
+    assert.match(requiredMatches[1], /'openingParagraph', 'topics'/)
+    const additionalPropsCount = (schemaBody.match(/additionalProperties: false/g) ?? []).length
+    assert.equal(additionalPropsCount, 2, 'expected additionalProperties: false at both the top level and the per-topic level')
   })
 
   test('the schema constant is defined once, at module scope, and reused by the single Anthropic call — never redefined ad hoc inline', () => {
-    const definitionCount = (src.match(/const EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA = /g) ?? []).length
+    const definitionCount = (src.match(/const ATS_REPORT_SCHEMA = /g) ?? []).length
     assert.equal(definitionCount, 1)
-    assert.match(src, /schema: EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA/)
+    assert.match(src, /schema: ATS_REPORT_SCHEMA/)
   })
 
   test('max_tokens, thinking, and output_config are all set on the same single anthropic.messages.create call — still exactly one Anthropic request per generation', () => {
@@ -143,9 +141,32 @@ describe('executive-summary.ts — structured output reliability layer (Phase 2B
     assert.match(call, /model: 'claude-sonnet-5'/)
     assert.match(call, /max_tokens: 8192/)
     assert.match(call, /thinking: \{ type: 'disabled' \}/)
-    assert.match(call, /output_config: \{ format: \{ type: 'json_schema', schema: EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA \} \}/)
+    assert.match(call, /output_config: \{ format: \{ type: 'json_schema', schema: ATS_REPORT_SCHEMA \} \}/)
     const createCallCount = (src.match(/anthropic\.messages\.create\(/g) ?? []).length
     assert.equal(createCallCount, 1, 'expected exactly one Anthropic call — this phase must not introduce a second/multi-pass call')
+  })
+
+  test('generateAnalysis returns AtsReport, built from a dynamic topics array — never a fixed/hard-coded set of topic names', () => {
+    const generateMatch = src.match(/async function generateAnalysis\([\s\S]*?\n\}/)
+    assert.ok(generateMatch, 'could not locate generateAnalysis')
+    assert.match(generateMatch[0], /Promise<AtsReport>/)
+    assert.match(generateMatch[0], /const rawTopics = Array\.isArray\(parsed\.topics\)/)
+    assert.match(generateMatch[0], /return \{\s*\n\s*openingParagraph: String\(parsed\.openingParagraph \?\? ''\),\s*\n\s*topics,\s*\n\s*\}/)
+  })
+})
+
+describe('executive-summary.ts — ATS prompt guidance (Phase 3 correction: never force a bullet count)', () => {
+  test('the prompt instructs 3-5 bullets only when supported, and explicitly allows fewer rather than inventing filler', () => {
+    assert.match(src, /aim for 3-5 when the source material genuinely supports that many distinct facts — but use fewer, even just 1 or 2, when fewer material facts are available; never invent or pad a bullet just to reach a count/)
+  })
+
+  test('the prompt never instructs a fixed/hard-coded set of topic names — topics must be derived from the reports', () => {
+    assert.match(src, /derive every topic strictly from what these reports actually contain/)
+    assert.equal(/"topics": \["[A-Z]/.test(src), false, 'must not hard-code example topic names in the prompt')
+  })
+
+  test('the prompt still forbids inventing facts, names, deadlines, decisions, commitments, or next steps not supported by the reports', () => {
+    assert.match(src, /Do not invent facts, names, deadlines, decisions, commitments, or next steps that are not explicitly stated or clearly supported above/)
   })
 })
 

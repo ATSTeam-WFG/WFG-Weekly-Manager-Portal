@@ -1,0 +1,68 @@
+/* All classes here are exclusive to AtsTopicsEditForm.tsx — new,
+   page-agnostic names (ats-edit-*) rather than reuse of any existing
+   shared/protected class, so this can never affect Weekly Summary, Reports
+   & Analytics, or any other existing page. Shares
+   .executive-summary-edit-textarea/.executive-summary-block/.btn from
+   ExecutiveAnalysisCard.css so form controls look identical to the legacy
+   edit form, rather than introducing a second visual style for editing. */
+
+.ats-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ats-edit-topic {
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ats-edit-topic-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.ats-edit-topic-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.ats-edit-topic-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.ats-edit-icon-btn {
+  padding: 4px 10px;
+}
+
+.ats-edit-bullet-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ats-edit-bullet-row .executive-summary-edit-textarea {
+  flex: 1;
+}
+
+.ats-edit-add-bullet {
+  margin-top: 2px;
+}
+
+@media (max-width: 480px) {
+  .ats-edit-topic-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}

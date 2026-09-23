@@ -9,6 +9,14 @@ import { computeSourceFingerprint } from '../src/lib/executiveAnalysisFingerprin
 import { toISODate } from '../src/utils/week.js'
 import { authenticateAdmin } from './_lib/adminAuth.js'
 import { extractAiJson, assembleTextFromContentBlocks } from './_lib/executiveSummaryJson.js'
+// atsReport.ts is a pure, side-effect-free type file (no supabase/env
+// imports), so — unlike ReportingAnalysisSections below, which is
+// deliberately re-declared locally rather than imported from
+// src/lib/executiveSummaryService.ts (that module pulls in supabaseClient.ts
+// and import.meta.env, neither valid in this serverless runtime) — the
+// shared AtsReport/AtsTopicSection types can be imported here directly,
+// keeping exactly one definition of the ATS shape for the whole app.
+import type { AtsReport, AtsTopicSection } from '../src/lib/atsReport.js'
 
 // Minimal local request/response typing so this file has no dependency on
 // @vercel/node (its transitive deps carry known vulnerabilities, and this is
@@ -25,43 +33,55 @@ interface VercelResponse {
   json(body: unknown): void
 }
 
-interface ReportingAnalysisSections {
-  executiveSummary: string
-  keyPriorities: string
-  majorWins: string
-  challengesRisks: string
-  challengeProgress: string
-  opportunities: string
-  prioritiesGoingForward: string
-}
-
-// Mirrors ReportingAnalysisSections exactly (same 7 keys, same order) —
-// passed to Anthropic's native structured-output feature (output_config.
+// Phase 3 — ATS migration: every NEW generation (Generate/Regenerate) now
+// produces the dynamic AtsReport shape (openingParagraph + topics[])
+// instead of the old fixed 7-key ReportingAnalysisSections. Existing
+// legacy-shaped rows already persisted are untouched by this change — they
+// remain readable/editable/revertible exactly as before, via the widened
+// is_valid_executive_analysis_sections(jsonb) validator (see
+// supabase/migrations/20260923_executive_analysis_ats_shape.sql), which
+// accepts either shape at write time. Nothing in this file ever converts an
+// existing row from one shape to the other.
+//
+// Passed to Anthropic's native structured-output feature (output_config.
 // format below) so the API itself constrains the response to this exact
 // shape, rather than relying solely on the prose instruction in the prompt.
 // additionalProperties: false rejects any extra key the model might add.
-// This does NOT replace extractAiJson/the truncation check below — both
-// stay exactly as-is as a second, independent safety net.
-const EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA = {
+// bullets allows 1-5 items deliberately, not a fixed count: factual
+// grounding takes priority over reaching a target bullet count (see the
+// prompt below and the matching bounds in the SQL validator). topics itself
+// is bounded 1-8 — a backstop supporting the ~1-1.5 page content target,
+// never a fixed/hard-coded set of topic names (topics are always derived
+// from that period's actual manager reports). This does NOT replace
+// extractAiJson/the truncation check below — both stay exactly as-is as a
+// second, independent safety net.
+const ATS_REPORT_SCHEMA = {
   type: 'object',
   properties: {
-    executiveSummary: { type: 'string' },
-    keyPriorities: { type: 'string' },
-    majorWins: { type: 'string' },
-    challengesRisks: { type: 'string' },
-    challengeProgress: { type: 'string' },
-    opportunities: { type: 'string' },
-    prioritiesGoingForward: { type: 'string' },
+    openingParagraph: { type: 'string' },
+    topics: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 8,
+      items: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          statusSummary: { type: 'string' },
+          bullets: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 5,
+            items: { type: 'string' },
+          },
+          next: { type: 'string' },
+        },
+        required: ['title', 'statusSummary', 'bullets', 'next'],
+        additionalProperties: false,
+      },
+    },
   },
-  required: [
-    'executiveSummary',
-    'keyPriorities',
-    'majorWins',
-    'challengesRisks',
-    'challengeProgress',
-    'opportunities',
-    'prioritiesGoingForward',
-  ],
+  required: ['openingParagraph', 'topics'],
   additionalProperties: false,
 } as const
 
@@ -130,7 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return sendError(res, 500, 'SERVER_MISCONFIGURED', 'Server is missing required configuration.')
     }
 
-    let sections: ReportingAnalysisSections
+    let sections: AtsReport
     try {
       sections = await generateAnalysis(stats.entries, periodKey, range.rangeLabel, ANTHROPIC_API_KEY)
     } catch (err) {
@@ -180,7 +200,7 @@ async function generateAnalysis(
   periodKey: ReportPeriodKey,
   rangeLabel: string,
   apiKey: string,
-): Promise<ReportingAnalysisSections> {
+): Promise<AtsReport> {
   const anthropic = new Anthropic({ apiKey })
 
   const isMultiWeek = entries.some((entry) => entry.weeks.length > 1)
@@ -237,18 +257,22 @@ Below are the submitted reports from ${entries.length} manager(s), grouped by ma
 
 ${managerBlocks}
 
-Write a professional executive analysis using ONLY the information in the reports above. Follow these rules strictly:
-- Do not invent facts, names, deadlines, or risks that are not explicitly stated above.
+Write a concise, leadership-friendly written report using ONLY the information in the reports above, in the following structure:
+- An opening paragraph covering the most important movement this period — what changed, and the overall picture a leader needs going in.
+- A dynamic set of topics: identify the distinct initiatives, themes, risks, or decisions that genuinely came up across these reports this period. Never force a topic that isn't really there, and never reuse a fixed/generic set of topic names — derive every topic strictly from what these reports actually contain. The number of topics should reflect what the reports actually support, not a fixed count.
+- For each topic, provide: a short title; a 1-2 sentence status summary; a list of concise, meaningful progress/metric/win/risk/decision bullets grounded only in the reports above (aim for 3-5 when the source material genuinely supports that many distinct facts — but use fewer, even just 1 or 2, when fewer material facts are available; never invent or pad a bullet just to reach a count); and a "next" line naming the immediate priority, action, blocker, or decision for that topic, grounded in the reports.
+
+Follow these rules strictly:
+- Do not invent facts, names, deadlines, decisions, commitments, or next steps that are not explicitly stated or clearly supported above.
 - Do not invent or restate specific numeric statistics (how many managers submitted, missed, or the completion percentage) — those figures are reported separately from verified application data; focus only on the qualitative content of the reports.
 - Clearly distinguish your own inference from something a manager explicitly stated. If the evidence is insufficient to draw a conclusion, say the status is unclear rather than guessing.
-- Only describe a theme as shared across managers if multiple managers genuinely raised it; do not force connections that aren't there.
+- Only describe a topic as shared across managers if multiple managers genuinely raised it; do not force connections that aren't there.
 - Do not identify a manager by name when summarizing a general, organization-wide theme; but if a specific challenge, risk, commitment, or accomplishment belongs to one manager, keep that attribution clear.
-- If a section has little or nothing relevant to report, say so briefly rather than padding it.
+- Avoid repetition between topics and between bullets within a topic.
 - ${progressInstruction}
-- Keep the tone factual and concise, suitable for a leadership meeting.
+- Keep the tone factual and concise, suitable for a leadership meeting. Target a consolidated result of roughly 1-1.5 pages overall — say little or nothing for a topic that has little to report, rather than padding it.
 
-Respond with ONLY a valid JSON object (no markdown fences, no commentary) with exactly these keys, each a string (a few sentences, or short lines starting with "- " for lists):
-{"executiveSummary": "...", "keyPriorities": "...", "majorWins": "...", "challengesRisks": "...", "challengeProgress": "...", "opportunities": "...", "prioritiesGoingForward": "..."}`
+Respond with ONLY a valid JSON object (no markdown fences, no commentary) matching exactly this shape: {"openingParagraph": "...", "topics": [{"title": "...", "statusSummary": "...", "bullets": ["...", "..."], "next": "..."}]}`
 
   // 8192 (up from 4096, itself up from 2000): production logs confirmed
   // stop_reason=max_tokens on a real period, with the response containing a
@@ -265,18 +289,24 @@ Respond with ONLY a valid JSON object (no markdown fences, no commentary) with e
   // the full 8192 budget available for the actual JSON output.
   //
   // output_config.format: json_schema — Anthropic's native structured
-  // output, constraining the response to EXACTLY the 7
-  // ReportingAnalysisSections keys (see EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA
-  // above), each a required string, no additional properties. This is an
-  // added reliability layer, not a replacement for assembleTextFromContent
-  // Blocks/extractAiJson below — both stay exactly as they were, as a
-  // second, independent safety net against a truncated or malformed
-  // response either way.
+  // output, constraining the response to the ATS shape (see
+  // ATS_REPORT_SCHEMA above): openingParagraph plus a dynamic 1-8 element
+  // topics array, each topic a required title/statusSummary/bullets(1-5)/
+  // next, no additional properties. A dynamic-length array is fully
+  // expressible via minItems/maxItems, so this dynamic topic count is not a
+  // structural obstacle to staying a single structured-output call — kept
+  // single-call here deliberately (no two-pass architecture) unless real
+  // evidence later proves this schema-bounded call insufficient, the same
+  // escalation discipline already used twice for max_tokens itself. This is
+  // an added reliability layer, not a replacement for
+  // assembleTextFromContentBlocks/extractAiJson below — both stay exactly
+  // as they were, as a second, independent safety net against a truncated
+  // or malformed response either way.
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-5',
     max_tokens: 8192,
     thinking: { type: 'disabled' },
-    output_config: { format: { type: 'json_schema', schema: EXECUTIVE_ANALYSIS_SECTIONS_SCHEMA } },
+    output_config: { format: { type: 'json_schema', schema: ATS_REPORT_SCHEMA } },
     messages: [{ role: 'user', content: prompt }],
   })
 
@@ -331,13 +361,20 @@ Respond with ONLY a valid JSON object (no markdown fences, no commentary) with e
     throw new Error('Could not parse the AI response as JSON.')
   }
 
+  const rawTopics = Array.isArray(parsed.topics) ? (parsed.topics as unknown[]) : []
+  const topics: AtsTopicSection[] = rawTopics.map((rawTopic) => {
+    const t = (rawTopic ?? {}) as Record<string, unknown>
+    const rawBullets = Array.isArray(t.bullets) ? (t.bullets as unknown[]) : []
+    return {
+      title: String(t.title ?? ''),
+      statusSummary: String(t.statusSummary ?? ''),
+      bullets: rawBullets.map((b) => String(b ?? '')),
+      next: String(t.next ?? ''),
+    }
+  })
+
   return {
-    executiveSummary: String(parsed.executiveSummary ?? ''),
-    keyPriorities: String(parsed.keyPriorities ?? ''),
-    majorWins: String(parsed.majorWins ?? ''),
-    challengesRisks: String(parsed.challengesRisks ?? ''),
-    challengeProgress: String(parsed.challengeProgress ?? ''),
-    opportunities: String(parsed.opportunities ?? ''),
-    prioritiesGoingForward: String(parsed.prioritiesGoingForward ?? ''),
+    openingParagraph: String(parsed.openingParagraph ?? ''),
+    topics,
   }
 }

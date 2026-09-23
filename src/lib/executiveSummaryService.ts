@@ -1,6 +1,7 @@
 import type { ReportPeriodKey } from '../utils/reportPeriods'
 import { getValidAccessToken as getValidAccessTokenShared, SessionError } from './sessionService'
 import { supabase } from './supabaseClient'
+import type { AtsReport } from './atsReport'
 
 // One shared shape for AI-generated reporting analysis, used by both the
 // Weekly Summary page (period 'weekly') and Reports & Analytics (all six
@@ -32,7 +33,8 @@ export interface ReportingAnalysisResult {
 }
 
 // Shared section titles so Weekly Summary and Reports & Analytics render the
-// same AI output the same way.
+// same AI output the same way. Legacy (pre-ATS) analyses only — new
+// generations use the dynamic AtsReport shape below.
 export const REPORTING_ANALYSIS_SECTIONS: { key: keyof ReportingAnalysisSections; title: string }[] = [
   { key: 'executiveSummary', title: 'Executive Summary' },
   { key: 'keyPriorities', title: 'Key Priorities' },
@@ -42,6 +44,51 @@ export const REPORTING_ANALYSIS_SECTIONS: { key: keyof ReportingAnalysisSections
   { key: 'opportunities', title: 'Opportunities / Items Requiring Attention' },
   { key: 'prioritiesGoingForward', title: 'Priorities Going Forward' },
 ]
+
+// A persisted analysis's sections are one of two shapes: the original fixed
+// 7-key ReportingAnalysisSections (every analysis generated before this ATS
+// migration, kept exactly as before) or the new dynamic-topic AtsReport
+// (every analysis generated after it). The two are structurally disjoint —
+// legacy carries exactly the 7 named string keys above, ATS carries exactly
+// `openingParagraph` + `topics` — so a plain key check reliably tells them
+// apart with no ambiguity and no separate shape marker needed.
+export type ExecutiveAnalysisSections = ReportingAnalysisSections | AtsReport
+
+// A plain "does .topics exist" check would misclassify malformed persisted
+// data (e.g. {openingParagraph: "...", topics: []}, or a topic missing a
+// required field) as safely renderable/editable ATS content, when it isn't:
+// AtsReportView/AtsTopicsEditForm both assume every topic has a non-empty
+// string `title`/`statusSummary`/`next` and a non-empty array of string
+// `bullets` to .map() over. This checks exactly that much structure — no
+// more — before classifying something as ATS-shaped, so a return of `true`
+// here is a genuine guarantee the renderer/editor can safely assume, not
+// just a guess based on which top-level keys happen to be present. A
+// document that fails this check falls through to the legacy rendering
+// branch instead (see ExecutiveAnalysisCard.tsx), which reads it via plain
+// object-key lookups that return undefined rather than throwing — so
+// malformed persisted data can never crash either branch, only render as
+// unexpectedly blank, which should not occur in practice since every write
+// path is already gated by the matching SQL validator (see
+// supabase/migrations/20260923_executive_analysis_ats_shape.sql).
+export function isAtsShapedSections(sections: ExecutiveAnalysisSections): sections is AtsReport {
+  const candidate = sections as Partial<AtsReport> | null | undefined
+  return (
+    typeof candidate?.openingParagraph === 'string' &&
+    Array.isArray(candidate.topics) &&
+    candidate.topics.length > 0 &&
+    candidate.topics.every(
+      (topic) =>
+        typeof topic === 'object' &&
+        topic !== null &&
+        typeof topic.title === 'string' &&
+        typeof topic.statusSummary === 'string' &&
+        typeof topic.next === 'string' &&
+        Array.isArray(topic.bullets) &&
+        topic.bullets.length > 0 &&
+        topic.bullets.every((bullet) => typeof bullet === 'string'),
+    )
+  )
+}
 
 export type ExecutiveSummaryErrorCode =
   | 'UNAUTHORIZED'
@@ -66,8 +113,8 @@ export interface PersistedExecutiveAnalysis {
   periodStartDate: string
   periodEndDate: string
   periodLabel: string
-  generatedSections: ReportingAnalysisSections
-  sections: ReportingAnalysisSections
+  generatedSections: ExecutiveAnalysisSections
+  sections: ExecutiveAnalysisSections
   isEdited: boolean
   generatedAt: string
   generatedBy: string
@@ -82,8 +129,8 @@ interface PersistedExecutiveAnalysisRow {
   period_start_date: string
   period_end_date: string
   period_label: string
-  generated_sections: ReportingAnalysisSections
-  sections: ReportingAnalysisSections
+  generated_sections: ExecutiveAnalysisSections
+  sections: ExecutiveAnalysisSections
   is_edited: boolean
   generated_at: string
   generated_by: string
@@ -211,7 +258,7 @@ export async function fetchPersistedAnalysis(
 // save_executive_analysis_edit).
 export async function saveEditedAnalysis(
   analysisId: string,
-  sections: ReportingAnalysisSections,
+  sections: ExecutiveAnalysisSections,
 ): Promise<PersistedExecutiveAnalysis> {
   const { data, error } = await supabase.rpc('save_executive_analysis_edit', {
     p_analysis_id: analysisId,

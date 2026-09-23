@@ -45,11 +45,22 @@ describe('AtsReportView.tsx — heading', () => {
     assert.match(viewSrc, /<h1>WFG Weekly Leadership Update<\/h1>/)
   })
 
-  test('week-ending date and leader name are caller-supplied props, not hard-coded', () => {
-    assert.match(viewSrc, /interface AtsReportViewProps \{[\s\S]*?report: AtsReport[\s\S]*?weekEndingDate: string[\s\S]*?leaderName: string[\s\S]*?\}/)
-    assert.match(viewSrc, /export default function AtsReportView\(\{ report, weekEndingDate, leaderName \}: AtsReportViewProps\)/)
-    assert.match(viewSrc, /Week Ending \{formatWeekEndingDate\(weekEndingDate\)\}/)
-    assert.match(viewSrc, /Leader: \{leaderName\}/)
+  // Phase 3 correction: the component previously decided the wording itself
+  // ("Week Ending {date}") and required a leaderName, which produced
+  // semantically wrong output for non-weekly periods and forced a
+  // fabricated leader for Executive Analysis (which has none). It now takes
+  // a fully caller-formatted periodLabel string, rendered verbatim, and an
+  // OPTIONAL leaderName that only renders when genuinely supplied.
+  test('period label is a fully caller-formatted string, rendered verbatim — this component no longer decides "Week Ending" wording itself', () => {
+    assert.match(viewSrc, /interface AtsReportViewProps \{[\s\S]*?report: AtsReport[\s\S]*?periodLabel: string[\s\S]*?leaderName\?: string[\s\S]*?\}/)
+    assert.match(viewSrc, /export default function AtsReportView\(\{ report, periodLabel, leaderName \}: AtsReportViewProps\)/)
+    assert.match(viewSrc, /<p className="ats-report-week">\{periodLabel\}<\/p>/)
+    assert.equal(viewSrc.includes('formatWeekEndingDate'), false, 'date-wording decisions must live with the caller, not this shared component')
+    assert.equal(viewSrc.includes('Week Ending {'), false, 'must not hard-code "Week Ending" phrasing in the shared component')
+  })
+
+  test('leaderName is optional and the "Leader:" line renders only when a genuine name is supplied — never a fabricated placeholder', () => {
+    assert.match(viewSrc, /\{leaderName && <p className="ats-report-leader">Leader: \{leaderName\}<\/p>\}/)
   })
 })
 
@@ -123,22 +134,30 @@ describe('AtsReportView.css — new, scoped classes only', () => {
   })
 })
 
-describe('Phase 1 is additive only — the existing Executive Analysis fixed-7-section structure is untouched', () => {
-  test('ReportingAnalysisSections still has its exact original 7 keys', () => {
+describe('Phase 1\'s legacy fixed-7-section structure remains readable/editable — Phase 3 only adds ATS generation alongside it', () => {
+  test('ReportingAnalysisSections still has its exact original 7 keys — every already-persisted legacy analysis remains valid', () => {
     assert.match(
       executiveSummaryServiceSrc,
       /export interface ReportingAnalysisSections \{\s*\n\s*executiveSummary: string\s*\n\s*keyPriorities: string\s*\n\s*majorWins: string\s*\n\s*challengesRisks: string\s*\n\s*challengeProgress: string\s*\n\s*opportunities: string\s*\n\s*prioritiesGoingForward: string\s*\n\}/,
     )
   })
 
-  test('REPORTING_ANALYSIS_SECTIONS still drives ExecutiveAnalysisCard\'s rendering, unchanged', () => {
+  test('REPORTING_ANALYSIS_SECTIONS still drives ExecutiveAnalysisCard\'s legacy-shape rendering branch, unchanged', () => {
     assert.match(executiveSummaryServiceSrc, /export const REPORTING_ANALYSIS_SECTIONS: \{ key: keyof ReportingAnalysisSections; title: string \}\[\]/)
     assert.match(executiveAnalysisCardSrc, /REPORTING_ANALYSIS_SECTIONS\.map\(\(section\) => \(/)
   })
 
-  test('api/executive-summary.ts still generates the legacy fixed-7-section shape, not the new AtsReport shape', () => {
-    assert.match(executiveSummaryApiSrc, /interface ReportingAnalysisSections \{/)
-    assert.equal(executiveSummaryApiSrc.includes('AtsReport'), false)
-    assert.equal(executiveSummaryApiSrc.includes('openingParagraph'), false)
+  // Phase 3 (ATS Executive Analysis migration) intentionally switches NEW
+  // generation to the dynamic AtsReport shape — this is the one place
+  // Phase 1's own "additive only" guard was expected to eventually give way
+  // to a real generation-shape change. Existing legacy rows are untouched
+  // (see the widened is_valid_executive_analysis_sections validator and
+  // ExecutiveAnalysisCard's isAtsShapedSections branch), so this is not a
+  // regression of Phase 1 additivity, just its intended, previously-flagged
+  // limit.
+  test('api/executive-summary.ts now generates the dynamic AtsReport shape, reusing the shared type rather than a local duplicate', () => {
+    assert.match(executiveSummaryApiSrc, /import type \{ AtsReport, AtsTopicSection \} from '\.\.\/src\/lib\/atsReport\.js'/)
+    assert.match(executiveSummaryApiSrc, /async function generateAnalysis\([\s\S]*?\): Promise<AtsReport>/)
+    assert.equal(executiveSummaryApiSrc.includes('interface ReportingAnalysisSections'), false)
   })
 })

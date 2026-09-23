@@ -36,25 +36,22 @@ describe('generateAnalysis builds a version-aware per-week prompt block', () => 
     assert.match(src, /OKR Notes \/ Exceptions: \$\{s\.okrNotes/)
   })
 
-  test('the AI output schema (the 7 JSON keys) is completely unchanged', () => {
+  // Phase 3 (ATS Executive Analysis migration) intentionally changes the AI
+  // output shape from the fixed 7-key ReportingAnalysisSections to the
+  // dynamic AtsReport (openingParagraph + topics[]) — the version-aware
+  // per-week INPUT block above (legacy vs. V2 manager report content) is
+  // completely independent of this and stays unchanged, as the tests above
+  // confirm.
+  test('the AI output instruction now requests the ATS shape (openingParagraph + dynamic topics), not the old fixed 7-key JSON', () => {
     assert.match(
       src,
-      /\{"executiveSummary": "\.\.\.", "keyPriorities": "\.\.\.", "majorWins": "\.\.\.", "challengesRisks": "\.\.\.", "challengeProgress": "\.\.\.", "opportunities": "\.\.\.", "prioritiesGoingForward": "\.\.\."\}/,
+      /\{"openingParagraph": "\.\.\.", "topics": \[\{"title": "\.\.\.", "statusSummary": "\.\.\.", "bullets": \["\.\.\.", "\.\.\."\], "next": "\.\.\."\}\]\}/,
     )
+    assert.equal(src.includes('"executiveSummary": "..."'), false)
   })
 
-  test('the persisted analysis interface (ReportingAnalysisSections) still has exactly the same 7 fields', () => {
-    const interfaceMatch = src.match(/interface ReportingAnalysisSections \{([\s\S]*?)\}/)
-    assert.ok(interfaceMatch, 'could not locate ReportingAnalysisSections')
-    const fields = [...interfaceMatch[1].matchAll(/^\s*(\w+):/gm)].map((m) => m[1])
-    assert.deepEqual(fields, [
-      'executiveSummary',
-      'keyPriorities',
-      'majorWins',
-      'challengesRisks',
-      'challengeProgress',
-      'opportunities',
-      'prioritiesGoingForward',
-    ])
+  test('the persisted-analysis-shape interface generateAnalysis returns is now AtsReport, imported from the shared type file, not a locally re-declared ReportingAnalysisSections', () => {
+    assert.equal(/interface ReportingAnalysisSections \{/.test(src), false)
+    assert.match(src, /import type \{ AtsReport, AtsTopicSection \} from '\.\.\/src\/lib\/atsReport\.js'/)
   })
 })

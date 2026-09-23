@@ -217,17 +217,36 @@ describe('ExecutiveAnalysisCard.tsx — collapsed-by-default preview, display-on
     )
   })
 
-  test('the full-sections block renders every REPORTING_ANALYSIS_SECTIONS entry (all 7), not just the preview\'s one section', () => {
+  test('the full-content block\'s legacy branch renders every REPORTING_ANALYSIS_SECTIONS entry (all 7), not just the preview\'s one section', () => {
     const fullBlockMatch = cardSrc.match(/<div className=\{`executive-summary-full[\s\S]*?\n {12}<\/div>/)
-    assert.ok(fullBlockMatch, 'could not locate the full-sections block')
-    assert.match(fullBlockMatch[0], /\{REPORTING_ANALYSIS_SECTIONS\.map\(\(section\) => \(/)
+    assert.ok(fullBlockMatch, 'could not locate the full-content block')
+    assert.match(fullBlockMatch[0], /REPORTING_ANALYSIS_SECTIONS\.map\(\(section\) => \(/)
   })
 
-  test('edit mode still exposes the complete editable analysis (all 7 sections), independent of previewExpanded — the existing edit form is untouched', () => {
+  // Phase 3 (ATS Executive Analysis migration): the same full-content block
+  // now branches on isAtsShapedSections — an ATS-shaped analysis reuses the
+  // shared, unmodified, read-only AtsReportView instead of the legacy
+  // 7-section map, but it is still always in the DOM (so printing still
+  // never depends on the on-screen collapse state) and still lives inside
+  // the same executive-summary-full/-open classes, so no print.css change
+  // was needed for this branch either.
+  test('the full-content block\'s ATS branch reuses AtsReportView, still always in the DOM regardless of on-screen collapse state', () => {
+    const fullBlockMatch = cardSrc.match(/<div className=\{`executive-summary-full[\s\S]*?\n {12}<\/div>/)
+    assert.ok(fullBlockMatch, 'could not locate the full-content block')
+    assert.match(fullBlockMatch[0], /isAtsShapedSections\(analysis\.sections\) \? \(\s*\n\s*<AtsReportView/)
+  })
+
+  test('edit mode still exposes the complete editable legacy analysis (all 7 sections) on its branch, independent of previewExpanded — the existing edit form is untouched', () => {
     const editFormMatch = cardSrc.match(/\{mode === 'edit' && editedSections && \([\s\S]*?\n {10}\)\}/)
     assert.ok(editFormMatch, 'could not locate the edit form block')
-    assert.match(editFormMatch[0], /\{REPORTING_ANALYSIS_SECTIONS\.map\(\(section\) => \(/)
+    assert.match(editFormMatch[0], /REPORTING_ANALYSIS_SECTIONS\.map\(\(section\) => \(/)
     assert.equal(editFormMatch[0].includes('previewExpanded'), false, 'the edit form must never be gated by the preview/expand state')
+  })
+
+  test('edit mode\'s ATS branch reuses AtsTopicsEditForm, also independent of previewExpanded', () => {
+    const editFormMatch = cardSrc.match(/\{mode === 'edit' && editedSections && \([\s\S]*?\n {10}\)\}/)
+    assert.ok(editFormMatch, 'could not locate the edit form block')
+    assert.match(editFormMatch[0], /isAtsShapedSections\(editedSections\) \? \(\s*\n\s*<AtsTopicsEditForm/)
   })
 
   test('printing always shows the complete analysis regardless of on-screen collapse state: .executive-summary-full is forced visible under @media print unconditionally', () => {
