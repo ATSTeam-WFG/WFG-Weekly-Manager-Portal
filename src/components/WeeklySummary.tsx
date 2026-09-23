@@ -1,14 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import wfgLogo from '../assets/wfg-logo.png'
-import { fetchWeeklySummary, type WeeklySummaryData } from '../lib/adminService'
+import { fetchManagersForWeek, fetchWeeklySummary, type ManagerSummary, type WeeklySummaryData } from '../lib/adminService'
 import { supabase } from '../lib/supabaseClient'
-import ExecutiveAnalysisCard from './ExecutiveAnalysisCard'
-import ReportContentView from './ReportContentView'
+import ExecutiveAnalysisCard, { printExecutiveAnalysisOnly } from './ExecutiveAnalysisCard'
+import SubmittedManagerCard from './SubmittedManagerCard'
+import WeeklySummaryExportMenu from './WeeklySummaryExportMenu'
 import type { ReportingWeek } from '../utils/week'
 import { AI_EXECUTIVE_SUMMARY_ENABLED } from '../config/featureFlags'
 import './AdminDashboard.css'
 import './SubmittedReport.css'
 import './WeeklySummary.css'
+
+// The existing "Complete Weekly Summary" print action — unchanged behavior,
+// just given the same module-scope-function shape ReportsAnalytics.tsx uses
+// for its own print actions, now that it's one of two choices in a menu
+// rather than the page's only print button.
+function printCompleteWeeklySummary(): void {
+  window.print()
+}
 
 interface WeeklySummaryProps {
   week: ReportingWeek
@@ -18,25 +27,41 @@ interface WeeklySummaryProps {
 
 export default function WeeklySummary({ week, weekOffset, onBack }: WeeklySummaryProps) {
   const [data, setData] = useState<WeeklySummaryData | null>(null)
+  // Fetched purely to read each manager's own submitted_at — the exact same
+  // call (and the exact same fetchManagersForWeek/fetchWeeklySummary pairing)
+  // ReportsAnalytics.tsx already makes for its own weekly mode. adminService.ts
+  // itself is untouched; WeeklySummaryEntry still has no timestamp field.
+  const [managers, setManagers] = useState<ManagerSummary[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandedManagerId, setExpandedManagerId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
     setLoading(true)
+    setExpandedManagerId(null)
 
-    fetchWeeklySummary(supabase, week.weekStartDate).then((result) => {
-      if (!active) return
-      setData(result)
-      setLoading(false)
-    })
+    Promise.all([fetchWeeklySummary(supabase, week.weekStartDate), fetchManagersForWeek(supabase, week.weekStartDate)]).then(
+      ([summaryResult, managersResult]) => {
+        if (!active) return
+        setData(summaryResult)
+        setManagers(managersResult)
+        setLoading(false)
+      },
+    )
 
     return () => {
       active = false
     }
   }, [week.weekStartDate])
 
-  const handlePrint = () => {
-    window.print()
+  // Not Started is derived, never fetched separately or hardcoded — the
+  // same totalManagers/submittedCount fetchWeeklySummary already returns.
+  const notStartedCount = data ? data.totalManagers - data.submittedCount : 0
+
+  const submittedAtByManagerId = useMemo(() => new Map(managers.map((m) => [m.id, m.submittedAt])), [managers])
+
+  const handleToggleManager = (managerId: string) => {
+    setExpandedManagerId((prev) => (prev === managerId ? null : managerId))
   }
 
   return (
@@ -58,55 +83,106 @@ export default function WeeklySummary({ week, weekOffset, onBack }: WeeklySummar
           <h1>Weekly Summary</h1>
           <p className="weekly-summary-week">Week of {week.label}</p>
         </div>
-        <button type="button" className="btn btn-secondary no-print" onClick={handlePrint}>
-          Print / Export PDF
-        </button>
+        <WeeklySummaryExportMenu
+          onCompleteWeeklySummary={printCompleteWeeklySummary}
+          onExecutiveAnalysisOnly={printExecutiveAnalysisOnly}
+        />
       </div>
 
       {loading ? (
         <div className="admin-loading">Loading summary…</div>
       ) : data ? (
         <>
-          <div className="weekly-summary-stats">
-            <div className="admin-stat-card">
-              <span className="admin-stat-value">{data.totalManagers}</span>
-              <span className="admin-stat-label">Total Managers</span>
+          {/* Four KPI cards, visually consistent with Reports & Analytics'
+              own .ra-kpi-row/.ra-kpi-card — but under new, Weekly-Summary-
+              scoped class names (ws-kpi-*) rather than reusing .admin-stat-card
+              (still relied on, unmodified, by AdminDashboard.tsx) or
+              .ra-kpi-card (Reports & Analytics only). */}
+          <div className="ws-kpi-row">
+            <div className="ws-kpi-card ws-kpi-card-total">
+              <span className="ws-kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="9" cy="8" r="3" />
+                  <path d="M4 20c0-3 2.5-5 5-5s5 2 5 5" />
+                  <circle cx="17" cy="9" r="2.5" />
+                  <path d="M15.5 20c0-2.5 1-4 3-4.5" />
+                </svg>
+              </span>
+              <div className="ws-kpi-text">
+                <span className="ws-kpi-value">{data.totalManagers}</span>
+                <span className="ws-kpi-label">Total Managers</span>
+              </div>
             </div>
-            <div className="admin-stat-card">
-              <span className="admin-stat-value admin-stat-submitted">{data.submittedCount}</span>
-              <span className="admin-stat-label">Submitted</span>
+            <div className="ws-kpi-card ws-kpi-card-submitted">
+              <span className="ws-kpi-icon" aria-hidden="true">
+                &#10003;
+              </span>
+              <div className="ws-kpi-text">
+                <span className="ws-kpi-value">{data.submittedCount}</span>
+                <span className="ws-kpi-label">Submitted</span>
+              </div>
             </div>
-            <div className="admin-stat-card">
-              <span className="admin-stat-value">{data.completionPct}%</span>
-              <span className="admin-stat-label">Completion</span>
+            <div className="ws-kpi-card ws-kpi-card-completion">
+              <div className="ws-kpi-text">
+                <span className="ws-kpi-value">{data.completionPct}%</span>
+                <span className="ws-kpi-label">Completion</span>
+              </div>
+            </div>
+            <div className="ws-kpi-card ws-kpi-card-not-started">
+              <span className="ws-kpi-icon" aria-hidden="true">
+                &#9675;
+              </span>
+              <div className="ws-kpi-text">
+                <span className="ws-kpi-value">{notStartedCount}</span>
+                <span className="ws-kpi-label">Not Started</span>
+              </div>
             </div>
           </div>
 
           {AI_EXECUTIVE_SUMMARY_ENABLED && (
+            // showPrintButton=false hides this card's own standalone "Print
+            // Executive Analysis" button — the unified Export/Print menu
+            // above already offers the identical action via the same
+            // exported printExecutiveAnalysisOnly function (never a second
+            // print implementation). The prop already existed for exactly
+            // this purpose (see Reports & Analytics' own use of it);
+            // ExecutiveAnalysisCard.tsx/.css themselves are untouched.
             <ExecutiveAnalysisCard
               periodKey="weekly"
               offset={weekOffset}
               weekStartDates={[week.weekStartDate]}
               periodStartDate={week.weekStartDate}
+              showPrintButton={false}
             />
           )}
+
+          <div className="ws-manager-reports-header">
+            <p className="ws-eyebrow">Submitted Manager Reports</p>
+            <span className="ws-manager-reports-count">
+              ({data.submittedCount} of {data.totalManagers})
+            </span>
+          </div>
 
           {data.entries.length === 0 ? (
             <div className="weekly-summary-empty">
               No managers have submitted a report for this week yet.
             </div>
           ) : (
-            // Grouped per manager (not per section) — a legacy submission has
-            // four sections and a V2 submission has five different ones, so
-            // there is no longer one shared section list to group by across
-            // every manager. ReportContentView renders each manager's own
-            // content in whichever format they actually submitted.
-            <div className="weekly-summary-manager-list">
+            // Only actual entries from fetchWeeklySummary (already filtered to
+            // status = 'submitted' — see adminService.ts, untouched) are ever
+            // rendered here. No Not Started/draft placeholder rows are
+            // invented; a manager who hasn't submitted simply never appears.
+            <div className="ws-manager-list">
               {data.entries.map((entry) => (
-                <div className="weekly-summary-manager-block" key={entry.managerId}>
-                  <h2 className="weekly-summary-entry-name">{entry.managerName}</h2>
-                  <ReportContentView content={entry.content} />
-                </div>
+                <SubmittedManagerCard
+                  key={entry.managerId}
+                  managerId={entry.managerId}
+                  managerName={entry.managerName}
+                  submittedAt={submittedAtByManagerId.get(entry.managerId) ?? null}
+                  content={entry.content}
+                  isExpanded={expandedManagerId === entry.managerId}
+                  onToggle={() => handleToggleManager(entry.managerId)}
+                />
               ))}
             </div>
           )}

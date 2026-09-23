@@ -1,0 +1,161 @@
+/* Weekly-Summary-only — a component-specific class namespace (ws-manager-*)
+   so nothing here can ever collide with or override Reports & Analytics'
+   own classes (.period-manager-block, .weekly-summary-manager-block, etc.),
+   even though this file is imported only by WeeklySummary.tsx. */
+.ws-manager-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.ws-manager-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  font-family: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.ws-manager-card-header:hover {
+  background: var(--warm-cream);
+}
+
+.ws-manager-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.ws-manager-card-date {
+  font-size: 12px;
+  color: var(--muted-gray);
+}
+
+.ws-manager-card-badge {
+  margin-left: auto;
+  margin-bottom: 0;
+}
+
+.ws-manager-card-chevron {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted-gray);
+  transition: transform 0.15s ease;
+}
+
+.ws-manager-card-chevron-open {
+  transform: rotate(180deg);
+}
+
+.ws-manager-card-body {
+  display: none;
+}
+
+.ws-manager-card-body-open {
+  display: block;
+}
+
+.ws-manager-card-body-content {
+  padding: 4px 16px 18px;
+  border-top: 1px solid var(--soft-sand);
+  padding-top: 14px;
+}
+
+/* Balanced 2-column presentation on desktop for the five report sections —
+   ReportContentView itself is untouched; this only changes how its output
+   (a flat list of .report-section siblings, defined in the shared,
+   untouched SubmittedReport.css) is arranged inside this one wrapper. */
+@media (min-width: 641px) {
+  .ws-manager-card-body-content {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px 24px;
+  }
+
+  /* Five sections in two columns leaves one orphan — OKR Notes / Exceptions
+     (always last) spans the full width instead of sitting alone. */
+  .ws-manager-card-body-content > .report-section:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .ws-manager-card-header {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .ws-manager-card-badge {
+    margin-left: 0;
+    order: 3;
+  }
+
+  .ws-manager-card-chevron {
+    margin-left: auto;
+  }
+}
+
+@media print {
+  .ws-manager-card {
+    border-color: var(--soft-sand);
+  }
+
+  .ws-manager-card-header {
+    cursor: default;
+  }
+
+  .ws-manager-card-header:hover {
+    background: none;
+  }
+
+  /* Always shown in print regardless of on-screen collapse state — the
+     same "force visible under print" technique already proven by
+     ExecutiveAnalysisCard's .executive-summary-full. No blank manager
+     pages: the card itself does not force break-inside:avoid (a long
+     report is allowed to flow/split across the page break), only each
+     individual, size-bounded section below does. */
+  .ws-manager-card-body {
+    display: block !important;
+  }
+
+  .ws-manager-card-body-content {
+    display: block;
+  }
+
+  .ws-manager-card-body-content .report-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* The actual fragmentation boundary is between this header (a block-level
+     button) and .ws-manager-card-body that follows it — NOT between the
+     inline name/date/badge/chevron spans inside the header, which all sit
+     on one line with no break candidate between them. Keeping this on the
+     header itself (rather than on .ws-manager-card-name) is what actually
+     prevents the header from being stranded alone at the bottom of a page:
+     if it can't fit together with at least the start of the first report
+     section, the whole header moves down with it, instead of only the
+     section being pushed while the header is left behind. */
+  .ws-manager-card-header {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Paired with the header's break-after:avoid above — a break-avoid hint on
+     only one side of a boundary is not always honored on its own, so the
+     first report section also declines a break immediately before it. Only
+     the FIRST section gets this (via :first-child); every later section is
+     still free to start a fresh page on its own, so this never forces every
+     manager (or every section) onto a new page, and never keeps the whole
+     card/body together as one unbreakable block. */
+  .ws-manager-card-body-content > .report-section:first-child {
+    break-before: avoid;
+    page-break-before: avoid;
+  }
+}

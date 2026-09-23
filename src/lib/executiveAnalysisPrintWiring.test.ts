@@ -32,7 +32,7 @@ describe('The dedicated Print Executive Analysis action exists only when appropr
     assert.match(cardSrc, /\{analysis && showPrintButton && \(\s*\n\s*<button type="button" className="btn btn-secondary" onClick=\{printExecutiveAnalysisOnly\}/)
   })
 
-  test('showPrintButton defaults to true — any existing caller that omits the prop (WeeklySummary.tsx) keeps this button exactly as before', () => {
+  test('showPrintButton defaults to true — any future caller that omits the prop keeps this button shown by default', () => {
     assert.match(cardSrc, /showPrintButton = true,/)
   })
 
@@ -40,10 +40,10 @@ describe('The dedicated Print Executive Analysis action exists only when appropr
     assert.match(reportsAnalyticsSrc, /<ExecutiveAnalysisCard[\s\S]*?showPrintButton=\{false\}[\s\S]*?\/>/)
   })
 
-  test('WeeklySummary.tsx does not pass showPrintButton at all — relies on the default (true), preserving its own standalone button unchanged', () => {
+  test('WeeklySummary.tsx also passes showPrintButton={false} — its own unified Export/Print menu (WeeklySummaryExportMenu, added in the Weekly Summary refinement) offers the identical "Executive Analysis only" action, so the standalone button here would just be a duplicate control', () => {
     const usageMatch = weeklySummarySrc.match(/<ExecutiveAnalysisCard[\s\S]*?\/>/)
     assert.ok(usageMatch, 'could not locate <ExecutiveAnalysisCard> usage in WeeklySummary.tsx')
-    assert.equal(usageMatch[0].includes('showPrintButton'), false)
+    assert.match(usageMatch[0], /showPrintButton=\{false\}/)
   })
 
   test('it is a distinct action from Edit/Regenerate/Revert — its own button, own handler, own label', () => {
@@ -137,30 +137,31 @@ describe('The print CSS isolation applies only during Executive-Analysis-only pr
   })
 })
 
-describe('Existing page-level Print / Export PDF handlers remain unchanged', () => {
+describe('Existing page-level print handlers were consolidated into per-page Export/Print menus, not reimplemented', () => {
   // ReportsAnalytics.tsx's old bare "Print / Export PDF" button was
-  // replaced by the unified ExportPrintMenu (see reportsAnalyticsPrintWiring.test.ts)
+  // replaced by the unified ExportPrintMenu (see reportsAnalyticsRefinementWiring.test.ts)
   // — its "Complete Leadership Report" choice is the direct equivalent (a
   // bare window.print(), no scoping class), covered there. WeeklySummary.tsx
-  // is unaffected by that redesign (it's scoped to Reports & Analytics only)
-  // and keeps its own unchanged button/handler, verified below.
-  test('WeeklySummary.tsx handlePrint is still a bare window.print() — no class toggle added', () => {
-    const fnMatch = weeklySummarySrc.match(/const handlePrint = \(\) => \{[\s\S]*?\n  \}/)
-    assert.ok(fnMatch, 'could not locate handlePrint in WeeklySummary.tsx')
-    assert.equal(fnMatch[0].replace(/\s+/g, ' ').trim(), 'const handlePrint = () => { window.print() }')
+  // later underwent the same consolidation into its own, separate
+  // WeeklySummaryExportMenu (see weeklySummaryRefinementWiring.test.ts) —
+  // both pages still end up calling a bare window.print() for their
+  // "complete" choice, just no longer via a single standalone button.
+  test('WeeklySummary.tsx printCompleteWeeklySummary is still a bare window.print() — no class toggle added', () => {
+    const fnMatch = weeklySummarySrc.match(/function printCompleteWeeklySummary\(\): void \{[\s\S]*?\n\}/)
+    assert.ok(fnMatch, 'could not locate printCompleteWeeklySummary in WeeklySummary.tsx')
+    assert.equal(fnMatch[0].replace(/\s+/g, ' ').trim(), 'function printCompleteWeeklySummary(): void { window.print() }')
   })
 
-  test('WeeklySummary.tsx never references the new print-executive-analysis-only class', () => {
-    assert.equal(weeklySummarySrc.includes('print-executive-analysis-only'), false)
+  test('WeeklySummary.tsx never defines its own print-executive-analysis-only class toggle — it reuses the imported printExecutiveAnalysisOnly function instead', () => {
+    assert.equal(/classList\.add\(.*print-executive-analysis-only/.test(weeklySummarySrc), false)
+    assert.match(weeklySummarySrc, /import ExecutiveAnalysisCard, \{ printExecutiveAnalysisOnly \} from '\.\/ExecutiveAnalysisCard'/)
   })
 
-  test('the WeeklySummary.tsx "Print / Export PDF" button is still wired to its own unchanged handlePrint', () => {
-    assert.match(weeklySummarySrc, /onClick=\{handlePrint\}>\s*\n\s*Print \/ Export PDF/)
-  })
-
-  test('ReportsAnalytics.tsx no longer has its own standalone handlePrint — printing now goes through ExportPrintMenu', () => {
+  test('neither page has its own standalone handlePrint anymore — printing on both goes through their respective Export/Print menu', () => {
     assert.equal(/const handlePrint = \(\) => \{/.test(reportsAnalyticsSrc), false)
+    assert.equal(/const handlePrint = \(\) => \{/.test(weeklySummarySrc), false)
     assert.match(reportsAnalyticsSrc, /<ExportPrintMenu/)
+    assert.match(weeklySummarySrc, /<WeeklySummaryExportMenu/)
   })
 })
 
