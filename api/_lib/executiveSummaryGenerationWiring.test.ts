@@ -182,8 +182,8 @@ describe('executive-summary.ts — structured output reliability layer (Phase 2B
 })
 
 describe('executive-summary.ts — ATS prompt guidance (Phase 3 correction: never force a bullet count)', () => {
-  test('the prompt instructs 3-5 bullets only when supported, and explicitly allows fewer rather than inventing filler', () => {
-    assert.match(src, /aim for 3-5 when the source material genuinely supports that many distinct facts — but use fewer, even just 1 or 2, when fewer material facts are available; never invent or pad a bullet just to reach a count/)
+  test('the prompt instructs normally 2-3 bullets, a 4th only when materially necessary, and never adding a bullet just to reach a count', () => {
+    assert.match(src, /normally 2-3 bullets; a 4th is allowed only when materially necessary; never add a bullet just to reach a count/)
   })
 
   test('the prompt never instructs a fixed/hard-coded set of topic names — topics must be derived from the reports', () => {
@@ -196,57 +196,105 @@ describe('executive-summary.ts — ATS prompt guidance (Phase 3 correction: neve
   })
 })
 
-// Weekly Summary print-scope + ATS length requirement: Weekly Summary
-// reuses this exact shared generation (see weeklySummaryAtsFormatWiring.
-// test.ts) with no second AI pipeline, so its own 1-1.5-page requirement is
-// satisfied here, in the one shared prompt — never by a second call, a
-// second schema, or client-side truncation of the generated topics/bullets.
-describe('executive-summary.ts — ATS length/synthesis requirement (targets 1-1.5 printed pages via prioritization, never via truncation or reduced content)', () => {
-  test('the prompt states a firm 1-1.5 page length budget and explicitly frames it as a prioritization/synthesis requirement, not a formatting one', () => {
-    assert.match(src, /This report has a firm length budget: it must read at roughly 1-1\.5 printed pages, no more\./)
-    assert.match(src, /This is a prioritization and synthesis requirement, not a formatting one — decide what materially matters and leave out the rest, rather than shrinking, compressing, or cutting off anything you do include\./)
-  })
-
-  test('the prompt gives an explicit priority order: risks/operational issues/blockers (incl. revenue/service/claims/customer experience) first, then leadership-visibility decisions, then wins/metrics/opportunities, then supported next actions', () => {
+// Weekly Summary print-scope + ATS content-budget requirement: Weekly
+// Summary reuses this exact shared generation (see
+// weeklySummaryAtsFormatWiring.test.ts) with no second AI pipeline, so its
+// own printed-page requirement is satisfied here, in the one shared prompt
+// — never by a second call, a second schema, or client-side truncation.
+// Production QA confirmed the earlier "1-1.5 pages / typically no more than
+// 5-6 topics" wording still produced ~4-page reports. Root-cause
+// investigation (read-only, no code change) found: (a) no technical ceiling
+// exists anywhere — Anthropic's structured output rejects maxItems/maxLength
+// entirely, so length was governed only by soft prompt wording; (b) the
+// stated "5-6 topics" ceiling itself mathematically exceeded what the
+// existing card-based ATS CSS can fit into 1-1.5 pages (measured: ~2.5-2.8in
+// per topic against a ~13.8in total budget ⇒ only ~4-5 topics realistically
+// fit). This tightened, word-budgeted version replaces the page-based
+// guidance with concrete numeric targets reasoned from that same typography,
+// without touching the schema, CSS, persistence, or adding any truncation.
+describe('executive-summary.ts — ATS content-budget requirement (350-450 total words, 3-4 topics, via prioritization — never via truncation, schema caps, or reduced typography)', () => {
+  test('the prompt states a firm ~350-450 total-word budget covering the opening paragraph plus every topic\'s summary/bullets/next combined, framed as prioritization/synthesis, not formatting', () => {
     assert.match(
       src,
-      /Prioritize, in this rough order of importance: material risks, operational issues, or blockers \(especially anything that could affect revenue, service, claims, or customer experience\); decisions or issues that genuinely need leadership visibility; significant wins, meaningful metrics, and real business opportunities; and immediate next actions the reports actually support\./,
+      /The complete report — the opening paragraph plus every topic's status summary, bullets, and "next" line, combined — has a firm total budget of approximately 350-450 words\./,
+    )
+    assert.match(src, /This exists to support an approved 1-1\.5 printed-page maximum using the existing print typography/)
+    assert.match(src, /it is a prioritization and synthesis requirement, not a formatting one — decide what materially matters and leave out the rest, rather than shrinking, compressing, or cutting off anything you do include\./)
+  })
+
+  test('the prompt targets 3-4 consolidated topics in a normal week, with a 5th permitted only for an additional materially significant issue that cannot responsibly be merged', () => {
+    assert.match(
+      src,
+      /Generate 3-4 consolidated leadership topics in a normal week; a 5th topic is permitted only when there is an additional materially significant issue that cannot responsibly be merged into the other topics without losing important leadership context\./,
     )
   })
 
-  test('the prompt caps topic count guidance at "typically no more than 5-6" without forcing a fixed count, and instructs combining related manager updates under one shared topic', () => {
-    assert.match(src, /typically no more than 5-6/)
+  test('the prompt forbids creating a topic merely because updates came from different managers, and instructs merging related updates into one broader theme instead', () => {
     assert.match(
       src,
-      /Combine related updates from multiple managers under one shared topic whenever they are genuinely the same initiative or theme, rather than repeating it separately per manager\./,
+      /Merge related updates from multiple managers into one broader leadership theme whenever they are genuinely the same initiative or theme — never create a separate topic merely because the updates came from different managers\./,
     )
   })
 
-  test('the prompt instructs omitting routine/background detail and avoiding transaction-level detail/excessive names unless strategically important', () => {
+  test('the opening paragraph is targeted at approximately 2 concise sentences summarizing the overall picture, not repeating the topic details that follow', () => {
     assert.match(
       src,
-      /Omit routine, background, or business-as-usual details that would not materially change a leader's understanding of the period, even if a manager reported them\./,
-    )
-    assert.match(
-      src,
-      /Avoid transaction-level detail and naming individual managers, customers, or files, except where a specific name is strategically important to a decision, risk, or accomplishment worth attributing\./,
+      /An opening paragraph of approximately 2 concise sentences summarizing the week's overall business picture — the big-picture takeaway a leader needs going in, not a preview or repetition of the topic details that follow\./,
     )
   })
 
-  test('the prompt instructs consolidating when material exceeds the budget, while explicitly forbidding invention and forbidding omission of materially significant items just to shorten the report', () => {
+  test('each topic\'s status summary is normally 1 sentence (at most 2 when genuinely necessary), bullets are normally 2-3 (a 4th only when materially necessary), and "next" is normally one concise sentence', () => {
+    assert.match(src, /a concise status summary \(normally 1 sentence, at most 2 when genuinely necessary\)/)
     assert.match(
       src,
-      /If the reports collectively contain more material than reasonably fits this budget, consolidate closely related points together and keep only the items with the greatest leadership\/business significance — never invent, and never omit something materially significant merely to shorten the report\./,
+      /normally 2-3 bullets; a 4th is allowed only when materially necessary; never add a bullet just to reach a count/,
+    )
+    assert.match(src, /a "next" line — normally one concise sentence — naming the immediate priority, action, blocker, or decision for that topic, grounded in the reports\./)
+  })
+
+  test('bullets are described as communicating results, metrics, meaningful changes, risks, opportunities, decisions, or other leadership-relevant issues', () => {
+    assert.match(
+      src,
+      /a short list of selective, meaningful bullets communicating results, metrics, meaningful changes, risks, opportunities, decisions, or other leadership-relevant issues/,
     )
   })
 
-  test('the topics JSON schema has no maxItems (confirmed unsupported by Anthropic structured output) — the page-length budget is enforced entirely through prompt guidance, never a schema-level cap or client-side truncation', () => {
+  test('the prompt gives an explicit 6-item priority order matching the approved ranking', () => {
+    assert.match(
+      src,
+      /Prioritize, in this order: \(1\) material risks, blockers, or operational issues; \(2\) matters affecting revenue, service, claims, customers\/agents, or business performance; \(3\) decisions or issues requiring leadership visibility; \(4\) significant wins and meaningful metrics\/results; \(5\) meaningful business opportunities; \(6\) immediate next actions the reports actually support\./,
+    )
+  })
+
+  test('the prompt instructs consolidating/omitting routine detail, information repeated across managers, minor transaction-level updates, and unnecessary names', () => {
+    assert.match(
+      src,
+      /Consolidate or omit routine\/background detail, information repeated across managers, minor transaction-level updates, and unnecessary names — none of these materially change a leader's understanding of the period\./,
+    )
+  })
+
+  test('the prompt explicitly forbids omitting a materially significant issue merely to meet the word budget, and frames the budget as a normal-week target rather than a hard ceiling that excuses dropping real content', () => {
+    assert.match(
+      src,
+      /Do not omit a materially significant issue merely to meet this word budget\. The budget describes a normal week, not a hard ceiling that excuses dropping real leadership-relevant content — if an unusually significant week genuinely requires more space to cover everything that matters, preserve that important information rather than fabricating, clipping, or hiding it\./,
+    )
+  })
+
+  test('the topics JSON schema has no maxItems/maxLength (confirmed unsupported by Anthropic structured output) — the content budget is enforced entirely through prompt guidance, never a schema-level cap or client-side truncation', () => {
     const schemaMatch = src.match(/const ATS_REPORT_SCHEMA = \{[\s\S]*?\n\} as const/)
     assert.ok(schemaMatch)
     assert.equal(schemaMatch[0].includes('maxItems'), false)
+    assert.equal(schemaMatch[0].includes('maxLength'), false)
     const generateMatch = src.match(/async function generateAnalysis\([\s\S]*?\n\}/)
     assert.ok(generateMatch)
-    assert.equal(/\.slice\(0,|\.slice\(-|topics\.length = /.test(generateMatch[0]), false, 'must never client-side truncate the generated topics/bullets')
+    assert.equal(/\.slice\(0,|\.slice\(-|topics\.length = |bullets\.length = /.test(generateMatch[0]), false, 'must never client-side truncate the generated topics/bullets')
+  })
+
+  test('max_tokens, thinking, and structured output are all unchanged by this content-budget wording change', () => {
+    assert.match(src, /max_tokens: 8192/)
+    assert.match(src, /thinking: \{ type: 'disabled' \}/)
+    assert.match(src, /output_config: \{ format: \{ type: 'json_schema', schema: ATS_REPORT_SCHEMA \} \}/)
+    assert.equal((src.match(/anthropic\.messages\.create\(/g) ?? []).length, 1)
   })
 
   test('progressInstruction no longer references the legacy "challengeProgress" field name (which does not exist in the ATS shape) — it speaks generically about a topic carrying over between weeks instead', () => {
@@ -259,16 +307,7 @@ describe('executive-summary.ts — ATS length/synthesis requirement (targets 1-1
     )
   })
 
-  test('every topic still requires a 1-2 sentence status summary, selective 3-5-when-supported bullets, and a grounded Next line — the per-topic structure requirements are unchanged by the length/synthesis strengthening', () => {
-    assert.match(src, /a 1-2 sentence status summary/)
-    assert.match(
-      src,
-      /aim for 3-5 when the source material genuinely supports that many distinct facts — but use fewer, even just 1 or 2, when fewer material facts are available; never invent or pad a bullet just to reach a count/,
-    )
-    assert.match(src, /a "next" line naming the immediate priority, action, blocker, or decision for that topic, grounded in the reports/)
-  })
-
-  test('the never-invent rule explicitly names numbers, trends, and blockers (not just the broader "facts") — precision matters for a safety-critical anti-fabrication instruction', () => {
+  test('the never-invent rule explicitly names facts, numbers, trends, names, deadlines, decisions, commitments, blockers, and next steps', () => {
     assert.match(src, /Do not invent facts, numbers, trends, names, deadlines, decisions, commitments, blockers, or next steps that are not explicitly stated or clearly supported above\./)
   })
 })
