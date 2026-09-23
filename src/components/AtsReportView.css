@@ -92,3 +92,92 @@
     padding: 14px 16px;
   }
 }
+
+/* Print-only compact "leadership memo" layout. Production QA found the
+   on-screen card treatment (rounded corners, generous 18-22px padding, a
+   full border plus a terracotta accent border, 16px inter-topic gaps)
+   added roughly 0.4-0.5in of pure decorative overhead per topic once
+   printed — on top of the 350-450-word ATS generation budget, this still
+   pushed a real report well past the approved 1-1.5 printed-page target.
+   Font sizes are DELIBERATELY left unchanged below except for the two
+   headings (report title, topic title): the existing 13-15px body/bullet/
+   next sizes already read as roughly 10-11pt in print, which already meets
+   the readability target, so the space savings here come entirely from
+   removing card decoration and tightening spacing — never from shrinking
+   body text, and never by hiding or clipping any generated content.
+   Scoped entirely to @media print: the on-screen .ats-report card design
+   (used identically by Weekly Summary and Reports & Analytics, wherever
+   AtsReportView renders) is completely unchanged — verified by every
+   selector above this block staying exactly as it was. */
+@media print {
+  .ats-report-heading {
+    margin: 0 0 10px;
+  }
+
+  .ats-report-heading h1 {
+    font-size: 16px;
+    margin: 0 0 2px;
+  }
+
+  .ats-report-opening {
+    margin: 0 0 10px;
+    padding-bottom: 8px;
+  }
+
+  .ats-report-topics {
+    gap: 0;
+  }
+
+  /* No card: no background, no border, no rounded corners, minimal
+     padding. A single subtle top border between topics — never above the
+     first one — replaces the card outline as the only visual separator, a
+     professional memo divider rather than a decorative box. */
+  .ats-topic-section {
+    background: none;
+    border: none;
+    border-left: none;
+    border-radius: 0;
+    padding: 8px 0;
+    border-top: 1px solid var(--soft-sand);
+  }
+
+  .ats-report-topics > .ats-topic-section:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .ats-topic-title {
+    font-size: 13px;
+    margin: 0 0 3px;
+    /* Keeps the heading attached to the line that follows it rather than
+       stranded alone at the bottom of a page — paired with
+       .ats-topic-status's break-before below, since a single one-sided
+       page-break hint is not reliably honored on its own (the same
+       established pairing convention used for
+       .ws-manager-card-header/.report-section:first-child). This only
+       binds the title to its very next line, not the whole topic, so
+       natural page flow through the rest of a topic's bullets is
+       unaffected — no break-inside:avoid is added anywhere here. */
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .ats-topic-status {
+    margin: 0 0 4px;
+    break-before: avoid;
+    page-break-before: avoid;
+  }
+
+  .ats-topic-bullets {
+    margin: 0 0 4px;
+    padding-left: 16px;
+  }
+
+  .ats-topic-bullets li {
+    margin-bottom: 1px;
+  }
+
+  .ats-topic-next {
+    padding-top: 4px;
+  }
+}
