@@ -1,0 +1,94 @@
+/* All classes here are exclusive to AtsReportView.tsx — new, page-agnostic
+   names (ats-*) rather than reuse of any existing shared/protected class,
+   so this can never affect Weekly Summary, Reports & Analytics, Executive
+   Analysis' current rendering, the Manager Report Form, or any other
+   existing page. Fluid sizing only (no fixed widths) so this renders
+   correctly both full-width and inside one half of a side-by-side layout. */
+
+.ats-report {
+  color: var(--espresso);
+}
+
+.ats-report-heading {
+  margin: 0 0 20px;
+}
+
+.ats-report-heading h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.ats-report-week,
+.ats-report-leader {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0 0 2px;
+}
+
+.ats-report-opening {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--espresso);
+  margin: 0 0 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.ats-report-topics {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ats-topic-section {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-left: 3px solid var(--terracotta);
+  border-radius: 12px;
+  padding: 18px 22px;
+}
+
+.ats-topic-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 6px;
+}
+
+.ats-topic-status {
+  font-size: 14px;
+  color: var(--espresso);
+  margin: 0 0 10px;
+}
+
+.ats-topic-bullets {
+  margin: 0 0 10px;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--espresso);
+}
+
+.ats-topic-bullets li {
+  margin-bottom: 4px;
+}
+
+.ats-topic-next {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--soft-sand);
+}
+
+.ats-topic-next strong {
+  color: var(--dark-charcoal);
+}
+
+@media (max-width: 480px) {
+  .ats-topic-section {
+    padding: 14px 16px;
+  }
+}
