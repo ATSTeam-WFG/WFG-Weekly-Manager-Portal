@@ -23,10 +23,10 @@ const appSrc = readFileSync(path.join(dir, '..', 'App.tsx'), 'utf8')
 
 describe('UserManagement.tsx rows and Edit Employee mutations key off the stable id, never email', () => {
   test('the list is keyed by user.id in both the editing and non-editing row branches — never user.email', () => {
-    const keyMatches = userManagementSrc.match(/<li key=\{user\.(id|email)\}/g) ?? []
-    assert.ok(keyMatches.length >= 2, 'expected at least two <li key={...}> row renders (editing and non-editing)')
+    const keyMatches = userManagementSrc.match(/<div className="um-row[^>]*\skey=\{user\.(id|email)\}/g) ?? []
+    assert.ok(keyMatches.length >= 2, 'expected at least two row renders (editing and non-editing) keyed by user.id')
     assert.ok(
-      keyMatches.every((m) => m === '<li key={user.id}'),
+      keyMatches.every((m) => m.endsWith('key={user.id}')),
       `every row key must be user.id, found: ${keyMatches.join(', ')}`,
     )
   })

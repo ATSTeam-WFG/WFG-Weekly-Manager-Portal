@@ -57,7 +57,7 @@ describe('UserManagement.tsx — the load-error UI shows the specific safe code/
   })
 
   test('the rendered error paragraph includes both loadError.message and loadError.code', () => {
-    const renderMatch = userManagementSrc.match(/loadError \? \(([\s\S]*?)\) : users\.length === 0/)
+    const renderMatch = userManagementSrc.match(/loadError \? \(([\s\S]*?)\) : \(/)
     assert.ok(renderMatch, 'could not locate the loadError render branch')
     assert.match(renderMatch[1], /\{loadError\.message\}/)
     assert.match(renderMatch[1], /\{loadError\.code\}/)

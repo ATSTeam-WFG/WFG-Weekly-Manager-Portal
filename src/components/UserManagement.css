@@ -1,106 +1,247 @@
 .user-management {
-  max-width: 860px;
+  max-width: 1080px;
   margin: 0 auto;
   padding: 32px 24px 100px;
 }
 
-.user-management-heading h1 {
-  font-size: 26px;
-  font-weight: 700;
-  color: var(--dark-charcoal);
-  margin: 0 0 24px;
-}
-
-.user-management-add-card,
-.user-management-list-card {
-  background: var(--white);
-  border: 1px solid var(--soft-sand);
-  border-radius: 12px;
-  padding: 24px;
+/* Header: title/subtitle left, "+ Add Employee" right. */
+.um-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 24px;
 }
 
-.user-management-add-card h2,
-.user-management-list-card h2 {
-  font-size: 16px;
+.um-header-titles h1 {
+  font-size: 26px;
   font-weight: 700;
   color: var(--dark-charcoal);
-  margin: 0 0 8px;
+  margin: 0 0 4px;
 }
 
-.user-management-add-helper {
-  font-size: 13px;
+.um-header-subtitle {
+  font-size: 14px;
   color: var(--muted-gray);
-  margin: 0 0 16px;
+  margin: 0;
 }
 
-.user-management-add-fields {
+/* Self-contained loading/empty states — this page no longer relies on
+   .admin-loading/.admin-empty-state (AdminDashboard.css), which it only
+   ever picked up implicitly from another mounted component's CSS import. */
+.um-loading {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+}
+
+.um-empty-state {
+  background: var(--white);
+  border: 1px dashed var(--soft-sand);
+  border-radius: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+}
+
+/* Four KPI cards — equal white cards with a subtle border/shadow, restraint
+   coming from each card's own icon tint rather than a different full-card
+   background color per card (the same refined pattern already used on
+   Reports & Analytics / Weekly Summary). */
+.um-kpi-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 12px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
-.user-management-field {
+.um-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 14px 16px;
+  min-height: 64px;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(48, 42, 39, 0.08);
+}
+
+.um-kpi-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  font-size: 15px;
+  flex-shrink: 0;
+  background: var(--soft-sand);
+  color: var(--espresso);
+}
+
+.um-kpi-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.um-kpi-card-active .um-kpi-icon {
+  background: rgba(22, 131, 75, 0.16);
+  color: var(--green);
+}
+
+.um-kpi-card-awaiting .um-kpi-icon {
+  background: rgba(59, 130, 246, 0.14);
+  color: var(--terracotta);
+}
+
+.um-kpi-card-inactive .um-kpi-icon {
+  background: var(--soft-sand);
+  color: var(--muted-gray);
+}
+
+.um-kpi-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.um-kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  line-height: 1.1;
+}
+
+.um-kpi-label {
+  font-size: 12px;
+  color: var(--muted-gray);
+}
+
+/* Search + status filter. */
+.um-controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.um-search {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 14px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--dark-charcoal);
+}
+
+.um-search:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+.um-status-filter {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dark-charcoal);
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  padding: 9px 14px;
+  cursor: pointer;
+}
+
+/* Employee table — a div-based semantic table (role="table"/"row"/"cell"),
+   the same pattern already proven by Reports & Analytics' ManagerReportsTable,
+   which collapses cleanly to stacked cards at narrow widths via CSS alone. */
+.um-table {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.um-table-header-row {
+  display: grid;
+  grid-template-columns: 2fr 0.9fr 1fr 1.4fr 1.5fr;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--warm-cream);
+  border-bottom: 1px solid var(--soft-sand);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-gray);
+}
+
+.um-row {
+  display: grid;
+  grid-template-columns: 2fr 0.9fr 1fr 1.4fr 1.5fr;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.um-row:last-child {
+  border-bottom: none;
+}
+
+.um-cell-employee {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
 
-.user-management-field .login-input {
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.user-management-message-error {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--terracotta);
-  margin: 0 0 12px;
-}
-
-.user-management-message-success {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--green);
-  margin: 0 0 12px;
-}
-
-.user-management-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.user-management-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--soft-sand);
-  border-radius: 10px;
-}
-
-.user-management-row-main {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 160px;
-}
-
-.user-management-name {
+.um-employee-name {
   font-size: 14px;
   font-weight: 700;
   color: var(--dark-charcoal);
 }
 
-.user-management-email {
-  font-size: 13px;
+.um-employee-email {
+  font-size: 12px;
   color: var(--muted-gray);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.um-weekly-badge {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--terracotta);
+}
+
+.um-weekly-dash {
+  color: var(--muted-gray);
+}
+
+.um-cell-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.um-row-message {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+}
+
+/* Role/status pill colors — layered on the shared .status-badge base
+   (StatusBadge.css, untouched) via these UserManagement-specific modifier
+   classes, exactly as before this refinement. Scoped nowrap (not a change
+   to the shared .status-badge rule itself) so "Awaiting First Login" never
+   breaks onto two lines at normal desktop widths. */
+.um-row .status-badge {
+  white-space: nowrap;
 }
 
 .role-badge {
@@ -133,30 +274,25 @@
   color: var(--muted-gray);
 }
 
-.submits-report-badge {
-  background: rgba(59, 130, 246, 0.12);
+.user-management-message-error {
+  font-size: 13px;
+  font-weight: 600;
   color: var(--terracotta);
+  margin: 0 0 12px;
 }
 
-.user-management-row-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+.user-management-message-success {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  margin: 0 0 12px;
 }
 
-.user-management-row .user-management-message-error,
-.user-management-row .user-management-message-success {
-  flex-basis: 100%;
-  margin: 4px 0 0;
-}
-
-.user-management-row-editing {
-  width: 100%;
-  align-items: stretch;
-}
-
-.user-management-edit-form {
-  width: 100%;
+/* Edit Employee — preserved as an inline form replacing the row (not a
+   modal), restyled to fit the new table row. */
+.um-row-editing {
+  display: block;
+  padding: 16px;
 }
 
 .user-management-edit-fields {
@@ -164,6 +300,36 @@
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-bottom: 12px;
+}
+
+.user-management-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.um-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--espresso);
+}
+
+.um-field-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--dark-charcoal);
+}
+
+.um-field-input:focus {
+  outline: none;
+  border-color: var(--terracotta);
 }
 
 .user-management-field-checkbox {
@@ -192,22 +358,47 @@
   gap: 8px;
 }
 
+@media (max-width: 860px) {
+  .um-kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 640px) {
-  .user-management-add-fields,
+  .um-kpi-row {
+    grid-template-columns: 1fr;
+  }
+
+  .um-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .um-controls {
+    flex-direction: column;
+  }
+
   .user-management-edit-fields {
     grid-template-columns: 1fr;
   }
 
-  .user-management-row {
-    flex-direction: column;
-    align-items: flex-start;
+  /* Collapse the table into stacked employee cards: the header row (column
+     labels) is redundant once each cell wraps to its own line, so it's
+     hidden, and each row becomes a compact card instead of a rigid grid. */
+  .um-table-header-row {
+    display: none;
   }
 
-  .user-management-row-actions {
+  .um-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .um-cell-actions {
     width: 100%;
   }
 
-  .user-management-row-actions .btn {
+  .um-cell-actions .btn {
     flex: 1;
   }
 }

@@ -1,0 +1,121 @@
+/* User-Management-specific — mirrors the app's existing centered-modal
+   convention (see ReminderPanel.css) under its own class names, so nothing
+   here can ever collide with or affect that unrelated feature. */
+.um-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(41, 37, 34, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+}
+
+.um-modal-panel {
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--white);
+  border-radius: 16px;
+  border: 1px solid var(--soft-sand);
+  box-shadow: 0 24px 60px -20px rgba(48, 42, 39, 0.45);
+}
+
+.um-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.um-modal-header h2 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0;
+}
+
+.um-modal-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  line-height: 1;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted-gray);
+  cursor: pointer;
+}
+
+.um-modal-close-btn:hover {
+  background: var(--warm-cream);
+  color: var(--terracotta);
+}
+
+.um-modal-close-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.um-modal-form {
+  padding: 20px 24px 24px;
+}
+
+.um-modal-helper {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0 0 16px;
+}
+
+.um-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.um-modal-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--espresso);
+}
+
+.um-modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--dark-charcoal);
+}
+
+.um-modal-input:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+.um-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+@media (max-width: 480px) {
+  .um-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .um-modal-actions .btn {
+    width: 100%;
+  }
+}
