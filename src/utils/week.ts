@@ -11,6 +11,24 @@ export function toISODate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+// toISODate's inverse. A bare "YYYY-MM-DD" string parsed via `new Date(iso)`
+// is special-cased by the ECMAScript spec as UTC midnight — in every US
+// timezone, `.toLocaleDateString()`/`.getDate()` on that value then reads
+// back as the PREVIOUS calendar day (confirmed root cause of a production
+// "Week Ending" off-by-one bug: 2026-09-18 displaying as Sep 17). This
+// mirrors the safe local-component-construction idiom already used
+// elsewhere in this codebase for exactly this reason (see
+// getReportingWeekFromStartDate below, and reportPeriods.ts's own Monday
+// resolution) — numeric year/month/day fed into `new Date(year, month - 1,
+// day)` are interpreted as LOCAL calendar components, not re-parsed as a
+// UTC instant, so the calendar date survives on any runtime timezone.
+// Use this for any other date-ONLY value (never a timestamp) instead of a
+// third ad hoc reimplementation of the same three-line split.
+export function parseDateOnly(iso: string): Date {
+  const [year, month, day] = iso.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
 // Builds the full ReportingWeek structure from an ALREADY-KNOWN Monday
 // (year/month/day) — no timezone interpretation happens here, since the
 // caller has already resolved which calendar date this is. The Date objects

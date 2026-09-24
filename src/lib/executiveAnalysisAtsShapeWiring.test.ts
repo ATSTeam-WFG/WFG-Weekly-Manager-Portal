@@ -303,7 +303,10 @@ describe('ExecutiveAnalysisCard.tsx — dual-shape view/edit branching', () => {
 
   test('builds a period-key-aware label for AtsReportView — "Week Ending [date]" only for weekly, the analysis\'s own period label/range otherwise — and never passes a fabricated leaderName', () => {
     assert.match(cardSrc, /function buildAtsPeriodLabel\(analysis: PersistedExecutiveAnalysis\): string \{/)
-    assert.match(cardSrc, /if \(analysis\.periodKey === 'weekly'\) \{\s*\n\s*return `Week Ending \$\{formatDate\(analysis\.periodEndDate\)\}`\s*\n\s*\}\s*\n\s*return analysis\.periodLabel/)
+    // formatDateOnly (not formatDate) is deliberately used here — see the
+    // timezone-bug fix in weekEndingDateWiring.test.ts: periodEndDate is a
+    // date-only value and must never be reparsed via `new Date(iso)`.
+    assert.match(cardSrc, /if \(analysis\.periodKey === 'weekly'\) \{\s*\n\s*return `Week Ending \$\{formatDateOnly\(analysis\.periodEndDate\)\}`\s*\n\s*\}\s*\n\s*return analysis\.periodLabel/)
     assert.match(cardSrc, /periodLabel=\{buildAtsPeriodLabel\(analysis\)\}/)
     assert.equal(/<AtsReportView[\s\S]*?leaderName=/.test(cardSrc), false, 'must never pass a fabricated leaderName for Executive Analysis')
   })

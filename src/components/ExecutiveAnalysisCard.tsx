@@ -14,6 +14,7 @@ import {
   type ExecutiveAnalysisSections,
 } from '../lib/executiveSummaryService'
 import type { ReportPeriodKey } from '../utils/reportPeriods'
+import { parseDateOnly } from '../utils/week'
 import AtsReportView from './AtsReportView'
 import AtsTopicsEditForm from './AtsTopicsEditForm'
 import './ExecutiveAnalysisCard.css'
@@ -78,8 +79,22 @@ interface ExecutiveAnalysisCardProps {
   showPrintButton?: boolean
 }
 
+// For genuine timestamps only (generatedAt/editedAt) — a full ISO datetime
+// string parses to the correct real instant regardless of runtime
+// timezone, so `new Date(iso)` is exactly right here. Never use this for a
+// date-only "YYYY-MM-DD" value (see formatDateOnly below and its own
+// comment for why that needs different handling).
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+// For date-ONLY values (periodEndDate) — parses via the shared, timezone-
+// safe parseDateOnly (week.ts) rather than `new Date(iso)`, which the
+// ECMAScript spec special-cases to UTC midnight for a bare "YYYY-MM-DD"
+// string; in every US timezone that reads back as the PREVIOUS calendar
+// day (confirmed production bug: 2026-09-18 displaying as "Sep 17").
+function formatDateOnly(iso: string) {
+  return parseDateOnly(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 // AtsReportView takes a fully-formatted period descriptor rather than
@@ -90,7 +105,7 @@ function formatDate(iso: string) {
 // 31)" or "October 2026", reads better than forcing "Week Ending" onto it).
 function buildAtsPeriodLabel(analysis: PersistedExecutiveAnalysis): string {
   if (analysis.periodKey === 'weekly') {
-    return `Week Ending ${formatDate(analysis.periodEndDate)}`
+    return `Week Ending ${formatDateOnly(analysis.periodEndDate)}`
   }
   return analysis.periodLabel
 }
