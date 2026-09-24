@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
 import './AdminSidebar.css'
 
-// The four (and only four) shared-shell destinations — ManagerReportView and
+// The five (and only five) shared-shell destinations — ManagerReportView and
 // the dual-role admin's own "My Weekly Report" view are deliberately NOT
 // part of this union, since neither is ever reachable while this sidebar is
 // showing (see App.tsx's render branching).
-export type AdminDestination = 'dashboard' | 'user-management' | 'reports-analytics' | 'weekly-summary'
+export type AdminDestination = 'dashboard' | 'user-management' | 'reports-analytics' | 'weekly-summary' | 'leadership-report'
 
 interface AdminSidebarProps {
   current: AdminDestination
@@ -13,6 +13,7 @@ interface AdminSidebarProps {
   onNavigateUserManagement: () => void
   onNavigateReportsAnalytics: () => void
   onNavigateWeeklySummary: () => void
+  onNavigateLeadershipReport: () => void
 }
 
 function DashboardIcon() {
@@ -61,6 +62,18 @@ function DocumentIcon() {
   )
 }
 
+// Same document silhouette as DocumentIcon (Weekly Summary), differentiated
+// by a checkmark rather than plain lines — reads as "polished/finalized
+// report" rather than "raw submitted content".
+function LeadershipReportIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h9l4 4v14H6z" />
+      <path d="M9 13l2 2 4-4" />
+    </svg>
+  )
+}
+
 // Purely decorative — an abstract layered-landscape treatment (CSS
 // shapes/gradients only, no image asset or external dependency) plus the
 // existing WFG brand copy. aria-hidden so it never appears to assistive
@@ -89,9 +102,10 @@ function SidebarDecoration() {
 }
 
 // Presentational only — App.tsx remains the sole owner of navigation state
-// (weeklySummaryOpen/reportsAnalyticsOpen/userManagementOpen). This
-// component never introduces routing or a second navigation-state model; it
-// only renders the four destinations and calls whichever handler its parent
+// (weeklySummaryOpen/reportsAnalyticsOpen/userManagementOpen/
+// leadershipReportOpen). This component never introduces routing or a
+// second navigation-state model; it only renders the five destinations
+// (grouped, with dividers) and calls whichever handler its parent
 // supplied.
 export default function AdminSidebar({
   current,
@@ -99,29 +113,45 @@ export default function AdminSidebar({
   onNavigateUserManagement,
   onNavigateReportsAnalytics,
   onNavigateWeeklySummary,
+  onNavigateLeadershipReport,
 }: AdminSidebarProps) {
-  const items: { key: AdminDestination; label: string; onClick: () => void; icon: ReactNode }[] = [
-    { key: 'dashboard', label: 'Admin Dashboard', onClick: onNavigateDashboard, icon: <DashboardIcon /> },
-    { key: 'user-management', label: 'User Management', onClick: onNavigateUserManagement, icon: <UsersIcon /> },
-    { key: 'reports-analytics', label: 'Reports & Analytics', onClick: onNavigateReportsAnalytics, icon: <ChartIcon /> },
-    { key: 'weekly-summary', label: 'Weekly Summary', onClick: onNavigateWeeklySummary, icon: <DocumentIcon /> },
+  // Approved grouping/order: Admin Dashboard — divider — Weekly Summary,
+  // Leadership Report — divider — User Management, Reports & Analytics.
+  // Groups, not a flat list, so a subtle divider can render between them
+  // without threading extra per-item flags through the existing single
+  // .map() below.
+  const groups: { key: AdminDestination; label: string; onClick: () => void; icon: ReactNode }[][] = [
+    [{ key: 'dashboard', label: 'Admin Dashboard', onClick: onNavigateDashboard, icon: <DashboardIcon /> }],
+    [
+      { key: 'weekly-summary', label: 'Weekly Summary', onClick: onNavigateWeeklySummary, icon: <DocumentIcon /> },
+      { key: 'leadership-report', label: 'Leadership Report', onClick: onNavigateLeadershipReport, icon: <LeadershipReportIcon /> },
+    ],
+    [
+      { key: 'user-management', label: 'User Management', onClick: onNavigateUserManagement, icon: <UsersIcon /> },
+      { key: 'reports-analytics', label: 'Reports & Analytics', onClick: onNavigateReportsAnalytics, icon: <ChartIcon /> },
+    ],
   ]
 
   return (
     <nav className="admin-sidebar" aria-label="Admin navigation">
-      {items.map((item) => (
-        <button
-          key={item.key}
-          type="button"
-          className={`admin-sidebar-item ${current === item.key ? 'admin-sidebar-item-active' : ''}`}
-          onClick={item.onClick}
-          aria-current={current === item.key ? 'page' : undefined}
-        >
-          <span className="admin-sidebar-icon" aria-hidden="true">
-            {item.icon}
-          </span>
-          <span className="admin-sidebar-label">{item.label}</span>
-        </button>
+      {groups.map((group, groupIndex) => (
+        <div className="admin-sidebar-group" key={groupIndex}>
+          {groupIndex > 0 && <div className="admin-sidebar-divider" role="separator" />}
+          {group.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`admin-sidebar-item ${current === item.key ? 'admin-sidebar-item-active' : ''}`}
+              onClick={item.onClick}
+              aria-current={current === item.key ? 'page' : undefined}
+            >
+              <span className="admin-sidebar-icon" aria-hidden="true">
+                {item.icon}
+              </span>
+              <span className="admin-sidebar-label">{item.label}</span>
+            </button>
+          ))}
+        </div>
       ))}
       <SidebarDecoration />
     </nav>

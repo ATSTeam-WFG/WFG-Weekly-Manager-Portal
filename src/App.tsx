@@ -15,6 +15,7 @@ import ManagerReportView from './components/ManagerReportView'
 import WeeklySummary from './components/WeeklySummary'
 import ReportsAnalytics from './components/ReportsAnalytics'
 import UserManagement from './components/UserManagement'
+import LeadershipReport from './components/LeadershipReport'
 import { supabase } from './lib/supabaseClient'
 import {
   fetchWeekReport,
@@ -85,6 +86,12 @@ function App() {
   const [weeklySummaryOpen, setWeeklySummaryOpen] = useState(false)
   const [reportsAnalyticsOpen, setReportsAnalyticsOpen] = useState(false)
   const [userManagementOpen, setUserManagementOpen] = useState(false)
+  const [leadershipReportOpen, setLeadershipReportOpen] = useState(false)
+  // Deliberately independent from adminWeekOffset — Leadership Report is a
+  // separate, potentially multi-session editing task, so navigating weeks
+  // on Admin Dashboard/Weekly Summary must never shift the week an Admin is
+  // mid-edit on here.
+  const [leadershipReportWeekOffset, setLeadershipReportWeekOffset] = useState(0)
   // Dual-role admin submitter only: true while that Admin is viewing their
   // own Manager report entry point rather than the Admin Dashboard. Never
   // set for a plain Admin — see onOpenMyReport below, only ever passed to
@@ -615,41 +622,55 @@ function App() {
   const displayName = profile?.fullName || userEmail || 'Manager'
   const roleLabel = isAdmin ? 'Admin' : 'Manager'
   const adminWeek = getReportingWeekByOffset(adminWeekOffset)
+  const leadershipReportWeek = getReportingWeekByOffset(leadershipReportWeekOffset)
 
-  // Derived, never a separate state variable — the same three booleans
-  // App.tsx already owned before the shell existed remain the single source
-  // of truth for which of the four destinations is showing.
+  // Derived, never a separate state variable — the same booleans App.tsx
+  // already owned before the shell existed (plus leadershipReportOpen)
+  // remain the single source of truth for which of the five destinations
+  // is showing.
   const currentAdminDestination: AdminDestination = userManagementOpen
     ? 'user-management'
     : reportsAnalyticsOpen
       ? 'reports-analytics'
-      : weeklySummaryOpen
-        ? 'weekly-summary'
-        : 'dashboard'
+      : leadershipReportOpen
+        ? 'leadership-report'
+        : weeklySummaryOpen
+          ? 'weekly-summary'
+          : 'dashboard'
 
   // Each handler makes the destination change mutually exclusive by
-  // resetting the other two "open" flags itself, regardless of whatever
-  // combination was true before — the exact same three setters App.tsx
-  // already called from AdminDashboard's own former nav buttons.
+  // resetting every other "open" flag itself, regardless of whatever
+  // combination was true before — the exact same setters App.tsx already
+  // called from AdminDashboard's own former nav buttons.
   const handleNavigateToDashboard = () => {
     setWeeklySummaryOpen(false)
     setReportsAnalyticsOpen(false)
     setUserManagementOpen(false)
+    setLeadershipReportOpen(false)
   }
   const handleNavigateToUserManagement = () => {
     setWeeklySummaryOpen(false)
     setReportsAnalyticsOpen(false)
     setUserManagementOpen(true)
+    setLeadershipReportOpen(false)
   }
   const handleNavigateToReportsAnalytics = () => {
     setWeeklySummaryOpen(false)
     setReportsAnalyticsOpen(true)
     setUserManagementOpen(false)
+    setLeadershipReportOpen(false)
   }
   const handleNavigateToWeeklySummary = () => {
     setWeeklySummaryOpen(true)
     setReportsAnalyticsOpen(false)
     setUserManagementOpen(false)
+    setLeadershipReportOpen(false)
+  }
+  const handleNavigateToLeadershipReport = () => {
+    setWeeklySummaryOpen(false)
+    setReportsAnalyticsOpen(false)
+    setUserManagementOpen(false)
+    setLeadershipReportOpen(true)
   }
 
   return (
@@ -671,9 +692,17 @@ function App() {
             onNavigateUserManagement={handleNavigateToUserManagement}
             onNavigateReportsAnalytics={handleNavigateToReportsAnalytics}
             onNavigateWeeklySummary={handleNavigateToWeeklySummary}
+            onNavigateLeadershipReport={handleNavigateToLeadershipReport}
           >
             {weeklySummaryOpen ? (
               <WeeklySummary week={adminWeek} weekOffset={adminWeekOffset} onBack={() => setWeeklySummaryOpen(false)} />
+            ) : leadershipReportOpen ? (
+              <LeadershipReport
+                week={leadershipReportWeek}
+                isCurrentWeek={leadershipReportWeekOffset === 0}
+                onPreviousWeek={() => setLeadershipReportWeekOffset((offset) => offset - 1)}
+                onNextWeek={() => setLeadershipReportWeekOffset((offset) => Math.min(0, offset + 1))}
+              />
             ) : reportsAnalyticsOpen ? (
               <ReportsAnalytics onBack={() => setReportsAnalyticsOpen(false)} />
             ) : userManagementOpen ? (

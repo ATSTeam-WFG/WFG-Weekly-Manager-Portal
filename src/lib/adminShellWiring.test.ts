@@ -27,24 +27,31 @@ const sidebarCss = readFileSync(path.join(dir, '..', 'components', 'AdminSidebar
 const headerSrc = readFileSync(path.join(dir, '..', 'components', 'Header.tsx'), 'utf8')
 const adminDashboardSrc = readFileSync(path.join(dir, '..', 'components', 'AdminDashboard.tsx'), 'utf8')
 
-describe('AdminSidebar.tsx — exactly four destinations, no more, no fewer', () => {
-  test('AdminDestination is exactly the four-value union', () => {
+// Originally "exactly four destinations" — the Leadership Report phase
+// (see leadershipReportWiring.test.ts, its own dedicated coverage) added a
+// 5th, restructuring the flat `items` array into grouped `groups` with
+// dividers. This describe block's own intent (a fixed, fully-enumerated set
+// of destinations, no stray extras like a manager-report/my-report item)
+// still holds — just against the current count and structure.
+describe('AdminSidebar.tsx — exactly five destinations, no more, no fewer', () => {
+  test('AdminDestination is exactly the five-value union (not merely a superset — checked with an end anchor)', () => {
     assert.match(
       sidebarSrc,
-      /export type AdminDestination = 'dashboard' \| 'user-management' \| 'reports-analytics' \| 'weekly-summary'/,
+      /export type AdminDestination = 'dashboard' \| 'user-management' \| 'reports-analytics' \| 'weekly-summary' \| 'leadership-report'\s*\n/,
     )
   })
 
-  test('the rendered items array has exactly four entries, one per destination, each with its own label', () => {
-    const itemsMatch = sidebarSrc.match(/const items: \{[\s\S]*?\}\[\] = \[([\s\S]*?)\n  \]/)
-    assert.ok(itemsMatch, 'could not locate the items array')
-    const body = itemsMatch[1]
+  test('the rendered groups array has exactly five entries total across its groups, one per destination, each with its own label', () => {
+    const groupsMatch = sidebarSrc.match(/const groups: \{[\s\S]*?\}\[\]\[\] = \[([\s\S]*?)\n  \]\s*\n/)
+    assert.ok(groupsMatch, 'could not locate the groups array')
+    const body = groupsMatch[1]
     assert.match(body, /key: 'dashboard', label: 'Admin Dashboard'/)
+    assert.match(body, /key: 'weekly-summary', label: 'Weekly Summary'/)
+    assert.match(body, /key: 'leadership-report', label: 'Leadership Report'/)
     assert.match(body, /key: 'user-management', label: 'User Management'/)
     assert.match(body, /key: 'reports-analytics', label: 'Reports & Analytics'/)
-    assert.match(body, /key: 'weekly-summary', label: 'Weekly Summary'/)
-    // Exactly four — no fifth entry (e.g. a manager-report or my-report item).
-    assert.equal((body.match(/key: '/g) ?? []).length, 4)
+    // Exactly five — no sixth entry (e.g. a manager-report or my-report item).
+    assert.equal((body.match(/key: '/g) ?? []).length, 5)
   })
 
   test('the active item gets aria-current="page" and the -active modifier class; inactive items get neither', () => {
@@ -82,10 +89,14 @@ describe('AdminSidebar.tsx — exactly four destinations, no more, no fewer', ()
 })
 
 describe('App.tsx — current destination is derived from existing state, never a new state variable', () => {
-  test('currentAdminDestination is a plain derived const, not a useState — reads the same three existing booleans', () => {
+  // Extended by the Leadership Report phase to also resolve
+  // leadershipReportOpen — still a plain derived const, still no new
+  // navigation-state model (see leadershipReportWiring.test.ts for that
+  // phase's own dedicated coverage of the extension itself).
+  test('currentAdminDestination is a plain derived const, not a useState — reads the same booleans (now including leadershipReportOpen)', () => {
     assert.match(
       appSrc,
-      /const currentAdminDestination: AdminDestination = userManagementOpen\s*\n\s*\? 'user-management'\s*\n\s*: reportsAnalyticsOpen\s*\n\s*\? 'reports-analytics'\s*\n\s*: weeklySummaryOpen\s*\n\s*\? 'weekly-summary'\s*\n\s*: 'dashboard'/,
+      /const currentAdminDestination: AdminDestination = userManagementOpen\s*\n\s*\? 'user-management'\s*\n\s*: reportsAnalyticsOpen\s*\n\s*\? 'reports-analytics'\s*\n\s*: leadershipReportOpen\s*\n\s*\? 'leadership-report'\s*\n\s*: weeklySummaryOpen\s*\n\s*\? 'weekly-summary'\s*\n\s*: 'dashboard'/,
     )
     assert.equal(/useState<AdminDestination>/.test(appSrc), false)
   })

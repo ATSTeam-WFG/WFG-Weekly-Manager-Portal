@@ -27,6 +27,25 @@
   overflow-y: auto;
 }
 
+/* Groups the sidebar items into the approved sections (Dashboard alone;
+   Weekly Summary + Leadership Report; User Management + Reports &
+   Analytics), each rendered with the same 2px gap .admin-sidebar already
+   uses between items — the divider below is the only new visual element. */
+.admin-sidebar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Real, subtle divider between groups — a single thin rule, not a
+   redesign: matches the restrained border weight/color already used
+   throughout this app (e.g. .print-header's own border-bottom). */
+.admin-sidebar-divider {
+  height: 1px;
+  margin: 10px 6px;
+  background: var(--soft-sand);
+}
+
 .admin-sidebar-item {
   display: flex;
   align-items: center;

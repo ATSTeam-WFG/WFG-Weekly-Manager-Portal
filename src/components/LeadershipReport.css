@@ -1,0 +1,197 @@
+/* All classes here are exclusive to LeadershipReport.tsx — new,
+   page-scoped names (lr-*) rather than reusing/redefining any existing
+   page's classes, except for the deliberately shared .week-current-badge
+   (already reused identically by AdminDashboard.tsx/ReportsAnalytics.tsx)
+   and .admin-loading/.link-btn/.back-link/.btn/.btn-primary/.btn-secondary
+   (shared, app-wide utility classes). */
+
+.leadership-report-page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px 32px 48px;
+}
+
+.lr-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 8px 0 28px;
+}
+
+.lr-header-titles h1 {
+  margin: 0 0 4px;
+  font-size: 26px;
+  color: var(--dark-charcoal);
+}
+
+.lr-header-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted-gray);
+}
+
+/* Same visual language as AdminDashboard's own .adp-week-nav/.adp-week-nav-
+   btn/.adp-week-label — new, page-scoped class names rather than reusing
+   those directly (matching this app's established convention of each page
+   owning its own class family for the same shared visual pattern; compare
+   Reports & Analytics' own .ra-period-nav). */
+.lr-week-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lr-week-nav-btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--espresso);
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.lr-week-nav-btn:hover:not(:disabled) {
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+
+.lr-week-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lr-week-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dark-charcoal);
+  white-space: nowrap;
+}
+
+/* Two substantial panes, side by side, on normal desktop widths — never a
+   tab/toggle. Equal columns so neither side reads as more "important" than
+   the other purely from width. */
+.lr-panes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.lr-pane {
+  border-radius: 12px;
+  padding: 24px;
+  min-width: 0;
+}
+
+/* Left = reference/source material: a slightly recessed, muted treatment
+   (warm-cream surface, restrained border) — deliberately less prominent
+   than the working document beside it. */
+.lr-pane-source {
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+}
+
+/* Right = the working/final leadership document: a crisper white surface
+   with a terracotta top accent, echoing the same "this is the real
+   document" treatment already used for .executive-summary-content
+   elsewhere in this app — restrained, not heavy (no drop shadow). */
+.lr-pane-draft {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-top: 4px solid var(--terracotta);
+}
+
+.lr-pane-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.lr-pane-header h2 {
+  margin: 0 0 2px;
+  font-size: 17px;
+  color: var(--dark-charcoal);
+}
+
+.lr-pane-subtitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-gray);
+}
+
+.lr-pane-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lr-pane-body {
+  font-size: 14px;
+}
+
+.lr-empty-state {
+  padding: 32px 8px;
+  text-align: center;
+  color: var(--muted-gray);
+}
+
+.lr-empty-state p {
+  margin: 0 0 8px;
+}
+
+/* Page-level framing only — AtsTopicsEditForm.tsx/.css are never touched.
+   A plain white surface (not warm-cream, to avoid nesting two same-color
+   boxes against .ats-edit-topic's own warm-cream cards inside it), a
+   restrained border/radius, and generous padding — gives the editing
+   surface a distinct "you are inside the document now" boundary without
+   adding a second heavy visual layer or touching the form's own controls,
+   input sizes, or add/remove/reorder functionality. */
+.lr-edit-container {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.lr-empty-state-hint {
+  font-size: 13px;
+}
+
+/* On genuinely smaller screens, stack rather than squeeze two "substantial"
+   panes into unusable widths. 1100px (wider than the shared 860px
+   admin-shell mobile-nav breakpoint) reflects that this layout specifically
+   needs more room than a single-column page does before it stops being
+   readable. Independent of any print media query — this only ever applies
+   on screen. */
+@media (max-width: 1100px) {
+  .lr-panes {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .leadership-report-page {
+    padding: 16px 16px 32px;
+  }
+
+  .lr-week-nav {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

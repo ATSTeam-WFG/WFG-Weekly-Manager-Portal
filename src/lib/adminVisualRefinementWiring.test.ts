@@ -84,11 +84,17 @@ describe('AdminSidebar.tsx — decorative lower-sidebar treatment is aria-hidden
     assert.match(sidebarSrc, /<span className="admin-sidebar-hill admin-sidebar-hill-back" \/>/)
   })
 
-  test('the decoration is still exactly one of the four nav buttons\' siblings — the four destinations themselves are untouched by this addition', () => {
-    const itemsMatch = sidebarSrc.match(/const items: \{[\s\S]*?\]\s*\n/)
-    assert.ok(itemsMatch)
-    assert.equal((itemsMatch[0].match(/key: '/g) ?? []).length, 4)
-    assert.match(sidebarSrc, /\{items\.map\(\(item\) => \([\s\S]*?\)\)\}\s*\n\s*<SidebarDecoration \/>/)
+  // The Leadership Report phase regrouped the flat 4-item `items` array
+  // into grouped destinations (with dividers, see leadershipReportWiring.
+  // test.ts) — this test's own intent (the decoration renders as the last
+  // sibling, after every nav destination, and the destination count itself
+  // is unaffected by the decoration) still holds, just against the new
+  // `groups` structure.
+  test('the decoration is still the last sibling after every nav destination — now 5, one added by the Leadership Report phase, unrelated to this decoration', () => {
+    const groupsMatch = sidebarSrc.match(/const groups: [\s\S]*?\] = \[[\s\S]*?\n  \]\s*\n/)
+    assert.ok(groupsMatch)
+    assert.equal((groupsMatch[0].match(/key: '/g) ?? []).length, 5)
+    assert.match(sidebarSrc, /\{groups\.map\(\(group, groupIndex\) => \([\s\S]*?\)\)\}\s*\n\s*<SidebarDecoration \/>/)
   })
 
   test('it is hidden at short viewport heights and whenever the sidebar is in its off-canvas mode, so it can never crowd out mobile navigation', () => {

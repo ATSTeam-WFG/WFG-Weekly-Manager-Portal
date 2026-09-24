@@ -10,21 +10,24 @@ interface AdminShellProps {
   onNavigateUserManagement: () => void
   onNavigateReportsAnalytics: () => void
   onNavigateWeeklySummary: () => void
+  onNavigateLeadershipReport: () => void
   children: ReactNode
 }
 
 // Purely a layout wrapper — App.tsx remains the sole owner of which of the
-// four admin destinations is showing (weeklySummaryOpen/reportsAnalyticsOpen/
-// userManagementOpen, else Admin Dashboard) and of `children` itself, which
-// is exactly the same element App.tsx already rendered before this shell
-// existed. The only state this component owns is whether the off-canvas
-// mobile nav is open — a pure UI concern, never a second navigation model.
+// five admin destinations is showing (weeklySummaryOpen/reportsAnalyticsOpen/
+// userManagementOpen/leadershipReportOpen, else Admin Dashboard) and of
+// `children` itself, which is exactly the same element App.tsx already
+// rendered before this shell existed. The only state this component owns is
+// whether the off-canvas mobile nav is open — a pure UI concern, never a
+// second navigation model.
 export default function AdminShell({
   current,
   onNavigateDashboard,
   onNavigateUserManagement,
   onNavigateReportsAnalytics,
   onNavigateWeeklySummary,
+  onNavigateLeadershipReport,
   children,
 }: AdminShellProps) {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
@@ -57,6 +60,7 @@ export default function AdminShell({
           onNavigateUserManagement={() => handleNavigate(onNavigateUserManagement)}
           onNavigateReportsAnalytics={() => handleNavigate(onNavigateReportsAnalytics)}
           onNavigateWeeklySummary={() => handleNavigate(onNavigateWeeklySummary)}
+          onNavigateLeadershipReport={() => handleNavigate(onNavigateLeadershipReport)}
         />
       </div>
 
