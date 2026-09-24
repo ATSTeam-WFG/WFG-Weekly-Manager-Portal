@@ -118,12 +118,19 @@ describe('Print-scope fix — the six required proofs', () => {
     )
   })
 
-  test('4. The WFG print header/week remains included in print — .print-header is explicitly exempted from the hide rule, and still renders the real week label', () => {
+  // Print-header cleanup phase: .print-header is now logo-only (the
+  // redundant "Weekly Manager Summary"/"Week of ..." text was removed —
+  // see weeklySummaryPrintHeaderWiring.test.ts) since AtsReportView's own
+  // "WFG Weekly Leadership Update"/"Week Ending [date]" heading is the
+  // single report header now. The week/date is still genuinely present in
+  // print — it just comes from that one heading instead of a second,
+  // redundant one.
+  test('4. The WFG print header remains included in print — .print-header is explicitly exempted from the hide rule and still renders the logo; the week/date is provided by AtsReportView\'s own single heading', () => {
     assert.match(
       printCss,
       /body\.print-executive-analysis-only \.weekly-summary > \*:not\(\.print-header\)/,
     )
-    assert.match(weeklySummarySrc, /<p className="print-week">Week of \{week\.label\}<\/p>/)
+    assert.match(weeklySummarySrc, /<img src=\{wfgLogo\} alt="WFG" className="print-logo" \/>/)
   })
 
   test('5. There is still exactly one print action, labeled "Print Weekly Summary"', () => {

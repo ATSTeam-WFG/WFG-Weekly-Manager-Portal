@@ -38,6 +38,27 @@
     display: none !important;
   }
 
+  /* Portal/navigation chrome (.admin-shell-menu-btn, .admin-shell-sidebar-
+     wrap) sits OUTSIDE .reports-analytics-page/.weekly-summary — as
+     ancestors of AdminShell.tsx, they're siblings of those page
+     containers, not descendants, so the rule above (which only reaches
+     direct children of those two containers) can never hide them.
+     Production QA found the Menu button (and, at print widths wider than
+     AdminShell.css's 860px breakpoint, the sidebar itself) printing above
+     the letterhead on Weekly Summary. Root cause: printable page width at
+     the standard 0.6in letter margins is ~7.3in (~701px), which falls
+     under that 860px breakpoint, silently activating the mobile-nav
+     layout during print. Scoped to this same body class, so it applies to
+     BOTH pages' Executive-Analysis-only print mode identically — this
+     also fixes the same bug on Reports & Analytics' own equivalent print
+     choice, which never surfaced there but shares the identical cause.
+     Screen behavior (including the real mobile responsive layout) is
+     completely unaffected — this rule only exists inside @media print. */
+  body.print-executive-analysis-only .admin-shell-menu-btn,
+  body.print-executive-analysis-only .admin-shell-sidebar-wrap {
+    display: none !important;
+  }
+
   /* Weekly Summary only (see ReportsAnalytics.tsx's printWeeklySummaryOnly)
      — reuses the exact same toggle-body-class-around-window.print() pattern
      as above. Restricted to .reports-analytics-page only: this option is

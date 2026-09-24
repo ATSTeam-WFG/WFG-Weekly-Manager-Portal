@@ -92,7 +92,11 @@ describe('AtsReportView.css — print-only compact layout removes the card treat
 
   test('under print, the opening-paragraph and topic-title/status/bullets/next margins and paddings are all reduced from their on-screen values', () => {
     const printBlock = extractMediaPrintBlock(viewCss)
-    assert.match(printBlock, /\.ats-report-opening \{\s*\n\s*margin: 0 0 10px;\s*\n\s*padding-bottom: 8px;\s*\n\s*\}/)
+    // padding-bottom/border-bottom subsequently moved from this rule up to
+    // .ats-report-heading (see weeklySummaryPrintHeaderWiring.test.ts) — the
+    // one divider now sits directly under the heading, not after the
+    // opening paragraph, so this rule keeps only the reduced margin.
+    assert.match(printBlock, /\.ats-report-opening \{\s*\n\s*margin: 0 0 10px;/)
     assert.match(printBlock, /margin: 0 0 3px;/) // topic title
     assert.match(printBlock, /\.ats-topic-status \{[\s\S]*?margin: 0 0 4px;/)
     assert.match(printBlock, /\.ats-topic-bullets \{\s*\n\s*margin: 0 0 4px;\s*\n\s*padding-left: 16px;\s*\n\s*\}/)

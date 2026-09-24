@@ -110,8 +110,17 @@
    AtsReportView renders) is completely unchanged — verified by every
    selector above this block staying exactly as it was. */
 @media print {
+  /* Single-header print structure: since Weekly Summary no longer prints
+     its own redundant "Weekly Manager Summary" title/date or the
+     Executive Analysis "AI-Generated Analysis" badge/card (see
+     WeeklySummary.tsx/.css), this heading is now the ONE report header
+     wherever it prints. A thin divider directly under it (rather than the
+     one previously trailing the opening paragraph, moved below) separates
+     the header from the executive overview immediately following it. */
   .ats-report-heading {
     margin: 0 0 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--soft-sand);
   }
 
   .ats-report-heading h1 {
@@ -121,7 +130,8 @@
 
   .ats-report-opening {
     margin: 0 0 10px;
-    padding-bottom: 8px;
+    padding-bottom: 0;
+    border-bottom: none;
   }
 
   .ats-report-topics {

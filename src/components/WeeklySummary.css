@@ -297,12 +297,22 @@
     padding: 0;
   }
 
+  /* Logo-only letterhead on Weekly Summary now (see WeeklySummary.tsx) —
+     AtsReportView's own heading ("WFG Weekly Leadership Update" / "Week
+     Ending [date]"), printed just below, is the single report title/date
+     there; this compact spacing reflects that .print-header no longer
+     carries its own title block on THIS page. .print-title/.print-week
+     below are kept fully intact and unscoped — ReportsAnalytics.css's own
+     .print-header (a separate, more specific `.reports-analytics-page
+     .print-header` rule) still relies on these same two bare classes for
+     its own letterhead's title/week paragraph styling, confirmed by
+     ReportsAnalytics.tsx still rendering both inside its own print-header;
+     removing them here would silently break that page's print output. */
   .print-header {
     display: flex;
     align-items: center;
-    gap: 16px;
-    margin-bottom: 24px;
-    padding-bottom: 16px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
     border-bottom: 2px solid var(--terracotta);
   }
 
@@ -347,6 +357,31 @@
 
   .executive-summary-content {
     box-shadow: none;
+  }
+
+  /* Weekly-Summary-ONLY: hides the "AI-Generated Analysis" badge and strips
+     the card framing (border, terracotta top accent, rounded corners,
+     padding, background) from the printed Executive Analysis content, so
+     AtsReportView's own "WFG Weekly Leadership Update" heading below is the
+     single report title — never a redundant badge followed by a bordered
+     card ahead of it. Deliberately scoped with a .weekly-summary ancestor
+     prefix (unlike the bare .executive-summary-content rule immediately
+     above, which is intentionally shared) so Reports & Analytics' own
+     printed Executive Analysis card keeps its existing badge/border/
+     padding completely unredesigned. Only visual framing is removed —
+     every generated word (opening paragraph, every topic, every bullet,
+     every Next: line) still renders in full via the untouched
+     .executive-summary-full/AtsReportView underneath. */
+  .weekly-summary .ai-generated-badge {
+    display: none;
+  }
+
+  .weekly-summary .executive-summary-content {
+    background: none;
+    border: none;
+    border-top: none;
+    border-radius: 0;
+    padding: 0;
   }
 
   .executive-summary-block {

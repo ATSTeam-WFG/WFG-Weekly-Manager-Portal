@@ -284,10 +284,10 @@ describe('Nothing here touches the completed, production-tested Reports & Analyt
     assert.match(raExportMenuSrc, /key: 'complete', label: 'Complete Leadership Report'/)
   })
 
-  test('WeeklySummary.tsx does not import ReportsAnalytics.css, and neither new CSS file defines any .ra-* or .reports-analytics-page selector', () => {
+  test('WeeklySummary.tsx does not import ReportsAnalytics.css, and neither new CSS file defines any .ra-* or .reports-analytics-page selector (a later phase\'s explanatory comment naming ReportsAnalytics.css/reports-analytics-page in prose is not itself a selector, so it must not trip this check)', () => {
     assert.equal(weeklySummarySrc.includes("import './ReportsAnalytics.css'"), false)
-    assert.equal(/^\.ra-[\w-]*\s*[{,]|reports-analytics-page/m.test(weeklySummaryCss), false)
-    assert.equal(/^\.ra-[\w-]*\s*[{,]|reports-analytics-page/m.test(managerCardCss), false)
+    assert.equal(/^\s*\.ra-[\w-]*\s*[{,]|^\s*\.reports-analytics-page\b/m.test(weeklySummaryCss), false)
+    assert.equal(/^\s*\.ra-[\w-]*\s*[{,]|^\s*\.reports-analytics-page\b/m.test(managerCardCss), false)
   })
 
   test('WeeklySummary.tsx still imports exactly the same shared CSS files it always did, in the same order, plus nothing new besides its own SubmittedManagerCard', () => {

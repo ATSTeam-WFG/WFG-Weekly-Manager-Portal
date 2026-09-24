@@ -61,12 +61,20 @@ export default function WeeklySummary({ week, weekOffset, onBack }: WeeklySummar
         &larr; Back to Admin Dashboard
       </button>
 
+      {/* Print-only letterhead — logo only. This block is unconditionally
+          display:none outside @media print (WeeklySummary.css), so it is
+          never visible on screen; the change here has zero on-screen
+          effect. It previously also repeated a "Weekly Manager Summary" /
+          "Week of ..." title, which was redundant with — and inconsistent
+          with — AtsReportView's own "WFG Weekly Leadership Update / Week
+          Ending [date]" heading rendered inside the Executive Analysis
+          card below it: printing Weekly Summary produced three stacked
+          title blocks (this one, the AI-Generated Analysis badge, and the
+          ATS heading) before any real content. Removed here so
+          AtsReportView's own heading is the single report header, per the
+          approved leadership print structure. */}
       <div className="print-header">
         <img src={wfgLogo} alt="WFG" className="print-logo" />
-        <div>
-          <h1 className="print-title">Weekly Manager Summary</h1>
-          <p className="print-week">Week of {week.label}</p>
-        </div>
       </div>
 
       <div className="weekly-summary-heading">
