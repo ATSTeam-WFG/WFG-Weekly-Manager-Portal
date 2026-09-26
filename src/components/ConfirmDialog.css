@@ -1,0 +1,68 @@
+/* Fixed, full-viewport overlay — position: fixed here is what makes this a
+   true modal rather than an inline block that pushes surrounding content
+   down. z-index (1000) is comfortably above every other stacking context in
+   this app (AdminShell's own highest is 100, for its mobile off-canvas
+   sidebar) — see AdminShell.css. No ancestor between this overlay and the
+   document root uses transform/filter/will-change (which would otherwise
+   create a new containing block and break position: fixed's viewport-
+   relative behavior) — confirmed directly, not assumed. */
+.confirm-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(48, 42, 39, 0.45);
+  padding: 24px;
+}
+
+.confirm-dialog-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-top: 4px solid var(--terracotta);
+  border-radius: 14px;
+  padding: 28px 24px;
+  box-shadow: 0 20px 40px -20px rgba(48, 42, 39, 0.5);
+}
+
+.confirm-dialog-title {
+  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.confirm-dialog-message {
+  margin: 0 0 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dark-charcoal);
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .confirm-dialog-overlay {
+    padding: 16px;
+  }
+
+  .confirm-dialog-card {
+    padding: 24px 20px;
+  }
+
+  .confirm-dialog-actions {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .confirm-dialog-actions .btn {
+    width: 100%;
+  }
+}

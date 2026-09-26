@@ -1,8 +1,9 @@
-/* All classes here are exclusive to LeadershipReport.tsx — new,
-   page-scoped names (lr-*) rather than reusing/redefining any existing
-   page's classes, except for the deliberately shared .week-current-badge
-   (already reused identically by AdminDashboard.tsx/ReportsAnalytics.tsx)
-   and .admin-loading/.link-btn/.back-link/.btn/.btn-primary/.btn-secondary
+/* All classes here are exclusive to LeadershipReport.tsx/LeadershipReport
+   Current.tsx/LeadershipReportHistory.tsx — new, page-scoped names (lr-*)
+   rather than reusing/redefining any existing page's classes, except for
+   the deliberately shared .week-current-badge (already reused identically
+   by AdminDashboard.tsx/ReportsAnalytics.tsx/WeeklySummary.tsx) and
+   .admin-loading/.link-btn/.back-link/.btn/.btn-primary/.btn-secondary
    (shared, app-wide utility classes). */
 
 .leadership-report-page {
@@ -32,15 +33,50 @@
   color: var(--muted-gray);
 }
 
+/* Current / History — a plain two-tab switch, visually lighter than the
+   left reference tabs below (no active-tab underline reuse — these two
+   families are deliberately distinguishable at a glance: this one decides
+   which whole workspace is showing, the other picks a reference document
+   within Current). */
+.lr-view-switch {
+  display: flex;
+  gap: 4px;
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.lr-view-tab {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-gray);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.lr-view-tab-active {
+  background: var(--white);
+  color: var(--dark-charcoal);
+  box-shadow: 0 1px 3px rgba(48, 42, 39, 0.12);
+}
+
 /* Same visual language as AdminDashboard's own .adp-week-nav/.adp-week-nav-
    btn/.adp-week-label — new, page-scoped class names rather than reusing
    those directly (matching this app's established convention of each page
    owning its own class family for the same shared visual pattern; compare
-   Reports & Analytics' own .ra-period-nav). */
+   Reports & Analytics' own .ra-period-nav, Weekly Summary's own
+   .ws-week-nav). Shared here by both LeadershipReportCurrent.tsx and
+   LeadershipReportHistory.tsx, each with its own independent week state. */
 .lr-week-nav {
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-bottom: 24px;
 }
 
 .lr-week-nav-btn {
@@ -75,14 +111,45 @@
   white-space: nowrap;
 }
 
-/* Two substantial panes, side by side, on normal desktop widths — never a
-   tab/toggle. Equal columns so neither side reads as more "important" than
-   the other purely from width. */
-.lr-panes {
+/* Two balanced columns on normal desktop widths — never a tab/toggle
+   between them. Approximately 1fr/1fr, per the approved hand-drawn layout;
+   the right (editable) column still reads as the visually dominant one via
+   its crisper surface/terracotta accent below, not via extra width. */
+.lr-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24px;
   align-items: start;
+}
+
+.lr-col-reference,
+.lr-col-draft {
+  min-width: 0;
+}
+
+/* Compact tabs sitting above the left (reference) pane, switching between
+   ATS Format and Previous Work without affecting the right column at all. */
+.lr-ref-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.lr-ref-tab {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-gray);
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.lr-ref-tab-active {
+  color: var(--terracotta);
+  border-color: var(--terracotta);
 }
 
 .lr-pane {
@@ -91,18 +158,21 @@
   min-width: 0;
 }
 
-/* Left = reference/source material: a slightly recessed, muted treatment
-   (warm-cream surface, restrained border) — deliberately less prominent
-   than the working document beside it. */
-.lr-pane-source {
+/* Reference material: a slightly recessed, muted treatment (warm-cream
+   surface, restrained border) — deliberately less prominent than the
+   working document beside it. Shared identically by the ATS Format tab,
+   the Previous Work tab, and History's own single pane — all three are
+   read-only reference/record material, never the active working document. */
+.lr-pane-source,
+.lr-pane-history {
   background: var(--warm-cream);
   border: 1px solid var(--soft-sand);
 }
 
-/* Right = the working/final leadership document: a crisper white surface
-   with a terracotta top accent, echoing the same "this is the real
-   document" treatment already used for .executive-summary-content
-   elsewhere in this app — restrained, not heavy (no drop shadow). */
+/* The working/final leadership document: a crisper white surface with a
+   terracotta top accent, echoing the same "this is the real document"
+   treatment already used for .executive-summary-content elsewhere in this
+   app — restrained, not heavy (no drop shadow). */
 .lr-pane-draft {
   background: var(--white);
   border: 1px solid var(--soft-sand);
@@ -137,8 +207,26 @@
 
 .lr-pane-actions {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* Mirrors ReportForm.css's own .autosave-status/-saved/-error exactly (same
+   sizing and color tokens) — this app's established convention for a small,
+   subtle save-status indicator next to a save action. */
+.lr-save-status {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-gray);
+}
+
+.lr-save-status-saved {
+  color: var(--green);
+}
+
+.lr-save-status-error {
+  color: var(--terracotta);
 }
 
 .lr-pane-body {
@@ -174,13 +262,11 @@
 }
 
 /* On genuinely smaller screens, stack rather than squeeze two "substantial"
-   panes into unusable widths. 1100px (wider than the shared 860px
-   admin-shell mobile-nav breakpoint) reflects that this layout specifically
-   needs more room than a single-column page does before it stops being
-   readable. Independent of any print media query — this only ever applies
-   on screen. */
+   columns into unusable widths — a genuinely smaller-screen breakpoint, not
+   the print/mobile-nav breakpoints. Independent of any print media query —
+   this only ever applies on screen. */
 @media (max-width: 1100px) {
-  .lr-panes {
+  .lr-columns {
     grid-template-columns: 1fr;
   }
 }
@@ -190,8 +276,57 @@
     padding: 16px 16px 32px;
   }
 
+  .lr-header {
+    align-items: stretch;
+  }
+
   .lr-week-nav {
     width: 100%;
     justify-content: space-between;
+  }
+}
+
+/* Print/Download (ATS Report, My Leadership Report, Previous Work,
+   History) — see LeadershipReportCurrent.tsx's printLeadershipReportAtsOnly/
+   printLeadershipReportDraftOnly/printLeadershipReportPreviousOnly and
+   LeadershipReportHistory.tsx's printLeadershipReportHistoryOnly, which
+   toggle body.print-lr-ats-only / body.print-lr-draft-only /
+   body.print-lr-previous-only / body.print-lr-history-only around
+   window.print() (see print.css for the page-level isolation rules those
+   activate). All four print-only mirrors, and both letterheads (one inside
+   .lr-current, one inside .lr-history — mutually exclusive, since only one
+   of the two is ever mounted at a time), are always mounted in the DOM but
+   hidden on screen here — revealed only under @media print, and only while
+   the matching body class is present. */
+.lr-print-ats-only,
+.lr-print-draft-only,
+.lr-print-previous-only,
+.lr-print-history-only {
+  display: none;
+}
+
+.print-header {
+  display: none;
+}
+
+@media print {
+  .lr-current > .print-header,
+  .lr-history > .print-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--terracotta);
+  }
+
+  .print-logo {
+    height: 40px;
+  }
+
+  .lr-print-ats-only,
+  .lr-print-draft-only,
+  .lr-print-previous-only,
+  .lr-print-history-only {
+    display: block;
   }
 }

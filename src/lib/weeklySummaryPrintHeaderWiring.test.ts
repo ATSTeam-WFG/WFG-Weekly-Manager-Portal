@@ -44,10 +44,10 @@ function extractMediaPrintBlock(css: string): string {
 }
 
 describe('1. Portal/navigation chrome (Menu button, sidebar) is hidden in Executive-Analysis-only print mode', () => {
-  test('print.css hides .admin-shell-menu-btn and .admin-shell-sidebar-wrap, scoped to body.print-executive-analysis-only', () => {
+  test('print.css hides .admin-shell-menu-btn and .admin-shell-sidebar-wrap, scoped to body.print-executive-analysis-only (the same rule also covers the later Leadership Report print modes — see leadershipReportPrintWiring.test.ts)', () => {
     assert.match(
       printCss,
-      /body\.print-executive-analysis-only \.admin-shell-menu-btn,\s*\n\s*body\.print-executive-analysis-only \.admin-shell-sidebar-wrap \{\s*\n\s*display: none !important;\s*\n\s*\}/,
+      /body\.print-executive-analysis-only \.admin-shell-menu-btn,\s*\n\s*body\.print-executive-analysis-only \.admin-shell-sidebar-wrap,[\s\S]*?\{\s*\n\s*display: none !important;\s*\n\s*\}/,
     )
   })
 

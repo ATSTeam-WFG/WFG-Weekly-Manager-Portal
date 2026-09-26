@@ -1,0 +1,97 @@
+/* Visual language mirrors Login.css's own card (same tokens/shape), but as
+   new, page-scoped classes rather than reusing Login's names directly —
+   this is not the full-screen login page, just a centered card within the
+   existing Admin shell content area, so it does not need min-height:100vh
+   or Login's decorative background treatment. */
+.lr-gate-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+}
+
+.lr-gate-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-top: 4px solid var(--terracotta);
+  border-radius: 16px;
+  padding: 40px 36px;
+  box-shadow: 0 20px 40px -28px rgba(48, 42, 39, 0.35);
+  text-align: center;
+}
+
+.lr-gate-card h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 6px;
+}
+
+.lr-gate-subtitle {
+  font-size: 14px;
+  color: var(--muted-gray);
+  margin: 0 0 28px;
+}
+
+.lr-gate-message {
+  font-size: 14px;
+  color: var(--muted-gray);
+  margin: 0;
+}
+
+.lr-gate-form {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.lr-gate-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dark-charcoal);
+  margin-bottom: 6px;
+}
+
+.lr-gate-input {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--espresso);
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+}
+
+.lr-gate-input:focus {
+  outline: none;
+  border-color: var(--terracotta);
+  background: var(--white);
+}
+
+.lr-gate-input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.lr-gate-error {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--terracotta);
+  background: rgba(183, 101, 74, 0.08);
+  border: 1px solid rgba(183, 101, 74, 0.25);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: -4px 0 18px;
+}
+
+.lr-gate-submit {
+  margin-top: 4px;
+}
+
+.lr-gate-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}

@@ -15,7 +15,8 @@ import ManagerReportView from './components/ManagerReportView'
 import WeeklySummary from './components/WeeklySummary'
 import ReportsAnalytics from './components/ReportsAnalytics'
 import UserManagement from './components/UserManagement'
-import LeadershipReport from './components/LeadershipReport'
+import LeadershipReportGate from './components/LeadershipReportGate'
+import ConfirmDialog from './components/ConfirmDialog'
 import { supabase } from './lib/supabaseClient'
 import {
   fetchWeekReport,
@@ -83,6 +84,11 @@ function App() {
 
   const [selectedManager, setSelectedManager] = useState<ManagerSummary | null>(null)
   const [adminWeekOffset, setAdminWeekOffset] = useState(0)
+  // Deliberately independent from adminWeekOffset — viewing/printing a past
+  // week's Weekly Summary must never shift the week Admin Dashboard itself
+  // is showing, matching the same independence already established for
+  // Leadership Report below.
+  const [weeklySummaryWeekOffset, setWeeklySummaryWeekOffset] = useState(0)
   const [weeklySummaryOpen, setWeeklySummaryOpen] = useState(false)
   const [reportsAnalyticsOpen, setReportsAnalyticsOpen] = useState(false)
   const [userManagementOpen, setUserManagementOpen] = useState(false)
@@ -92,6 +98,22 @@ function App() {
   // on Admin Dashboard/Weekly Summary must never shift the week an Admin is
   // mid-edit on here.
   const [leadershipReportWeekOffset, setLeadershipReportWeekOffset] = useState(0)
+  // True only while Leadership Report's own Current tab has unsaved edits
+  // (reported up through LeadershipReportGate -> LeadershipReport ->
+  // LeadershipReportCurrent's existing dirty-tracking). Declared here,
+  // alongside every other top-level useState, and NOT further down near
+  // where it's actually used — this component has several early `return`s
+  // gated on authStatus above that point, and a hook declared after them
+  // would be skipped on some renders but not others (a genuine "rendered
+  // fewer hooks than expected" crash, not merely a style preference).
+  const [leadershipReportDirty, setLeadershipReportDirty] = useState(false)
+  // Holds the navigation to perform if/when the person confirms discarding
+  // unsaved Leadership Report edits — see requestLeaveLeadershipReportIfDirty
+  // below (declared further down, alongside the four handlers it's used
+  // from) and the <ConfirmDialog> render near the end of this component.
+  // Same early-return-hazard reasoning as leadershipReportDirty above
+  // applies here too, hence declaring this hook up here as well.
+  const [pendingLeaveAction, setPendingLeaveAction] = useState<(() => void) | null>(null)
   // Dual-role admin submitter only: true while that Admin is viewing their
   // own Manager report entry point rather than the Admin Dashboard. Never
   // set for a plain Admin — see onOpenMyReport below, only ever passed to
@@ -622,6 +644,7 @@ function App() {
   const displayName = profile?.fullName || userEmail || 'Manager'
   const roleLabel = isAdmin ? 'Admin' : 'Manager'
   const adminWeek = getReportingWeekByOffset(adminWeekOffset)
+  const weeklySummaryWeek = getReportingWeekByOffset(weeklySummaryWeekOffset)
   const leadershipReportWeek = getReportingWeekByOffset(leadershipReportWeekOffset)
 
   // Derived, never a separate state variable — the same booleans App.tsx
@@ -638,43 +661,96 @@ function App() {
           ? 'weekly-summary'
           : 'dashboard'
 
+  // leadershipReportDirty/pendingLeaveAction are declared near the top of
+  // this component, with the other useState calls (see above authStatus's
+  // early returns) — reused here, not duplicated, for the same "unsaved
+  // changes" concept the Current tab already guards its own week-change/
+  // History-switch with. leadershipReportDirty is reset to false whenever
+  // LeadershipReportGate unmounts (see its own onDirtyChange cleanup) and
+  // defensively on entering Leadership Report below — never persisted
+  // anywhere.
+  //
+  // A deferred "pending action" + rendered <ConfirmDialog> (see the JSX
+  // below), not window.confirm() — confirmed directly
+  // (window.confirm('test') in the actual preview environment used for
+  // this app's manual QA) that the native dialog silently resolves to
+  // false with NO visible UI there, so it cannot satisfy "a visible
+  // confirmation must appear." Consulted only by the four navigate-AWAY
+  // handlers below, and only matters while Leadership Report is the
+  // CURRENTLY open destination — navigating between any other two
+  // destinations is completely unaffected, regardless of what
+  // leadershipReportDirty last held.
+  const requestLeaveLeadershipReportIfDirty = (action: () => void) => {
+    if (!leadershipReportOpen || !leadershipReportDirty) {
+      action()
+      return
+    }
+    setPendingLeaveAction(() => action)
+  }
+
   // Each handler makes the destination change mutually exclusive by
   // resetting every other "open" flag itself, regardless of whatever
   // combination was true before — the exact same setters App.tsx already
-  // called from AdminDashboard's own former nav buttons.
+  // called from AdminDashboard's own former nav buttons. The four
+  // navigate-AWAY handlers each route their body through the check above;
+  // cancelling in the resulting dialog leaves every flag (and the current
+  // screen) untouched.
   const handleNavigateToDashboard = () => {
-    setWeeklySummaryOpen(false)
-    setReportsAnalyticsOpen(false)
-    setUserManagementOpen(false)
-    setLeadershipReportOpen(false)
+    requestLeaveLeadershipReportIfDirty(() => {
+      setWeeklySummaryOpen(false)
+      setReportsAnalyticsOpen(false)
+      setUserManagementOpen(false)
+      setLeadershipReportOpen(false)
+    })
   }
   const handleNavigateToUserManagement = () => {
-    setWeeklySummaryOpen(false)
-    setReportsAnalyticsOpen(false)
-    setUserManagementOpen(true)
-    setLeadershipReportOpen(false)
+    requestLeaveLeadershipReportIfDirty(() => {
+      setWeeklySummaryOpen(false)
+      setReportsAnalyticsOpen(false)
+      setUserManagementOpen(true)
+      setLeadershipReportOpen(false)
+    })
   }
   const handleNavigateToReportsAnalytics = () => {
-    setWeeklySummaryOpen(false)
-    setReportsAnalyticsOpen(true)
-    setUserManagementOpen(false)
-    setLeadershipReportOpen(false)
+    requestLeaveLeadershipReportIfDirty(() => {
+      setWeeklySummaryOpen(false)
+      setReportsAnalyticsOpen(true)
+      setUserManagementOpen(false)
+      setLeadershipReportOpen(false)
+    })
   }
   const handleNavigateToWeeklySummary = () => {
-    setWeeklySummaryOpen(true)
-    setReportsAnalyticsOpen(false)
-    setUserManagementOpen(false)
-    setLeadershipReportOpen(false)
+    requestLeaveLeadershipReportIfDirty(() => {
+      setWeeklySummaryOpen(true)
+      setReportsAnalyticsOpen(false)
+      setUserManagementOpen(false)
+      setLeadershipReportOpen(false)
+    })
   }
   const handleNavigateToLeadershipReport = () => {
     setWeeklySummaryOpen(false)
     setReportsAnalyticsOpen(false)
     setUserManagementOpen(false)
     setLeadershipReportOpen(true)
+    // Defensive reset only — a freshly (re-)mounted Gate/Current reports its
+    // own real value within its first effect anyway.
+    setLeadershipReportDirty(false)
   }
 
   return (
     <div className="app-shell">
+      {pendingLeaveAction && (
+        <ConfirmDialog
+          message="You have unsaved changes. If you continue, those changes will be lost. Continue?"
+          onConfirm={() => {
+            const action = pendingLeaveAction
+            setPendingLeaveAction(null)
+            action()
+          }}
+          onCancel={() => setPendingLeaveAction(null)}
+        />
+      )}
+
       <Header displayName={displayName} roleLabel={roleLabel} onSignOut={handleSignOut} />
 
       {isAdmin && !myReportOpen ? (
@@ -695,13 +771,27 @@ function App() {
             onNavigateLeadershipReport={handleNavigateToLeadershipReport}
           >
             {weeklySummaryOpen ? (
-              <WeeklySummary week={adminWeek} weekOffset={adminWeekOffset} onBack={() => setWeeklySummaryOpen(false)} />
+              <WeeklySummary
+                week={weeklySummaryWeek}
+                weekOffset={weeklySummaryWeekOffset}
+                isCurrentWeek={weeklySummaryWeekOffset === 0}
+                onPreviousWeek={() => setWeeklySummaryWeekOffset((offset) => offset - 1)}
+                onNextWeek={() => setWeeklySummaryWeekOffset((offset) => Math.min(0, offset + 1))}
+                onBack={() => setWeeklySummaryOpen(false)}
+              />
             ) : leadershipReportOpen ? (
-              <LeadershipReport
+              // LeadershipReportGate owns its own lock/unlock state, in
+              // memory only. Because this whole branch only renders while
+              // leadershipReportOpen is true, navigating to any other
+              // destination unmounts it (destroying that state) and
+              // returning later mounts a fresh, locked instance — no
+              // router or extra reset wiring needed.
+              <LeadershipReportGate
                 week={leadershipReportWeek}
                 isCurrentWeek={leadershipReportWeekOffset === 0}
                 onPreviousWeek={() => setLeadershipReportWeekOffset((offset) => offset - 1)}
                 onNextWeek={() => setLeadershipReportWeekOffset((offset) => Math.min(0, offset + 1))}
+                onDirtyChange={setLeadershipReportDirty}
               />
             ) : reportsAnalyticsOpen ? (
               <ReportsAnalytics onBack={() => setReportsAnalyticsOpen(false)} />

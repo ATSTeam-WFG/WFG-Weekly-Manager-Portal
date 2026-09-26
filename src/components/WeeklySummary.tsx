@@ -13,10 +13,13 @@ import './WeeklySummary.css'
 interface WeeklySummaryProps {
   week: ReportingWeek
   weekOffset: number
+  isCurrentWeek: boolean
+  onPreviousWeek: () => void
+  onNextWeek: () => void
   onBack: () => void
 }
 
-export default function WeeklySummary({ week, weekOffset, onBack }: WeeklySummaryProps) {
+export default function WeeklySummary({ week, weekOffset, isCurrentWeek, onPreviousWeek, onNextWeek, onBack }: WeeklySummaryProps) {
   const [data, setData] = useState<WeeklySummaryData | null>(null)
   // Fetched purely to read each manager's own submitted_at — the exact same
   // call (and the exact same fetchManagersForWeek/fetchWeeklySummary pairing)
@@ -80,7 +83,32 @@ export default function WeeklySummary({ week, weekOffset, onBack }: WeeklySummar
       <div className="weekly-summary-heading">
         <div>
           <h1>Weekly Summary</h1>
-          <p className="weekly-summary-week">Week of {week.label}</p>
+          {/* Independent week navigation (own state in App.tsx, separate
+              from Admin Dashboard's adminWeekOffset) — mirrors Admin
+              Dashboard's own Previous/Next pattern exactly (same
+              Math.min(0, offset+1) future-week clamp, same
+              disabled={isCurrentWeek}), under new page-scoped classes per
+              this app's established convention (compare .adp-week-nav,
+              .lr-week-nav). Approved content/layout below this line is
+              otherwise unchanged. */}
+          <div className="ws-week-nav">
+            <button type="button" className="ws-week-nav-btn" onClick={onPreviousWeek} aria-label="Previous reporting week">
+              &lsaquo; Previous
+            </button>
+            <span className="ws-week-label">
+              Week of {week.label}
+              {isCurrentWeek && <span className="week-current-badge">Current</span>}
+            </span>
+            <button
+              type="button"
+              className="ws-week-nav-btn"
+              onClick={onNextWeek}
+              disabled={isCurrentWeek}
+              aria-label="Next reporting week"
+            >
+              Next &rsaquo;
+            </button>
+          </div>
         </div>
         {/* Production requirement: printing must include only the WFG
             letterhead and the consolidated ATS analysis — never the KPI row,

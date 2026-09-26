@@ -187,7 +187,12 @@ describe('App.tsx — the four destination components still render with their ex
     const childrenMatch = appSrc.match(/<AdminShell[\s\S]*?>\s*\n([\s\S]*?)\n\s*<\/AdminShell>/)
     assert.ok(childrenMatch, 'could not locate AdminShell\'s children block')
     const body = childrenMatch[1]
-    assert.match(body, /<WeeklySummary week=\{adminWeek\} weekOffset=\{adminWeekOffset\} onBack=\{\(\) => setWeeklySummaryOpen\(false\)\} \/>/)
+    // WeeklySummary gained its own independent week-nav props in a later
+    // phase (weeklySummaryWeek/weeklySummaryWeekOffset, no longer
+    // adminWeek/adminWeekOffset) — see weeklySummaryWeekNavWiring.test.ts
+    // for that change's own dedicated coverage; this check only needs to
+    // confirm it's still rendered inside AdminShell's children at all.
+    assert.match(body, /<WeeklySummary\s*\n\s*week=\{weeklySummaryWeek\}/)
     assert.match(body, /<ReportsAnalytics onBack=\{\(\) => setReportsAnalyticsOpen\(false\)\} \/>/)
     assert.match(body, /<UserManagement onBack=\{\(\) => setUserManagementOpen\(false\)\} currentUserEmail=\{userEmail\} \/>/)
     assert.match(body, /<AdminDashboard\s*\n\s*week=\{adminWeek\}/)

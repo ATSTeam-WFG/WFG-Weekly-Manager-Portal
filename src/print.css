@@ -55,7 +55,69 @@
      Screen behavior (including the real mobile responsive layout) is
      completely unaffected — this rule only exists inside @media print. */
   body.print-executive-analysis-only .admin-shell-menu-btn,
-  body.print-executive-analysis-only .admin-shell-sidebar-wrap {
+  body.print-executive-analysis-only .admin-shell-sidebar-wrap,
+  body.print-lr-ats-only .admin-shell-menu-btn,
+  body.print-lr-ats-only .admin-shell-sidebar-wrap,
+  body.print-lr-draft-only .admin-shell-menu-btn,
+  body.print-lr-draft-only .admin-shell-sidebar-wrap,
+  body.print-lr-previous-only .admin-shell-menu-btn,
+  body.print-lr-previous-only .admin-shell-sidebar-wrap,
+  body.print-lr-history-only .admin-shell-menu-btn,
+  body.print-lr-history-only .admin-shell-sidebar-wrap {
+    display: none !important;
+  }
+
+  /* Leadership Report — ATS Format Report only (see
+     LeadershipReportCurrent.tsx's printLeadershipReportAtsOnly). Hides the
+     page-level title/Current-History switch (.lr-header, a sibling of
+     .lr-current, outside it) and every direct child of .lr-current except
+     the letterhead and the always-mounted ATS-only mirror
+     (.lr-print-ats-only) — leaving only the letterhead and the current
+     week's ATS Format Report visible, regardless of which left reference
+     tab or right-column edit/view mode is currently active on screen. */
+  body.print-lr-ats-only .lr-header {
+    display: none !important;
+  }
+  body.print-lr-ats-only .lr-current > *:not(.print-header):not(.lr-print-ats-only) {
+    display: none !important;
+  }
+
+  /* Leadership Report — My Leadership Report only (see
+     printLeadershipReportDraftOnly). Same isolation, targeting the
+     always-mounted draft-only mirror (.lr-print-draft-only) instead, which
+     is wired directly to draftReport — the CURRENT displayed content
+     (including unsaved edits) — so it prints correctly even while the
+     on-screen pane is showing the edit form rather than AtsReportView. */
+  body.print-lr-draft-only .lr-header {
+    display: none !important;
+  }
+  body.print-lr-draft-only .lr-current > *:not(.print-header):not(.lr-print-draft-only) {
+    display: none !important;
+  }
+
+  /* Leadership Report — Previous Work only (see
+     LeadershipReportCurrent.tsx's printLeadershipReportPreviousOnly). Same
+     isolation, targeting the always-mounted previous-only mirror
+     (.lr-print-previous-only) — the caller's own saved history, fetched via
+     the existing owner-scoped RLS read (fetchPreviousLeadershipReportDraft),
+     never gated by an owner_id client-side. */
+  body.print-lr-previous-only .lr-header {
+    display: none !important;
+  }
+  body.print-lr-previous-only .lr-current > *:not(.print-header):not(.lr-print-previous-only) {
+    display: none !important;
+  }
+
+  /* Leadership Report — History only (see LeadershipReportHistory.tsx's
+     printLeadershipReportHistoryOnly, which reuses printWithScopedClass
+     imported directly from LeadershipReportCurrent.tsx — no second print
+     mechanism). History has its own root, .lr-history — mutually exclusive
+     with .lr-current, since LeadershipReport.tsx only ever mounts one of
+     the two at a time — so this isolation is scoped there instead. */
+  body.print-lr-history-only .lr-header {
+    display: none !important;
+  }
+  body.print-lr-history-only .lr-history > *:not(.print-header):not(.lr-print-history-only) {
     display: none !important;
   }
 
