@@ -65,8 +65,8 @@ describe('WeeklySummary.tsx — Previous/Current/Next week navigation, reusing t
     assert.equal(/generateReportingAnalysis|\/api\/executive-summary/.test(wsSrc), false)
   })
 
-  test('Print Weekly Summary is untouched — still the same unmodified, imported printExecutiveAnalysisOnly, which prints whatever week is currently rendered (no manager reports, per the existing print isolation)', () => {
+  test('Print Summary is untouched — still the same unmodified, imported printExecutiveAnalysisOnly (now wired as the PrintReportMenu\'s first option), which prints whatever week is currently rendered (no manager reports, per the existing print isolation)', () => {
     assert.match(wsSrc, /import ExecutiveAnalysisCard, \{ printExecutiveAnalysisOnly \} from '\.\/ExecutiveAnalysisCard'/)
-    assert.match(wsSrc, /onClick=\{printExecutiveAnalysisOnly\}/)
+    assert.match(wsSrc, /onSelect: printExecutiveAnalysisOnly/)
   })
 })

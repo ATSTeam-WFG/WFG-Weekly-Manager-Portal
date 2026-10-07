@@ -182,9 +182,8 @@ describe('Weekly Summary still prints only the consolidated ATS report (unchange
     )
   })
 
-  test('WeeklySummary.tsx is not modified by this phase — still exactly one print action, reusing printExecutiveAnalysisOnly', () => {
-    assert.match(weeklySummarySrc, /onClick=\{printExecutiveAnalysisOnly\}/)
-    assert.match(weeklySummarySrc, />\s*Print Weekly Summary\s*</)
+  test('WeeklySummary.tsx is not modified by this phase — Print Summary still reuses printExecutiveAnalysisOnly unchanged (now via PrintReportMenu, see consolidatedReportPrintWiring.test.ts)', () => {
+    assert.match(weeklySummarySrc, /onSelect: printExecutiveAnalysisOnly/)
   })
 })
 

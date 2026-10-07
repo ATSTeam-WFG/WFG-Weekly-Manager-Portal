@@ -1,0 +1,63 @@
+/* PrintReportMenu.tsx only — new, page-agnostic names so this can be
+   reused anywhere a two-choice print dropdown is needed without touching
+   any existing button style. */
+
+.print-report-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.print-report-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.print-report-menu-caret {
+  font-size: 10px;
+}
+
+.print-report-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 200px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.print-report-menu-item {
+  text-align: left;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--espresso);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.print-report-menu-item:hover,
+.print-report-menu-item:focus-visible {
+  background: var(--warm-cream);
+  color: var(--terracotta);
+  outline: none;
+}
+
+@media (max-width: 480px) {
+  .print-report-menu-list {
+    right: 0;
+    left: auto;
+    min-width: 180px;
+    max-width: calc(100vw - 48px);
+  }
+}

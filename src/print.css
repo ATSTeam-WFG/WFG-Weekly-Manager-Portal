@@ -146,4 +146,41 @@
   body.print-manager-reports-only .reports-analytics-page > *:not(.print-header):not(.ra-print-report-content) {
     display: none !important;
   }
+
+  /* Consolidated Report (Present Week Summary + Leadership Report) — see
+     WeeklySummary.tsx's printConsolidatedReportOnly. Same base isolation
+     as print-executive-analysis-only (hide every other direct child of
+     .weekly-summary), but additionally exempts two more elements: the new
+     "PRESENT WEEK SUMMARY" part-label (.ws-consolidated-part-label) and
+     the always-mounted Leadership Report mirror
+     (.ws-consolidated-leadership-mirror) — both hidden on screen
+     (WeeklySummary.css), revealed here. A page break separates the two
+     report sections. */
+  body.print-consolidated-report-only .weekly-summary > *:not(.print-header):not(.executive-summary-section):not(.ws-consolidated-part-label):not(.ws-consolidated-leadership-mirror) {
+    display: none !important;
+  }
+
+  body.print-consolidated-report-only .ws-consolidated-part-label,
+  body.print-consolidated-report-only .ws-consolidated-leadership-mirror {
+    display: block !important;
+  }
+
+  body.print-consolidated-report-only .ws-consolidated-leadership-mirror {
+    page-break-before: always;
+    margin-top: 0;
+  }
+
+  body.print-consolidated-report-only .ws-consolidated-part-label {
+    margin: 0 0 8px;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Chrome (menu button, sidebar) hidden for this mode too — same fix as
+     print-executive-analysis-only above, same root cause (print width
+     falls under AdminShell.css's mobile-nav breakpoint). */
+  body.print-consolidated-report-only .admin-shell-menu-btn,
+  body.print-consolidated-report-only .admin-shell-sidebar-wrap {
+    display: none !important;
+  }
 }

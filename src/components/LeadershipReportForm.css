@@ -1,0 +1,271 @@
+/* THE WFG WEEKLY LEADERSHIP UPDATE FORM — shared by both
+   LeadershipReportFormView.tsx (read-only) and LeadershipReportForm.tsx
+   (editable). New, page-agnostic names (lrf-*) so this can never affect
+   any other existing page, mirroring AtsReportView.css's own convention
+   exactly: same color variables, same card treatment (white surface,
+   soft-sand border, terracotta left accent, 12px radius), same fluid
+   (no fixed-width) sizing so this works full-width or in a side-by-side
+   column. */
+
+.lrf-report {
+  color: var(--espresso);
+}
+
+.lrf-banner {
+  background: var(--dark-charcoal);
+  color: var(--white);
+  border-radius: 12px;
+  padding: 16px 22px;
+  text-align: center;
+  margin-bottom: 18px;
+}
+
+.lrf-banner h1 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  letter-spacing: 0.02em;
+}
+
+.lrf-tagline {
+  font-size: 12px;
+  color: var(--soft-sand);
+  margin: 0;
+}
+
+.lrf-identity {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.lrf-identity > div {
+  flex: 1;
+}
+
+.lrf-identity-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-gray);
+  margin-bottom: 4px;
+}
+
+.lrf-identity-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dark-charcoal);
+  margin: 0;
+}
+
+.lrf-identity-input {
+  width: 100%;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dark-charcoal);
+  padding: 8px 10px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  font-family: inherit;
+}
+
+.lrf-section {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-left: 3px solid var(--terracotta);
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 16px;
+}
+
+.lrf-section-heading {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 8px;
+  letter-spacing: 0.01em;
+}
+
+.lrf-helper-question {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--muted-gray);
+  margin: 0 0 4px;
+  line-height: 1.5;
+}
+
+.lrf-supporting-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-gray);
+  margin: 0 0 10px;
+}
+
+.lrf-bullets {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--espresso);
+}
+
+.lrf-bullets li {
+  margin-bottom: 6px;
+}
+
+.lrf-section-empty {
+  font-size: 13px;
+  color: var(--muted-gray);
+  font-style: italic;
+  margin: 0;
+}
+
+.lrf-okr-notes {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--espresso);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.lrf-guidance {
+  font-size: 12px;
+  color: var(--muted-gray);
+  line-height: 1.6;
+  padding-top: 14px;
+  border-top: 1px solid var(--soft-sand);
+}
+
+.lrf-guidance p {
+  margin: 0 0 6px;
+}
+
+.lrf-guidance strong {
+  color: var(--dark-charcoal);
+}
+
+/* Editable form only — bullet add/remove/edit controls. */
+.lrf-bullet-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lrf-bullet-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.lrf-bullet-input {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--espresso);
+  padding: 8px 10px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.lrf-bullet-remove {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.lrf-bullet-add {
+  align-self: flex-start;
+}
+
+.lrf-okr-input {
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--espresso);
+  padding: 10px 12px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+@media (max-width: 768px) {
+  .lrf-identity {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .lrf-section {
+    padding: 14px 16px;
+  }
+
+  .lrf-bullet-row {
+    flex-direction: column;
+  }
+
+  .lrf-bullet-remove {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .lrf-banner {
+    padding: 14px 16px;
+  }
+
+  .lrf-banner h1 {
+    font-size: 16px;
+  }
+}
+
+/* Print-only compact layout — same philosophy as AtsReportView.css's own
+   print block: remove card decoration/spacing overhead, never shrink
+   body/bullet text below readable size, never hide or clip content. */
+@media print {
+  .lrf-banner {
+    background: none;
+    color: var(--dark-charcoal);
+    border: none;
+    border-bottom: 1px solid var(--soft-sand);
+    border-radius: 0;
+    padding: 0 0 8px;
+    margin-bottom: 10px;
+    text-align: left;
+  }
+
+  .lrf-tagline {
+    color: var(--muted-gray);
+  }
+
+  .lrf-identity {
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+  }
+
+  .lrf-section {
+    background: none;
+    border: none;
+    border-left: none;
+    border-radius: 0;
+    padding: 6px 0;
+    border-top: 1px solid var(--soft-sand);
+    margin-bottom: 0;
+  }
+
+  .lrf-report > .lrf-section:first-of-type {
+    border-top: none;
+  }
+
+  .lrf-bullets {
+    padding-left: 16px;
+  }
+
+  .lrf-bullets li {
+    margin-bottom: 2px;
+  }
+}

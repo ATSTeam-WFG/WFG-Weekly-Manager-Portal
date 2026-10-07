@@ -161,9 +161,9 @@ describe('Existing page-level print handlers were consolidated into per-page Exp
   // manager report (see weeklySummaryAtsFormatWiring.test.ts). The button's
   // own label stays "Print Weekly Summary" throughout — only its underlying
   // implementation changed.
-  test('WeeklySummary.tsx imports and calls the shared printExecutiveAnalysisOnly directly — no local printCompleteWeeklySummary function remains', () => {
+  test('WeeklySummary.tsx imports and calls the shared printExecutiveAnalysisOnly directly (now as the PrintReportMenu\'s "Print Summary" option) — no local printCompleteWeeklySummary function remains', () => {
     assert.match(weeklySummarySrc, /import ExecutiveAnalysisCard, \{ printExecutiveAnalysisOnly \} from '\.\/ExecutiveAnalysisCard'/)
-    assert.match(weeklySummarySrc, /onClick=\{printExecutiveAnalysisOnly\}/)
+    assert.match(weeklySummarySrc, /onSelect: printExecutiveAnalysisOnly/)
     assert.equal(/function printCompleteWeeklySummary\(/.test(weeklySummarySrc), false)
     assert.equal(/function printExecutiveAnalysisOnly\(/.test(weeklySummarySrc), false, 'the function itself must live only in ExecutiveAnalysisCard.tsx, not be redefined here')
   })

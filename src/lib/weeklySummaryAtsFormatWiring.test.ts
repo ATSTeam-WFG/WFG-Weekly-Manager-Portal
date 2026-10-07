@@ -133,10 +133,10 @@ describe('Print-scope fix — the six required proofs', () => {
     assert.match(weeklySummarySrc, /<img src=\{wfgLogo\} alt="WFG" className="print-logo" \/>/)
   })
 
-  test('5. There is still exactly one print action, labeled "Print Weekly Summary"', () => {
-    const printButtonMatches = [...weeklySummarySrc.matchAll(/className="btn btn-primary no-print"/g)]
-    assert.equal(printButtonMatches.length, 1, 'expected exactly one print-related button')
-    assert.match(weeklySummarySrc, />\s*Print Weekly Summary\s*</)
+  test('5. There is exactly one print entry point — the PrintReportMenu dropdown — never a second, independent print button', () => {
+    const menuMatches = [...weeklySummarySrc.matchAll(/<PrintReportMenu/g)]
+    assert.equal(menuMatches.length, 1, 'expected exactly one <PrintReportMenu />')
+    assert.equal(/className="btn btn-primary no-print"/.test(weeklySummarySrc), false, 'the old standalone print button no longer exists in this file')
   })
 
   test('6. Reports & Analytics print behavior is unchanged — ExportPrintMenu.tsx and ReportsAnalytics.tsx are untouched, and its half of the shared isolation rule is unchanged', () => {
@@ -149,8 +149,8 @@ describe('Print-scope fix — the six required proofs', () => {
   })
 })
 
-describe('Weekly Summary export/print: exactly one action — "Print Weekly Summary"', () => {
-  test('WeeklySummaryExportMenu.tsx/.css no longer exist — the two-choice dropdown was removed, not merely hidden', () => {
+describe('Weekly Summary export/print: a dropdown with exactly two choices — "Print Summary" and "Print Consolidated Report"', () => {
+  test('WeeklySummaryExportMenu.tsx/.css (the OLD, unrelated export dropdown from an earlier phase) still do not exist — the new PrintReportMenu is a distinct, dedicated component, not a resurrection of that one', () => {
     assert.equal(existsSync(path.join(componentsDir, 'WeeklySummaryExportMenu.tsx')), false)
     assert.equal(existsSync(path.join(componentsDir, 'WeeklySummaryExportMenu.css')), false)
   })
@@ -159,20 +159,22 @@ describe('Weekly Summary export/print: exactly one action — "Print Weekly Summ
     assert.equal(weeklySummarySrc.includes('WeeklySummaryExportMenu'), false)
   })
 
-  // Production requirement (print-scope fix): printing must include only
-  // the letterhead and the consolidated ATS analysis — never the KPI row or
-  // individual submitted manager reports. printExecutiveAnalysisOnly
-  // (imported unmodified from ExecutiveAnalysisCard.tsx) already implements
-  // exactly this isolation for Reports & Analytics; Weekly Summary's single
-  // button now calls it directly rather than a bare window.print(), while
-  // keeping its own label "Print Weekly Summary" — never "Executive
-  // Analysis only". This is reuse of an existing mechanism, not a second,
-  // separately-labeled print choice, and no dropdown/menu/popover is
-  // reintroduced.
-  test('WeeklySummary.tsx renders exactly one print action: a plain "Print Weekly Summary" button calling the reused printExecutiveAnalysisOnly, not a dropdown/menu/popover', () => {
-    assert.match(weeklySummarySrc, /<button type="button" className="btn btn-primary no-print" onClick=\{printExecutiveAnalysisOnly\}>\s*\n\s*Print Weekly Summary\s*\n\s*<\/button>/)
-    assert.equal(weeklySummarySrc.includes('role="menu"'), false)
-    assert.equal(weeklySummarySrc.includes('ws-export'), false)
+  // Production requirement: printing Part 1 (Print Summary) must still
+  // include only the letterhead and the consolidated ATS analysis — never
+  // the KPI row or individual submitted manager reports.
+  // printExecutiveAnalysisOnly (imported unmodified from
+  // ExecutiveAnalysisCard.tsx) already implements exactly this isolation;
+  // Print Summary calls it directly, byte-for-byte the same as the old
+  // single button used to. Print Consolidated Report is a second, new
+  // option — see consolidatedReportPrintWiring.test.ts for its own
+  // dedicated coverage.
+  test('WeeklySummary.tsx renders exactly one <PrintReportMenu> with exactly two options reading "Print Summary" and "Print Consolidated Report" — no numeric prefix on either', () => {
+    const match = weeklySummarySrc.match(/<PrintReportMenu\s*\n([\s\S]*?)\n\s*\/>/)
+    assert.ok(match, 'could not locate <PrintReportMenu />')
+    const optionsBlock = match[1]
+    assert.match(optionsBlock, /\{ label: 'Print Summary', onSelect: printExecutiveAnalysisOnly \}/)
+    assert.match(optionsBlock, /\{ label: 'Print Consolidated Report', onSelect: printConsolidatedReportOnly \}/)
+    assert.equal(/label: '\d/.test(optionsBlock), false, 'no option label may start with a digit/numeric prefix')
   })
 
   test('"Executive Analysis only" is never the visible label of any button/action in WeeklySummary.tsx — only ever mentioned in an explanatory comment', () => {

@@ -49,12 +49,14 @@ describe('LeadershipReportHistory.tsx — independent week navigation, future we
 })
 
 describe('LeadershipReportHistory.tsx — strictly read-only, no ATS substitution, no cross-user selection', () => {
-  test('renders the saved draft via the unmodified AtsReportView — no edit form, no onChange, imported anywhere in this file', () => {
+  test('renders the saved draft shape-aware: LeadershipReportFormView for the new shape, the unmodified AtsReportView as a legacy fallback — no edit form, no onChange, imported anywhere in this file', () => {
     assert.match(histSrc, /import AtsReportView from '\.\/AtsReportView'/)
-    assert.equal(/AtsTopicsEditForm|onChange=/.test(histSrc), false)
+    assert.match(histSrc, /import LeadershipReportFormView from '\.\/LeadershipReportFormView'/)
+    assert.match(histSrc, /isLeadershipReportContent\(savedDraft\.content\)/)
+    assert.equal(/LeadershipReportForm \{|onChange=/.test(histSrc), false)
   })
 
-  test('an absent saved report for the selected week shows the exact required empty-state copy — never substituting the ATS source', () => {
+  test('an absent saved report for the selected week shows the exact required empty-state copy — never substituting the Present Week Summary source', () => {
     assert.match(histSrc, /<p>No saved Leadership Report for this week\.<\/p>/)
     // The ATS source (fetchPersistedAnalysis/executiveSummaryService) is
     // never imported here at all — there is no path by which this view

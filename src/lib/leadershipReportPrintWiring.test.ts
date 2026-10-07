@@ -96,7 +96,7 @@ describe('Print / Download Report (My Leadership Report) — buttons and wiring'
   test('the button calls printLeadershipReportDraftOnly directly, disabled only when there is no draft content at all', () => {
     assert.match(
       curSrc,
-      /onClick=\{printLeadershipReportDraftOnly\}\s*\n\s*disabled=\{!draftReport\}/,
+      /onClick=\{printLeadershipReportDraftOnly\}\s*\n\s*disabled=\{!draftContent\}/,
     )
   })
 })
@@ -141,7 +141,7 @@ describe('Print / Download Report (History) — buttons and wiring', () => {
 })
 
 describe('The always-mounted print-only mirrors are wired to the correct data, independent of on-screen tab/mode/week-cursor', () => {
-  test('the ATS-only mirror renders sourceReport (the left ATS source) — never draftReport or previousDraft.content', () => {
+  test('the ATS-only mirror renders sourceReport (the left Present Week Summary source) — never draftContent or previousDraft.content', () => {
     const mirrorMatch = curSrc.match(/<div className="lr-print-ats-only">\s*\n\s*<AtsReportView report=\{([^}]+)\} periodLabel=\{periodLabel\} \/>/)
     assert.ok(mirrorMatch, 'could not locate the .lr-print-ats-only mirror')
     assert.equal(mirrorMatch[1], 'sourceReport')
@@ -158,59 +158,55 @@ describe('The always-mounted print-only mirrors are wired to the correct data, i
     assert.equal(/leftTab/.test(mirrorBlockMatch[0]), false, 'the print-only ATS mirror must not depend on leftTab')
   })
 
-  test('the ATS-only mirror never renders previousDraft or draftReport — Previous Work/My Leadership Report content can never leak into the ATS print output', () => {
+  test('the ATS-only mirror never renders previousDraft or draftContent — Previous Work/My Leadership Report content can never leak into the Present Week Summary print output', () => {
     const mirrorBlockMatch = curSrc.match(/\{hasSource && sourceIsAtsShaped && sourceReport && \([\s\S]*?\n {6}\)\}/)
     assert.ok(mirrorBlockMatch)
     assert.equal(/previousDraft/.test(mirrorBlockMatch[0]), false)
-    assert.equal(/\bdraftReport\b/.test(mirrorBlockMatch[0]), false)
+    assert.equal(/\bdraftContent\b/.test(mirrorBlockMatch[0]), false)
   })
 
-  test('the draft-only mirror renders draftReport — the CURRENT visible content (including unsaved edits) — never baselineContent or sourceReport', () => {
-    const mirrorMatch = curSrc.match(/<div className="lr-print-draft-only">\s*\n\s*<AtsReportView report=\{([^}]+)\} periodLabel=\{periodLabel\} \/>/)
+  test('the draft-only mirror renders draftContent via LeadershipReportFormView — the CURRENT visible content (including unsaved edits) — never baselineContent or sourceReport', () => {
+    const mirrorMatch = curSrc.match(/<div className="lr-print-draft-only">\s*\n\s*<LeadershipReportFormView content=\{([^}]+)\} \/>/)
     assert.ok(mirrorMatch, 'could not locate the .lr-print-draft-only mirror')
-    assert.equal(mirrorMatch[1], 'draftReport')
+    assert.equal(mirrorMatch[1], 'draftContent')
   })
 
   test('the draft-only mirror is rendered unconditionally with respect to mode — its JSX never reads or branches on mode, so it reflects unsaved edits made while mode is \'edit\' too', () => {
-    const mirrorBlockMatch = curSrc.match(/\{draftReport && \(\s*\n\s*<div className="lr-print-draft-only">[\s\S]*?\n {6}\)\}/)
+    const mirrorBlockMatch = curSrc.match(/\{draftContent && \(\s*\n\s*<div className="lr-print-draft-only">[\s\S]*?\n {6}\)\}/)
     assert.ok(mirrorBlockMatch, 'could not locate the draft-only mirror block')
     assert.equal(/\bmode\b/.test(mirrorBlockMatch[0]), false, 'the print-only draft mirror must not depend on mode')
   })
 
-  test('the previous-only mirror renders previousDraft.content/previousDraft.periodLabel — the caller\'s own previous saved report, never sourceReport or draftReport', () => {
-    const mirrorMatch = curSrc.match(/<div className="lr-print-previous-only">\s*\n\s*<AtsReportView report=\{([^}]+)\} periodLabel=\{([^}]+)\} \/>/)
-    assert.ok(mirrorMatch, 'could not locate the .lr-print-previous-only mirror')
-    assert.equal(mirrorMatch[1], 'previousDraft.content')
-    assert.equal(mirrorMatch[2], 'previousDraft.periodLabel')
+  test('the previous-only mirror is shape-aware: LeadershipReportFormView for the new shape, AtsReportView as a legacy fallback — the caller\'s own previous saved report, never sourceReport or draftContent', () => {
+    const newShapeMatch = curSrc.match(/\{previousDraft && isLeadershipReportContent\(previousDraft\.content\) && \(\s*\n\s*<div className="lr-print-previous-only">\s*\n\s*<LeadershipReportFormView content=\{previousDraft\.content\} \/>/)
+    assert.ok(newShapeMatch, 'could not locate the new-shape .lr-print-previous-only mirror')
+    const legacyMatch = curSrc.match(/\{previousDraft && !isLeadershipReportContent\(previousDraft\.content\) && \(\s*\n\s*<div className="lr-print-previous-only">\s*\n\s*<AtsReportView report=\{previousDraft\.content as AtsReport\} periodLabel=\{previousDraft\.periodLabel\} \/>/)
+    assert.ok(legacyMatch, 'could not locate the legacy-fallback .lr-print-previous-only mirror')
   })
 
-  test('the previous-only mirror is gated on previousDraft alone — an absent previous report renders nothing to print', () => {
-    assert.match(curSrc, /\{previousDraft && \(\s*\n\s*<div className="lr-print-previous-only">/)
+  test('the previous-only mirror is gated on previousDraft (plus a shape check) alone — an absent previous report renders nothing to print', () => {
+    assert.match(curSrc, /\{previousDraft && isLeadershipReportContent\(previousDraft\.content\) && \(\s*\n\s*<div className="lr-print-previous-only">/)
+    assert.match(curSrc, /\{previousDraft && !isLeadershipReportContent\(previousDraft\.content\) && \(\s*\n\s*<div className="lr-print-previous-only">/)
   })
 
-  test('the history-only mirror renders savedDraft.content/savedDraft.periodLabel — the selected historical week\'s actual saved report', () => {
-    const mirrorMatch = histSrc.match(/<div className="lr-print-history-only">\s*\n\s*<AtsReportView report=\{([^}]+)\} periodLabel=\{([^}]+)\} \/>/)
-    assert.ok(mirrorMatch, 'could not locate the .lr-print-history-only mirror')
-    assert.equal(mirrorMatch[1], 'savedDraft.content')
-    assert.equal(mirrorMatch[2], 'savedDraft.periodLabel')
+  test('the history-only mirror is shape-aware: LeadershipReportFormView for the new shape, AtsReportView as a legacy fallback — the selected historical week\'s actual saved report', () => {
+    const newShapeMatch = histSrc.match(/\{savedDraft && isLeadershipReportContent\(savedDraft\.content\) && \(\s*\n\s*<div className="lr-print-history-only">\s*\n\s*<LeadershipReportFormView content=\{savedDraft\.content\} \/>/)
+    assert.ok(newShapeMatch, 'could not locate the new-shape .lr-print-history-only mirror')
+    const legacyMatch = histSrc.match(/\{savedDraft && !isLeadershipReportContent\(savedDraft\.content\) && \(\s*\n\s*<div className="lr-print-history-only">\s*\n\s*<AtsReportView report=\{savedDraft\.content as AtsReport\} periodLabel=\{savedDraft\.periodLabel\} \/>/)
+    assert.ok(legacyMatch, 'could not locate the legacy-fallback .lr-print-history-only mirror')
   })
 
   test('the history-only mirror is gated on savedDraft alone, and both the mirror and the on-screen pane read the same savedDraft — so the selected historical week/date is always preserved for print', () => {
-    assert.match(histSrc, /\{savedDraft && \(\s*\n\s*<div className="lr-print-history-only">/)
-    const onScreenPaneMatch = histSrc.match(/<AtsReportView report=\{savedDraft\.content\} periodLabel=\{savedDraft\.periodLabel\} \/>/g)
-    assert.ok(onScreenPaneMatch && onScreenPaneMatch.length === 2, 'expected savedDraft to feed both the on-screen pane and the print-only mirror identically')
+    assert.match(histSrc, /\{savedDraft && isLeadershipReportContent\(savedDraft\.content\) && \(\s*\n\s*<div className="lr-print-history-only">/)
+    const onScreenPaneMatch = histSrc.match(/isLeadershipReportContent\(savedDraft\.content\)/g)
+    assert.ok(onScreenPaneMatch && onScreenPaneMatch.length >= 2, 'expected the same shape guard to drive both the on-screen pane and the print-only mirror')
   })
 
-  test('all four mirrors use a period label derived from their own report, so the printed week always matches the report actually being printed', () => {
-    assert.match(curSrc, /<div className="lr-print-ats-only">\s*\n\s*<AtsReportView report=\{sourceReport\} periodLabel=\{periodLabel\} \/>/)
-    assert.match(curSrc, /<div className="lr-print-draft-only">\s*\n\s*<AtsReportView report=\{draftReport\} periodLabel=\{periodLabel\} \/>/)
-    assert.match(curSrc, /<div className="lr-print-previous-only">\s*\n\s*<AtsReportView report=\{previousDraft\.content\} periodLabel=\{previousDraft\.periodLabel\} \/>/)
-    assert.match(histSrc, /<div className="lr-print-history-only">\s*\n\s*<AtsReportView report=\{savedDraft\.content\} periodLabel=\{savedDraft\.periodLabel\} \/>/)
-  })
-
-  test('none of the four mirrors redefines AtsReportView — all reuse the shared, unmodified component, so no duplicate report-formatting logic was introduced', () => {
+  test('none of the mirrors redefines AtsReportView or LeadershipReportFormView — all reuse the shared, unmodified components, so no duplicate report-formatting logic was introduced', () => {
     assert.equal(/function AtsReportView\(/.test(curSrc), false)
     assert.equal(/function AtsReportView\(/.test(histSrc), false)
+    assert.equal(/function LeadershipReportFormView\(/.test(curSrc), false)
+    assert.equal(/function LeadershipReportFormView\(/.test(histSrc), false)
   })
 })
 
@@ -381,8 +377,8 @@ describe('Previous Work and History remain read-only — the new print actions a
 })
 
 describe('Weekly Summary and Reports & Analytics print behavior remains completely unaffected', () => {
-  test('WeeklySummary.tsx still calls printExecutiveAnalysisOnly directly — untouched by any of the four Leadership Report print classes/functions', () => {
-    assert.match(weeklySummarySrc, /onClick=\{printExecutiveAnalysisOnly\}/)
+  test('WeeklySummary.tsx still calls printExecutiveAnalysisOnly directly (via PrintReportMenu\'s "Print Summary" option) — untouched by any of the four Leadership-Report-SPECIFIC print classes/functions (it does separately reuse the shared printWithScopedClass helper for its own new Consolidated Report option — see consolidatedReportPrintWiring.test.ts — which is not one of the four)', () => {
+    assert.match(weeklySummarySrc, /onSelect: printExecutiveAnalysisOnly/)
     assert.equal(
       /printLeadershipReportAtsOnly|printLeadershipReportDraftOnly|printLeadershipReportPreviousOnly|printLeadershipReportHistoryOnly|print-lr-ats-only|print-lr-draft-only|print-lr-previous-only|print-lr-history-only/.test(
         weeklySummarySrc,
