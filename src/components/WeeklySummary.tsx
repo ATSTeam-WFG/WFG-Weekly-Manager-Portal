@@ -4,25 +4,43 @@ import { fetchManagersForWeek, fetchWeeklySummary, type ManagerSummary, type Wee
 import { supabase } from '../lib/supabaseClient'
 import ExecutiveAnalysisCard, { printExecutiveAnalysisOnly } from './ExecutiveAnalysisCard'
 import SubmittedManagerCard from './SubmittedManagerCard'
+import ReportContentView from './ReportContentView'
+import AtsReportView from './AtsReportView'
 import PrintReportMenu from './PrintReportMenu'
 import { printWithScopedClass } from './LeadershipReportCurrent'
-import { fetchLeadershipReportDraft } from '../lib/leadershipReportDraftService'
-import { isLeadershipReportContent, type LeadershipReportContent } from '../lib/leadershipReportContent'
-import LeadershipReportFormView from './LeadershipReportFormView'
+import {
+  fetchPersistedAnalysis,
+  isAtsShapedSections,
+  REPORTING_ANALYSIS_SECTIONS,
+  type PersistedExecutiveAnalysis,
+  type ReportingAnalysisSections,
+} from '../lib/executiveSummaryService'
 import type { ReportingWeek } from '../utils/week'
+import { parseDateOnly } from '../utils/week'
 import { AI_EXECUTIVE_SUMMARY_ENABLED } from '../config/featureFlags'
 import './AdminDashboard.css'
 import './SubmittedReport.css'
 import './WeeklySummary.css'
 
-// Consolidated print — reveals the SAME .executive-summary-section Part 1
-// already renders, plus the always-mounted Leadership Report mirror below
-// (see print.css for the actual isolation rules). Reuses
-// printWithScopedClass directly from LeadershipReportCurrent.tsx — the
-// same cross-component toggle-body-class-around-window.print() mechanism
-// every other print action in this app already uses, never a second,
-// duplicated implementation.
+// Consolidated print — Present Week Summary (the KPI overview) + every
+// submitted manager's own weekly report + the Executive Summary, all for
+// the SAME selected week — see print.css for the actual isolation rules.
+// Leadership Report is NOT part of this report; it is a separate feature
+// with its own print actions (LeadershipReportCurrent.tsx/
+// LeadershipReportHistory.tsx). Reuses printWithScopedClass directly from
+// LeadershipReportCurrent.tsx — the same cross-component toggle-body-class-
+// around-window.print() mechanism every other print action in this app
+// already uses, never a second, duplicated implementation.
 const PRINT_CONSOLIDATED_REPORT_ONLY_CLASS = 'print-consolidated-report-only'
+
+// "Week Ending [date]" — the exact same wording/format
+// ExecutiveAnalysisCard.tsx's own (unexported) buildAtsPeriodLabel produces
+// for a 'weekly' period analysis, replicated here (not imported, since that
+// helper isn't exported) so this print-only Executive Summary reads
+// identically to the on-screen Executive Analysis card.
+function formatWeeklyAnalysisPeriodLabel(periodEndDate: string): string {
+  return `Week Ending ${parseDateOnly(periodEndDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+}
 
 function printConsolidatedReportOnly(): void {
   printWithScopedClass(PRINT_CONSOLIDATED_REPORT_ONLY_CLASS)
@@ -46,17 +64,16 @@ export default function WeeklySummary({ week, weekOffset, isCurrentWeek, onPrevi
   const [managers, setManagers] = useState<ManagerSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedManagerId, setExpandedManagerId] = useState<string | null>(null)
-  // For the consolidated print option's Leadership Report half only — read
-  // via the EXACT same RLS-scoped fetchLeadershipReportDraft every other
-  // Leadership Report read already uses, keyed to THIS SAME week prop, so
-  // it structurally cannot show a different week's (or another owner's)
-  // report. Never the previous week (fetchPreviousLeadershipReportDraft is
-  // not imported here) — only ever this page's own currently selected
-  // week. A legacy (pre-rebuild) shaped draft is treated the same as "none
-  // saved" below (null) rather than rendered via the old viewer, since the
-  // new consolidated report's Leadership Report half is specifically the
-  // new WFG Weekly Leadership Update presentation.
-  const [leadershipDraftContent, setLeadershipDraftContent] = useState<LeadershipReportContent | null>(null)
+  // For the consolidated print option's Executive Summary part only — a
+  // plain read via the SAME fetchPersistedAnalysis every other Executive
+  // Analysis consumer uses (ExecutiveAnalysisCard.tsx,
+  // LeadershipReportCurrent.tsx), keyed to THIS SAME week prop. A separate
+  // read from the on-screen ExecutiveAnalysisCard instance above (which
+  // fetches internally) rather than sharing its state, so this file never
+  // has to reach into that component's internals — both reads are
+  // read-only and hit the same existing table/RPC, never a write, and
+  // never trigger generation merely by existing.
+  const [printAnalysis, setPrintAnalysis] = useState<PersistedExecutiveAnalysis | null>(null)
 
   useEffect(() => {
     let active = true
@@ -79,11 +96,11 @@ export default function WeeklySummary({ week, weekOffset, isCurrentWeek, onPrevi
 
   useEffect(() => {
     let active = true
-    setLeadershipDraftContent(null)
+    setPrintAnalysis(null)
 
-    fetchLeadershipReportDraft(week.weekStartDate).then((draft) => {
+    fetchPersistedAnalysis('weekly', week.weekStartDate).then((analysis) => {
       if (!active) return
-      setLeadershipDraftContent(draft && isLeadershipReportContent(draft.content) ? draft.content : null)
+      setPrintAnalysis(analysis)
     })
 
     return () => {
@@ -158,12 +175,13 @@ export default function WeeklySummary({ week, weekOffset, isCurrentWeek, onPrevi
             unchanged) — the KPI row and individual submitted manager
             reports are still excluded, and this option's output is
             byte-for-byte what the old single "Print Present Week Summary"
-            button already produced. Print Consolidated Report is the new
-            option: Part 1 is this SAME executive-summary-section content,
-            Part 2 is this same week's Leadership Report (read-only,
-            graceful "No Leadership Report available" if none exists) — see
-            print.css's print-consolidated-report-only rule and the
-            always-mounted mirror below. */}
+            button already produced. Print Consolidated Report is the
+            expanded three-part document for this SAME selected week: Part 1
+            Present Week Summary (the KPI overview below), Part 2 every
+            submitted manager's own report, Part 3 the Executive Summary —
+            Leadership Report is a separate feature and is never part of
+            this printout. See print.css's print-consolidated-report-only
+            rule and the always-mounted print-only blocks below. */}
         <PrintReportMenu
           label="Print"
           options={[
@@ -177,11 +195,18 @@ export default function WeeklySummary({ week, weekOffset, isCurrentWeek, onPrevi
         <div className="admin-loading">Loading summary…</div>
       ) : data ? (
         <>
+          {/* Print-only — hidden on screen (WeeklySummary.css), shown only
+              under print-consolidated-report-only (print.css) as the
+              consolidated report's Part 1 label. */}
+          <p className="ws-eyebrow ws-consolidated-part-label">Present Week Summary</p>
           {/* Four KPI cards, visually consistent with Reports & Analytics'
               own .ra-kpi-row/.ra-kpi-card — but under new, Weekly-Summary-
               scoped class names (ws-kpi-*) rather than reusing .admin-stat-card
               (still relied on, unmodified, by AdminDashboard.tsx) or
-              .ra-kpi-card (Reports & Analytics only). */}
+              .ra-kpi-card (Reports & Analytics only). This is also exactly
+              Part 1 ("Present Week Summary") of the consolidated print —
+              the KPI overview, not the Executive Analysis card (which is
+              Part 3, "Executive Summary", printed separately below). */}
           <div className="ws-kpi-row">
             <div className="ws-kpi-card ws-kpi-card-total">
               <span className="ws-kpi-icon" aria-hidden="true">
@@ -234,16 +259,15 @@ export default function WeeklySummary({ week, weekOffset, isCurrentWeek, onPrevi
                   introduced, and the card's own internal heading/behavior
                   are unchanged. */}
               <p className="ws-eyebrow">Consolidated Weekly Summary</p>
-              {/* Print-only — hidden on screen (WeeklySummary.css), shown
-                  only under print-consolidated-report-only (print.css) as
-                  the "PART 1" section label distinguishing this report from
-                  the Leadership Report mirror below, since AtsReportView's
-                  own heading ("WFG Weekly Leadership Update") is the exact
-                  same generic document title both reports share — without
-                  this label the two parts would print back-to-back with
-                  what looks like a duplicate title. */}
-              <p className="ws-eyebrow ws-consolidated-part-label">Present Week Summary</p>
-              {/* showPrintButton=false hides this card's own standalone
+              {/* This on-screen instance of ExecutiveAnalysisCard is never
+                  itself part of the consolidated print (see print.css —
+                  .executive-summary-section is no longer exempted under
+                  print-consolidated-report-only). Printing's own Part 3
+                  "Executive Summary" is the separate, always-mounted
+                  print-only block near the end of this file, fetched
+                  independently via printAnalysis so it never depends on
+                  this card's on-screen mode/edit state. showPrintButton=false
+                  hides this card's own standalone
                   "Print Executive Analysis" button — the single "Print
                   Weekly Summary" action above already prints the complete
                   page, including this card's current content. The prop
@@ -296,21 +320,57 @@ export default function WeeklySummary({ week, weekOffset, isCurrentWeek, onPrevi
       )}
 
       {/* Always-mounted, hidden on screen (WeeklySummary.css) — the
-          Consolidated Report's "PART 2" (Leadership Report), revealed only
-          under print-consolidated-report-only (print.css), with a page
-          break before it. Wired to leadershipDraftContent, which is fetched
-          above for THIS SAME week.weekStartDate only — never the previous
-          week, never another owner's row. Reuses LeadershipReportFormView
-          unmodified: no edit controls, no textareas, no Add/Remove/Save
-          buttons can ever appear here, because this component never
-          imports LeadershipReportForm (the editable one) at all. A missing
-          or legacy-shaped draft shows a plain, honest message instead of
-          silently substituting different content or crashing. */}
-      <div className="ws-consolidated-leadership-mirror">
-        {leadershipDraftContent ? (
-          <LeadershipReportFormView content={leadershipDraftContent} />
+          Consolidated Report's Part 2 (every submitted manager's own
+          report for THIS SAME week), revealed only under
+          print-consolidated-report-only (print.css), with a page break
+          before it. Built from the SAME data.entries fetchWeeklySummary
+          already loaded above — no second fetch, no duplicate stored data.
+          Each manager renders via ReportContentView, the same shared
+          read-only renderer SubmittedManagerCard/HistoricalReportView/
+          ManagerReportView already use — purely static content, no edit
+          controls, no buttons of any kind. If there are no submitted
+          reports for this week, a plain message is shown instead; this
+          mirrors the SAME data.entries check the on-screen list above
+          already makes, so the two can never disagree about whether any
+          manager submitted. */}
+      <div className="ws-consolidated-manager-reports">
+        <p className="ws-eyebrow ws-consolidated-part-label">Manager Reports</p>
+        {!data || data.entries.length === 0 ? (
+          <p className="ws-consolidated-empty-note">No submitted manager reports are available for this week.</p>
         ) : (
-          <p className="ws-consolidated-leadership-missing">No Leadership Report available for this week.</p>
+          data.entries.map((entry) => (
+            <div key={entry.managerId} className="ws-consolidated-manager-report">
+              <h3 className="ws-consolidated-manager-name">{entry.managerName}</h3>
+              <ReportContentView content={entry.content} />
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Consolidated Report's Part 3 (Executive Summary) — the existing
+          Executive Analysis content for THIS SAME week, via a separate
+          read-only fetch (printAnalysis, above) independent of the
+          on-screen ExecutiveAnalysisCard instance's own state/mode, so
+          printing never depends on whether that card is currently
+          collapsed/expanded/mid-edit on screen. Renders the exact same two
+          shapes ExecutiveAnalysisCard itself renders (ATS via AtsReportView,
+          legacy via the shared REPORTING_ANALYSIS_SECTIONS titles) — never
+          a third, independently-maintained rendering. This fetch is
+          strictly read-only: it can never create or trigger generation of
+          an analysis merely by existing or being printed. */}
+      <div className="ws-consolidated-executive-summary">
+        <p className="ws-eyebrow ws-consolidated-part-label">Executive Summary</p>
+        {!printAnalysis ? (
+          <p className="ws-consolidated-empty-note">No Executive Summary is available for this week.</p>
+        ) : isAtsShapedSections(printAnalysis.sections) ? (
+          <AtsReportView report={printAnalysis.sections} periodLabel={formatWeeklyAnalysisPeriodLabel(printAnalysis.periodEndDate)} />
+        ) : (
+          REPORTING_ANALYSIS_SECTIONS.map((section) => (
+            <div className="executive-summary-block" key={section.key}>
+              <h3>{section.title}</h3>
+              <p className="report-readonly-text">{(printAnalysis.sections as ReportingAnalysisSections)[section.key]}</p>
+            </div>
+          ))
         )}
       </div>
     </div>

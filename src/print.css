@@ -147,25 +147,42 @@
     display: none !important;
   }
 
-  /* Consolidated Report (Present Week Summary + Leadership Report) — see
-     WeeklySummary.tsx's printConsolidatedReportOnly. Same base isolation
-     as print-executive-analysis-only (hide every other direct child of
-     .weekly-summary), but additionally exempts two more elements: the new
-     "PRESENT WEEK SUMMARY" part-label (.ws-consolidated-part-label) and
-     the always-mounted Leadership Report mirror
-     (.ws-consolidated-leadership-mirror) — both hidden on screen
-     (WeeklySummary.css), revealed here. A page break separates the two
-     report sections. */
-  body.print-consolidated-report-only .weekly-summary > *:not(.print-header):not(.executive-summary-section):not(.ws-consolidated-part-label):not(.ws-consolidated-leadership-mirror) {
+  /* Consolidated Report — Present Week Summary (KPI overview) + every
+     submitted manager's own report + the Executive Summary, all for the
+     SAME selected week. See WeeklySummary.tsx's printConsolidatedReportOnly.
+     Leadership Report is explicitly NOT part of this — it is a separate
+     feature with its own print actions, and .executive-summary-section
+     (the on-screen Executive Analysis card, used for Print Summary) is
+     deliberately NOT exempted here either, since Part 3 below is a
+     separate, independently-fetched print-only rendering of the same
+     underlying analysis, kept in the correct Part 1 -> 2 -> 3 order
+     regardless of where the on-screen card happens to sit in the page.
+     Same base isolation pattern as print-executive-analysis-only (hide
+     every other direct child of .weekly-summary), exempting: the KPI row
+     (Part 1) and its print-only label, the always-mounted manager-reports
+     block (Part 2), and the always-mounted Executive Summary block
+     (Part 3) — all three hidden on screen (WeeklySummary.css), revealed
+     here, in that DOM order. */
+  body.print-consolidated-report-only .weekly-summary > *:not(.print-header):not(.ws-consolidated-part-label):not(.ws-kpi-row):not(.ws-consolidated-manager-reports):not(.ws-consolidated-executive-summary) {
     display: none !important;
   }
 
   body.print-consolidated-report-only .ws-consolidated-part-label,
-  body.print-consolidated-report-only .ws-consolidated-leadership-mirror {
+  body.print-consolidated-report-only .ws-kpi-row,
+  body.print-consolidated-report-only .ws-consolidated-manager-reports,
+  body.print-consolidated-report-only .ws-consolidated-executive-summary {
     display: block !important;
   }
 
-  body.print-consolidated-report-only .ws-consolidated-leadership-mirror {
+  /* .ws-kpi-row is a CSS grid on screen (WeeklySummary.css) — overriding
+     display to block above would otherwise collapse its 4-column layout
+     in print, so restore grid specifically for this mode. */
+  body.print-consolidated-report-only .ws-kpi-row {
+    display: grid !important;
+  }
+
+  body.print-consolidated-report-only .ws-consolidated-manager-reports,
+  body.print-consolidated-report-only .ws-consolidated-executive-summary {
     page-break-before: always;
     margin-top: 0;
   }
@@ -174,6 +191,17 @@
     margin: 0 0 8px;
     break-after: avoid;
     page-break-after: avoid;
+  }
+
+  /* Keeps a manager's own report from starting a fresh page just for its
+     heading, where avoidable — a plain readability nicety, not load-bearing. */
+  body.print-consolidated-report-only .ws-consolidated-manager-report {
+    break-inside: avoid-page;
+    margin-bottom: 20px;
+  }
+
+  body.print-consolidated-report-only .ws-consolidated-manager-report:first-of-type {
+    margin-top: 0;
   }
 
   /* Chrome (menu button, sidebar) hidden for this mode too — same fix as
