@@ -123,7 +123,7 @@ export default function AdminSidebar({
   const groups: { key: AdminDestination; label: string; onClick: () => void; icon: ReactNode }[][] = [
     [{ key: 'dashboard', label: 'Admin Dashboard', onClick: onNavigateDashboard, icon: <DashboardIcon /> }],
     [
-      { key: 'weekly-summary', label: 'Weekly Summary', onClick: onNavigateWeeklySummary, icon: <DocumentIcon /> },
+      { key: 'weekly-summary', label: 'Present Week Summary', onClick: onNavigateWeeklySummary, icon: <DocumentIcon /> },
       { key: 'leadership-report', label: 'Leadership Report', onClick: onNavigateLeadershipReport, icon: <LeadershipReportIcon /> },
     ],
     [

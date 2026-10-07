@@ -65,6 +65,21 @@
   display: none;
 }
 
+/* Consolidated Report print-only elements — see print.css for the reveal
+   rules under body.print-consolidated-report-only. Unconditionally
+   display:none outside @media print, so neither has any on-screen
+   effect. */
+.ws-consolidated-part-label,
+.ws-consolidated-leadership-mirror {
+  display: none;
+}
+
+.ws-consolidated-leadership-missing {
+  font-size: 13px;
+  color: var(--muted-gray);
+  font-style: italic;
+}
+
 .weekly-summary-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

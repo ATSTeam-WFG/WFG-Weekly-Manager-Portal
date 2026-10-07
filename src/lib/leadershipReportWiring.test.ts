@@ -156,7 +156,7 @@ describe('LeadershipReport.tsx has no "Back to Admin Dashboard" link — the one
 describe('LeadershipReport.tsx — thin shell: title + Current/History switch only', () => {
   test('the page title and subtitle match exactly what was approved', () => {
     assert.match(lrSrc, /<h1>Leadership Report<\/h1>/)
-    assert.match(lrSrc, /<p className="lr-header-subtitle">Review the ATS source and prepare the final leadership report\.<\/p>/)
+    assert.match(lrSrc, /<p className="lr-header-subtitle">Review the Present Week Summary source and prepare the final leadership report\.<\/p>/)
   })
 
   test('view defaults to Current, and the switch offers exactly Current/History', () => {

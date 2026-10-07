@@ -46,7 +46,7 @@ describe('AdminSidebar.tsx — exactly five destinations, no more, no fewer', ()
     assert.ok(groupsMatch, 'could not locate the groups array')
     const body = groupsMatch[1]
     assert.match(body, /key: 'dashboard', label: 'Admin Dashboard'/)
-    assert.match(body, /key: 'weekly-summary', label: 'Weekly Summary'/)
+    assert.match(body, /key: 'weekly-summary', label: 'Present Week Summary'/)
     assert.match(body, /key: 'leadership-report', label: 'Leadership Report'/)
     assert.match(body, /key: 'user-management', label: 'User Management'/)
     assert.match(body, /key: 'reports-analytics', label: 'Reports & Analytics'/)

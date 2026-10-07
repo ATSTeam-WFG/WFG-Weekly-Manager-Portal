@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient'
-import type { AtsReport } from './atsReport'
+import type { LeadershipReportContent } from './leadershipReportContent'
 
 // The client-side counterpart to
 // supabase/migrations/20260924_leadership_report_drafts.sql. Reads go
@@ -10,6 +10,12 @@ import type { AtsReport } from './atsReport'
 // migration's own table grants (authenticated has SELECT only; the RPC is
 // SECURITY DEFINER and performs its own is_admin() check).
 
+// `content` is typed `unknown`, not `LeadershipReportContent`, because a
+// row can also be a HISTORICAL draft saved before the Word-template
+// rebuild (the old AtsReport {openingParagraph, topics} shape) — callers
+// must runtime-check it with isLeadershipReportContent() (see
+// leadershipReportContent.ts) before treating it as the new shape, so a
+// legacy row can be handled gracefully instead of crashing.
 export interface LeadershipReportDraft {
   id: string
   periodStartDate: string
@@ -17,7 +23,7 @@ export interface LeadershipReportDraft {
   periodLabel: string
   sourceAnalysisId: string
   sourceAtsFingerprint: string
-  content: AtsReport
+  content: unknown
   createdAt: string
   createdBy: string
   updatedAt: string
@@ -31,7 +37,7 @@ interface LeadershipReportDraftRow {
   period_label: string
   source_analysis_id: string
   source_ats_fingerprint: string
-  content: AtsReport
+  content: unknown
   created_at: string
   created_by: string
   updated_at: string
@@ -146,7 +152,10 @@ export interface SaveLeadershipReportDraftParams {
   periodLabel: string
   sourceAnalysisId: string
   sourceAtsFingerprint: string
-  content: AtsReport
+  // Every NEW save always uses the current Word-template shape — only
+  // historical rows (read via fetch*, never written here) can be the old
+  // AtsReport shape.
+  content: LeadershipReportContent
 }
 
 // The only write path for this table. created_by/updated_by/timestamps are

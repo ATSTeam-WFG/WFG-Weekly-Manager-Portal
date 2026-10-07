@@ -127,6 +127,6 @@ describe('LeadershipReportCurrent.tsx — a successful Save Draft clears the nav
     const tryEnd = curSrc.indexOf('} catch', tryStart)
     const tryBody = curSrc.slice(tryStart, tryEnd)
     assert.match(tryBody, /setBaselineContent\(saved\.content\)/)
-    assert.match(curSrc, /const isDirty = draftReport !== null && baselineContent !== null && JSON\.stringify\(draftReport\) !== JSON\.stringify\(baselineContent\)/)
+    assert.match(curSrc, /const isDirty = draftContent !== null && baselineContent !== null && JSON\.stringify\(draftContent\) !== JSON\.stringify\(baselineContent\)/)
   })
 })

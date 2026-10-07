@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import wfgLogo from '../assets/wfg-logo.png'
 import { fetchLeadershipReportDraft, type LeadershipReportDraft } from '../lib/leadershipReportDraftService'
+import { isLeadershipReportContent } from '../lib/leadershipReportContent'
+import type { AtsReport } from '../lib/atsReport'
 import { getReportingWeekByOffset } from '../utils/week'
 import AtsReportView from './AtsReportView'
+import LeadershipReportFormView from './LeadershipReportFormView'
 import { printWithScopedClass } from './LeadershipReportCurrent'
 import './LeadershipReport.css'
 
@@ -120,8 +123,14 @@ export default function LeadershipReportHistory() {
             <div className="lr-empty-state">
               <p>No saved Leadership Report for this week.</p>
             </div>
+          ) : isLeadershipReportContent(savedDraft.content) ? (
+            <LeadershipReportFormView content={savedDraft.content} />
           ) : (
-            <AtsReportView report={savedDraft.content} periodLabel={savedDraft.periodLabel} />
+            // Legacy (pre-rebuild) shape — still shown via the original
+            // ATS-shaped viewer rather than hidden or crashed on, since
+            // this historical row is never modified or reshaped by this
+            // app.
+            <AtsReportView report={savedDraft.content as AtsReport} periodLabel={savedDraft.periodLabel} />
           )}
         </div>
       </div>
@@ -130,11 +139,15 @@ export default function LeadershipReportHistory() {
           LeadershipReport.css), revealed only while
           body.print-lr-history-only is active. Wired directly to
           savedDraft rather than reusing the on-screen pane above, matching
-          the same convention used in LeadershipReportCurrent.tsx. Reuses
-          AtsReportView unmodified — no duplicate report-formatting logic. */}
-      {savedDraft && (
+          the same convention used in LeadershipReportCurrent.tsx. */}
+      {savedDraft && isLeadershipReportContent(savedDraft.content) && (
         <div className="lr-print-history-only">
-          <AtsReportView report={savedDraft.content} periodLabel={savedDraft.periodLabel} />
+          <LeadershipReportFormView content={savedDraft.content} />
+        </div>
+      )}
+      {savedDraft && !isLeadershipReportContent(savedDraft.content) && (
+        <div className="lr-print-history-only">
+          <AtsReportView report={savedDraft.content as AtsReport} periodLabel={savedDraft.periodLabel} />
         </div>
       )}
     </div>

@@ -80,7 +80,7 @@ export default function LeadershipReport({ week, isCurrentWeek, onPreviousWeek, 
       <div className="lr-header">
         <div className="lr-header-titles">
           <h1>Leadership Report</h1>
-          <p className="lr-header-subtitle">Review the ATS source and prepare the final leadership report.</p>
+          <p className="lr-header-subtitle">Review the Present Week Summary source and prepare the final leadership report.</p>
         </div>
 
         <div className="lr-view-switch" role="tablist" aria-label="Leadership Report view">

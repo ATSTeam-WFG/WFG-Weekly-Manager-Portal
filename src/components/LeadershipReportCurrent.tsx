@@ -10,10 +10,19 @@ import {
 } from '../lib/leadershipReportDraftService'
 import { computeAtsContentFingerprint } from '../lib/atsContentFingerprint'
 import type { AtsReport } from '../lib/atsReport'
+import {
+  isLeadershipReportContent,
+  blankLeadershipReportContent,
+  deepCopyLeadershipReportContent,
+  formatLeadershipReportWeekEnding,
+  type LeadershipReportContent,
+} from '../lib/leadershipReportContent'
 import type { ReportingWeek } from '../utils/week'
 import { parseDateOnly } from '../utils/week'
+import { getReportingWeekFromStartDate } from '../utils/week'
 import AtsReportView from './AtsReportView'
-import AtsTopicsEditForm from './AtsTopicsEditForm'
+import LeadershipReportForm from './LeadershipReportForm'
+import LeadershipReportFormView from './LeadershipReportFormView'
 import ConfirmDialog from './ConfirmDialog'
 import './LeadershipReport.css'
 
@@ -107,34 +116,28 @@ function weekEndingLabel(periodEndDate: string): string {
   return `Week Ending ${parseDateOnly(periodEndDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
 }
 
-// A genuine deep copy — new topic objects and new bullet arrays, never a
-// shared reference back to the source ATS analysis. This is what guarantees
-// "editing the right-side local copy must never modify the left-side ATS
-// report": there is no path, even an indirect one, from a mutation of this
-// copy back to the object fetchPersistedAnalysis returned.
-function deepCopyAtsReport(report: AtsReport): AtsReport {
-  return {
-    openingParagraph: report.openingParagraph,
-    topics: report.topics.map((topic) => ({
-      title: topic.title,
-      statusSummary: topic.statusSummary,
-      bullets: [...topic.bullets],
-      next: topic.next,
-    })),
-  }
-}
-
 // The Current workspace: independent week navigation, a left reference
-// column (ATS Format / Previous Work tabs) and a right editable column (My
-// Leadership Report). fetchPersistedAnalysis is still the same, unmodified
-// read this app already uses for Executive Analysis — the left ATS tab's
-// data path is completely untouched. Loading a saved draft (when one
-// exists) takes priority over reseeding from the current ATS source, so an
-// Admin's prior edits are never silently discarded by later ATS
-// regeneration; no database row is created merely by viewing/unlocking/
-// changing week — the first row is created only when Save Draft is
-// explicitly clicked (handleSaveDraft below, the only call site of
-// saveLeadershipReportDraft anywhere in this component).
+// column (Present Week Summary / Previous Work tabs) and a right editable
+// column (My Leadership Report, now the WFG Weekly Leadership Update form —
+// see leadershipReportContent.ts). fetchPersistedAnalysis is still the
+// same, unmodified read this app already uses for Executive Analysis — the
+// left Present Week Summary tab's data path is completely untouched.
+// Loading a saved draft (when one exists) takes priority over reseeding —
+// so an Admin's prior edits are never silently discarded; no database row
+// is created merely by viewing/unlocking/changing week — the first row is
+// created only when Save Draft is explicitly clicked (handleSaveDraft
+// below, the only call site of saveLeadershipReportDraft anywhere in this
+// component).
+//
+// COPY-FORWARD: when no draft is saved yet for the viewed week, this seeds
+// the right-side draft from the CALLER'S OWN immediately-previous saved
+// Leadership Report (deep-copied, never a shared reference), with
+// weekEnding always overridden to the viewed week's own date. If there is
+// no previous draft, or it's in the pre-rebuild legacy shape (see
+// isLeadershipReportContent), it falls back to a blank template instead —
+// never fabricating content, never reaching into a different week's data
+// beyond the one immediately-previous read. This never writes anything;
+// the new content only becomes a real row once Save Draft is clicked.
 export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviousWeek, onNextWeek, onDirtyChange }: LeadershipReportCurrentProps) {
   const [loading, setLoading] = useState(true)
   const [periodLabel, setPeriodLabel] = useState('')
@@ -143,11 +146,16 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
   const [sourceIsAtsShaped, setSourceIsAtsShaped] = useState(false)
   const [sourceReport, setSourceReport] = useState<AtsReport | null>(null)
   const [sourceAnalysisId, setSourceAnalysisId] = useState<string | null>(null)
-  const [draftReport, setDraftReport] = useState<AtsReport | null>(null)
+  const [draftContent, setDraftContent] = useState<LeadershipReportContent | null>(null)
+  // True only when a draft row IS saved for this week but in the legacy
+  // (pre-rebuild) shape — distinguishes "nothing to show yet" from "there
+  // is something, but it can't be edited in the new form" for the empty
+  // state below.
+  const [draftHasLegacyShape, setDraftHasLegacyShape] = useState(false)
   // The content exactly as last loaded or last saved — compared against
-  // draftReport to know whether there's anything unsaved to warn about
+  // draftContent to know whether there's anything unsaved to warn about
   // before discarding it. Never itself shown; a plain comparison baseline.
-  const [baselineContent, setBaselineContent] = useState<AtsReport | null>(null)
+  const [baselineContent, setBaselineContent] = useState<LeadershipReportContent | null>(null)
   const [previousDraft, setPreviousDraft] = useState<LeadershipReportDraft | null>(null)
   const [leftTab, setLeftTab] = useState<LeftTab>('ats')
   const [mode, setMode] = useState<Mode>('view')
@@ -162,17 +170,20 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
     setSaveStatus('idle')
     setSaveError(null)
     setPreviousDraft(null)
+    setDraftHasLegacyShape(false)
 
-    // Independent of whether this week's ATS source exists — "my previous
-    // report" is about the CALLER's own saved history, not this week's
-    // data. RLS (owner_id = auth.uid()) is what makes this "mine"; no
-    // owner_id is ever passed or filtered here client-side.
-    fetchPreviousLeadershipReportDraft(week.weekStartDate).then((previous) => {
+    async function load() {
+      // Independent of whether this week's Present Week Summary source
+      // exists — "my previous report" is about the CALLER's own saved
+      // history, not this week's data. RLS (owner_id = auth.uid()) is what
+      // makes this "mine"; no owner_id is ever passed or filtered here
+      // client-side. Fetched before the source below so copy-forward can
+      // reuse this one read rather than fetching it twice.
+      const previous = await fetchPreviousLeadershipReportDraft(week.weekStartDate)
       if (!active) return
       setPreviousDraft(previous)
-    })
 
-    fetchPersistedAnalysis('weekly', week.weekStartDate).then(async (persisted) => {
+      const persisted = await fetchPersistedAnalysis('weekly', week.weekStartDate)
       if (!active) return
 
       setHasSource(persisted !== null)
@@ -191,33 +202,54 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
         const savedDraft = await fetchLeadershipReportDraft(week.weekStartDate)
         if (!active) return
 
-        if (savedDraft) {
-          setDraftReport(savedDraft.content)
+        if (savedDraft && isLeadershipReportContent(savedDraft.content)) {
+          // A draft already exists for THIS week — load it exactly as
+          // saved. Never recopy the previous week over it, regardless of
+          // whether a previous draft also exists.
+          setDraftContent(savedDraft.content)
           setBaselineContent(savedDraft.content)
+        } else if (savedDraft) {
+          // A draft row exists but predates the Word-template rebuild —
+          // never guess a mapping into the new shape; surface it as
+          // unavailable to edit here (still viewable via Previous
+          // Work/History, which both render either shape).
+          setDraftHasLegacyShape(true)
+          setDraftContent(null)
+          setBaselineContent(null)
         } else {
-          // Deep copy, computed once per fetch — never re-derived from
-          // sourceReport later, so nothing here can accidentally reintroduce
-          // a shared reference on a subsequent render.
-          const copy = deepCopyAtsReport(persisted.sections)
-          setDraftReport(copy)
-          setBaselineContent(copy)
+          // COPY-FORWARD: no draft yet for this week. Seed from the
+          // caller's own immediately-previous saved Leadership Report
+          // (deep-copied — never a shared reference), or a blank template
+          // if there is none, or it's legacy-shaped. weekEnding is always
+          // the VIEWED week's own date, never copied from the previous
+          // week.
+          const weekEndingText = formatLeadershipReportWeekEnding(persisted.periodEndDate)
+          const base =
+            previous && isLeadershipReportContent(previous.content)
+              ? deepCopyLeadershipReportContent(previous.content)
+              : blankLeadershipReportContent('', weekEndingText)
+          const seeded: LeadershipReportContent = { ...base, weekEnding: weekEndingText }
+          setDraftContent(seeded)
+          setBaselineContent(seeded)
         }
       } else {
         setSourceReport(null)
         setSourceAnalysisId(null)
-        setDraftReport(null)
+        setDraftContent(null)
         setBaselineContent(null)
       }
 
       setLoading(false)
-    })
+    }
+
+    void load()
 
     return () => {
       active = false
     }
   }, [week.weekStartDate])
 
-  const isDirty = draftReport !== null && baselineContent !== null && JSON.stringify(draftReport) !== JSON.stringify(baselineContent)
+  const isDirty = draftContent !== null && baselineContent !== null && JSON.stringify(draftContent) !== JSON.stringify(baselineContent)
 
   // Reported upward on every change so the parent can warn before a switch
   // to History would discard it (switching unmounts this component), and —
@@ -246,24 +278,25 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
   // Any further local edit invalidates the "Draft saved"/error status from a
   // previous save — showing a stale "Draft saved" alongside new unsaved
   // changes would be misleading.
-  const handleDraftChange = (next: AtsReport) => {
-    setDraftReport(next)
+  const handleDraftChange = (next: LeadershipReportContent) => {
+    setDraftContent(next)
     setSaveStatus('idle')
     setSaveError(null)
   }
 
-  const canSave = mode === 'edit' && draftReport !== null && sourceReport !== null && sourceAnalysisId !== null && periodEndDate !== null
+  const canSave = mode === 'edit' && draftContent !== null && sourceReport !== null && sourceAnalysisId !== null && periodEndDate !== null
 
   const handleSaveDraft = async () => {
-    if (!canSave || saveStatus === 'saving' || !draftReport || !sourceReport || !sourceAnalysisId || !periodEndDate) return
+    if (!canSave || saveStatus === 'saving' || !draftContent || !sourceReport || !sourceAnalysisId || !periodEndDate) return
 
     setSaveStatus('saving')
     setSaveError(null)
 
     try {
-      // Fingerprint of the CURRENT left ATS source content — never
-      // executive_analyses.source_fingerprint (see atsContentFingerprint.ts
-      // for why that value can't reliably detect ATS content drift).
+      // Fingerprint of the CURRENT left Present Week Summary source
+      // content — never executive_analyses.source_fingerprint (see
+      // atsContentFingerprint.ts for why that value can't reliably detect
+      // content drift).
       const sourceAtsFingerprint = await computeAtsContentFingerprint(sourceReport)
 
       const saved = await saveLeadershipReportDraft({
@@ -272,11 +305,17 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
         periodLabel,
         sourceAnalysisId,
         sourceAtsFingerprint,
-        content: draftReport,
+        content: draftContent,
       })
 
-      setDraftReport(saved.content)
-      setBaselineContent(saved.content)
+      // saved.content is `unknown` at the service-layer type, but a save
+      // we just performed with LeadershipReportContent always round-trips
+      // as the same shape — guarded rather than cast, so a server-side
+      // surprise would clear the draft instead of silently mistyping it.
+      if (isLeadershipReportContent(saved.content)) {
+        setDraftContent(saved.content)
+        setBaselineContent(saved.content)
+      }
       setSaveStatus('saved')
     } catch (err) {
       // Local edits are left exactly as they were — only the status/error
@@ -366,7 +405,7 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
                 className={`lr-ref-tab ${leftTab === 'ats' ? 'lr-ref-tab-active' : ''}`}
                 onClick={() => setLeftTab('ats')}
               >
-                1&nbsp; ATS Format
+                Present Week Summary
               </button>
               <button
                 type="button"
@@ -375,7 +414,7 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
                 className={`lr-ref-tab ${leftTab === 'previous' ? 'lr-ref-tab-active' : ''}`}
                 onClick={() => setLeftTab('previous')}
               >
-                2&nbsp; Previous Work
+                Previous Work
               </button>
             </div>
 
@@ -384,44 +423,43 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
                 <>
                   <div className="lr-pane-header">
                     <div>
-                      <h2>ATS Format Report</h2>
+                      <h2>Present Week Summary</h2>
                       <p className="lr-pane-subtitle">Read-only source</p>
                     </div>
                     {/* Prints the always-mounted .lr-print-ats-only mirror
                         (below), wired directly to sourceReport — never this
                         pane's own content, so it prints the current week's
-                        ATS source regardless of which left tab is active.
-                        Disabled whenever there's no valid ATS source to
-                        print, matching the empty states in the pane body
-                        below. */}
+                        source regardless of which left tab is active.
+                        Disabled whenever there's no valid source to print,
+                        matching the empty states in the pane body below. */}
                     <button
                       type="button"
                       className="btn btn-secondary no-print"
                       onClick={printLeadershipReportAtsOnly}
                       disabled={!hasSource || !sourceIsAtsShaped || !sourceReport}
-                      title={hasSource && sourceIsAtsShaped && sourceReport ? 'Print or save this week’s ATS Format Report as PDF' : 'No ATS report available to print for this week'}
+                      title={hasSource && sourceIsAtsShaped && sourceReport ? 'Print or save this week’s Present Week Summary as PDF' : 'No Present Week Summary report available to print for this week'}
                     >
-                      Print / Download ATS Report
+                      Print / Download Present Week Summary
                     </button>
                   </div>
 
                   <div className="lr-pane-body">
                     {!hasSource ? (
                       <div className="lr-empty-state">
-                        <p>No ATS report has been generated for this week yet.</p>
-                        <p className="lr-empty-state-hint">Generate the weekly ATS report from Weekly Summary first, then return here.</p>
+                        <p>No Present Week Summary report has been generated for this week yet.</p>
+                        <p className="lr-empty-state-hint">Generate the weekly report from Present Week Summary first, then return here.</p>
                       </div>
                     ) : !sourceIsAtsShaped || !sourceReport ? (
                       <div className="lr-empty-state">
-                        <p>This week&apos;s saved analysis is not in the ATS format Leadership Report requires.</p>
+                        <p>This week&apos;s saved analysis is not in the format Leadership Report requires.</p>
                         <p className="lr-empty-state-hint">
-                          Regenerate this week&apos;s analysis from Weekly Summary to bring it into the current ATS format.
+                          Regenerate this week&apos;s analysis from Present Week Summary to bring it into the current format.
                         </p>
                       </div>
                     ) : (
                       // Strictly read-only: no edit affordance is ever
                       // rendered for this tab — the only way to guarantee an
-                      // Admin can never modify the ATS source from this page.
+                      // Admin can never modify this source from this page.
                       <AtsReportView report={sourceReport} periodLabel={periodLabel} />
                     )}
                   </div>
@@ -431,7 +469,15 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
                   <div className="lr-pane-header">
                     <div>
                       <h2>My Previous Leadership Report</h2>
-                      <p className="lr-pane-subtitle">{previousDraft ? previousDraft.periodLabel : 'Read-only reference'}</p>
+                      {/* Display-only: derived from periodStartDate via the
+                          same week-range formatter used everywhere else in
+                          this app ("Week of <Mon–Fri>, <year>"), rather than
+                          the stored periodLabel ("Week Ending ..."), which is
+                          never read or modified here. Works for any week,
+                          not just Oct 2. */}
+                      <p className="lr-pane-subtitle">
+                        {previousDraft ? `Week of ${getReportingWeekFromStartDate(previousDraft.periodStartDate).label}` : 'Read-only reference'}
+                      </p>
                     </div>
                     {/* Rendered only when a previous saved report actually
                         exists — never a disabled placeholder, so an empty
@@ -456,13 +502,19 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
                       <div className="lr-empty-state">
                         <p>No previous report available.</p>
                       </div>
-                    ) : (
+                    ) : isLeadershipReportContent(previousDraft.content) ? (
                       // Strictly read-only — the caller's own saved history,
                       // fetched via a plain RLS-scoped read
                       // (fetchPreviousLeadershipReportDraft) that never
                       // accepts or filters by owner_id client-side, so it
                       // structurally cannot show another owner's report.
-                      <AtsReportView report={previousDraft.content} periodLabel={previousDraft.periodLabel} />
+                      <LeadershipReportFormView content={previousDraft.content} />
+                    ) : (
+                      // Legacy (pre-rebuild) shape — still shown via the
+                      // original ATS-shaped viewer rather than hidden or
+                      // crashed on, since this historical row is never
+                      // modified or reshaped by this app.
+                      <AtsReportView report={previousDraft.content as AtsReport} periodLabel={previousDraft.periodLabel} />
                     )}
                   </div>
                 </>
@@ -478,12 +530,12 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
                   <p className="lr-pane-subtitle">Editable Draft</p>
                 </div>
                 <div className="lr-pane-actions">
-                  {draftReport && mode === 'view' && (
+                  {draftContent && mode === 'view' && (
                     <button type="button" className="btn btn-secondary" onClick={() => setMode('edit')}>
                       Edit
                     </button>
                   )}
-                  {draftReport && mode === 'edit' && (
+                  {draftContent && mode === 'edit' && (
                     <button type="button" className="btn btn-secondary" onClick={() => setMode('view')}>
                       Done Editing
                     </button>
@@ -509,7 +561,7 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
                     <span className="lr-save-status lr-save-status-error">{saveError ?? 'Could not save.'}</span>
                   )}
                   {/* Prints the always-mounted .lr-print-draft-only mirror
-                      (below), wired directly to draftReport — the CURRENT
+                      (below), wired directly to draftContent — the CURRENT
                       visible content, including unsaved edits, regardless
                       of edit/view mode. Never calls saveLeadershipReportDraft;
                       printing can never create, modify, or discard a saved
@@ -518,8 +570,8 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
                     type="button"
                     className={`btn ${mode === 'edit' ? 'btn-secondary' : 'btn-primary'} no-print`}
                     onClick={printLeadershipReportDraftOnly}
-                    disabled={!draftReport}
-                    title={draftReport ? 'Print or save My Leadership Report as PDF' : 'No Leadership Report content to print yet'}
+                    disabled={!draftContent}
+                    title={draftContent ? 'Print or save My Leadership Report as PDF' : 'No Leadership Report content to print yet'}
                   >
                     Print / Download Report
                   </button>
@@ -527,19 +579,28 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
               </div>
 
               <div className="lr-pane-body">
-                {!draftReport ? (
+                {!draftContent ? (
                   <div className="lr-empty-state">
-                    <p>The Leadership Report starts from this week&apos;s ATS source.</p>
-                    <p className="lr-empty-state-hint">Once an ATS report exists for this week, its content will appear here to customize.</p>
+                    {draftHasLegacyShape ? (
+                      <>
+                        <p>This week already has a saved Leadership Report in the previous format.</p>
+                        <p className="lr-empty-state-hint">
+                          It remains available read-only via Previous Work/History, but cannot be edited in the current Leadership Report form.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p>The Leadership Report starts from this week&apos;s Present Week Summary source.</p>
+                        <p className="lr-empty-state-hint">Once a Present Week Summary report exists for this week, its content will appear here to customize.</p>
+                      </>
+                    )}
                   </div>
                 ) : mode === 'edit' ? (
-                  // Page-level container only — AtsTopicsEditForm.tsx and its
-                  // own CSS are completely untouched.
                   <div className="lr-edit-container">
-                    <AtsTopicsEditForm report={draftReport} onChange={handleDraftChange} />
+                    <LeadershipReportForm content={draftContent} onChange={handleDraftChange} />
                   </div>
                 ) : (
-                  <AtsReportView report={draftReport} periodLabel={periodLabel} />
+                  <LeadershipReportFormView content={draftContent} />
                 )}
               </div>
             </div>
@@ -550,25 +611,29 @@ export default function LeadershipReportCurrent({ week, isCurrentWeek, onPreviou
       {/* Always-mounted print-only mirrors — hidden on screen (see
           LeadershipReport.css), revealed only while the matching body class
           from printLeadershipReportAtsOnly/printLeadershipReportDraftOnly is
-          active. Wired directly to sourceReport/draftReport rather than
-          reusing the on-screen panes above, so ATS print never depends on
-          (or leaks) whichever left tab is currently selected, and draft
-          print always reflects the current, possibly-unsaved content
-          regardless of edit/view mode. Reuses AtsReportView unmodified —
-          no duplicate report-formatting logic. */}
+          active. Wired directly to sourceReport/draftContent rather than
+          reusing the on-screen panes above, so Present Week Summary print
+          never depends on (or leaks) whichever left tab is currently
+          selected, and draft print always reflects the current,
+          possibly-unsaved content regardless of edit/view mode. */}
       {hasSource && sourceIsAtsShaped && sourceReport && (
         <div className="lr-print-ats-only">
           <AtsReportView report={sourceReport} periodLabel={periodLabel} />
         </div>
       )}
-      {draftReport && (
+      {draftContent && (
         <div className="lr-print-draft-only">
-          <AtsReportView report={draftReport} periodLabel={periodLabel} />
+          <LeadershipReportFormView content={draftContent} />
         </div>
       )}
-      {previousDraft && (
+      {previousDraft && isLeadershipReportContent(previousDraft.content) && (
         <div className="lr-print-previous-only">
-          <AtsReportView report={previousDraft.content} periodLabel={previousDraft.periodLabel} />
+          <LeadershipReportFormView content={previousDraft.content} />
+        </div>
+      )}
+      {previousDraft && !isLeadershipReportContent(previousDraft.content) && (
+        <div className="lr-print-previous-only">
+          <AtsReportView report={previousDraft.content as AtsReport} periodLabel={previousDraft.periodLabel} />
         </div>
       )}
     </div>

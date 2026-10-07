@@ -7,7 +7,9 @@
 // every other Supabase-touching component in this app — it cannot be
 // imported and executed directly under plain `node --test`; verified via
 // source inspection instead. Deterministic fingerprint behavior itself is
-// verified by real execution in atsContentFingerprint.test.ts.
+// verified by real execution in atsContentFingerprint.test.ts. The
+// editable content shape itself (WFG Weekly Leadership Update form) is
+// covered by leadershipReportContentWiring.test.ts.
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -18,19 +20,31 @@ const dir = path.dirname(fileURLToPath(import.meta.url))
 const curSrc = readFileSync(path.join(dir, '..', 'components', 'LeadershipReportCurrent.tsx'), 'utf8')
 const lrCss = readFileSync(path.join(dir, '..', 'components', 'LeadershipReport.css'), 'utf8')
 
-describe('LeadershipReportCurrent.tsx — loading a week loads its saved draft, or deep-copies the ATS source; never persists merely by opening', () => {
-  test('an existing saved draft loads its content directly — checked, and taken, before falling back to a deep copy', () => {
-    const savedBranchIndex = curSrc.indexOf('if (savedDraft) {')
-    const setFromDraftIndex = curSrc.indexOf('setDraftReport(savedDraft.content)')
-    const deepCopyBranchIndex = curSrc.indexOf('setDraftReport(copy)')
-    assert.ok(savedBranchIndex !== -1 && setFromDraftIndex !== -1 && deepCopyBranchIndex !== -1)
-    assert.ok(savedBranchIndex < setFromDraftIndex && setFromDraftIndex < deepCopyBranchIndex, 'expected the saved-draft branch (and its assignment) before the deep-copy fallback in source order')
+describe('LeadershipReportCurrent.tsx — loading a week loads its saved draft, or copy-forwards the previous week; never persists merely by opening', () => {
+  test('an existing new-shaped saved draft loads its content directly — checked, and taken, before copy-forward', () => {
+    const savedBranchIndex = curSrc.indexOf('if (savedDraft && isLeadershipReportContent(savedDraft.content)) {')
+    const setFromDraftIndex = curSrc.indexOf('setDraftContent(savedDraft.content)')
+    const copyForwardIndex = curSrc.indexOf('const weekEndingText = formatLeadershipReportWeekEnding(persisted.periodEndDate)')
+    assert.ok(savedBranchIndex !== -1 && setFromDraftIndex !== -1 && copyForwardIndex !== -1)
+    assert.ok(savedBranchIndex < setFromDraftIndex && setFromDraftIndex < copyForwardIndex, 'expected the saved-draft branch (and its assignment) before the copy-forward fallback in source order')
   })
 
-  test('no saved draft still falls back to a deep copy of the current ATS source, exactly as before', () => {
-    assert.match(curSrc, /const copy = deepCopyAtsReport\(persisted\.sections\)/)
-    assert.match(curSrc, /setDraftReport\(copy\)/)
-    assert.match(curSrc, /setBaselineContent\(copy\)/)
+  test('a saved draft in the legacy (pre-rebuild) shape is never guessed into the new shape — it is surfaced via draftHasLegacyShape instead, with draftContent left null', () => {
+    assert.match(curSrc, /\} else if \(savedDraft\) \{/)
+    const legacyBranchStart = curSrc.indexOf('} else if (savedDraft) {')
+    const legacyBranchEnd = curSrc.indexOf('} else {', legacyBranchStart)
+    const legacyBranch = curSrc.slice(legacyBranchStart, legacyBranchEnd)
+    assert.match(legacyBranch, /setDraftHasLegacyShape\(true\)/)
+    assert.match(legacyBranch, /setDraftContent\(null\)/)
+  })
+
+  test('no saved draft copy-forwards the caller\'s own immediately-previous saved Leadership Report (deep-copied), falling back to a blank template when there is none or it\'s legacy-shaped', () => {
+    assert.match(curSrc, /previous && isLeadershipReportContent\(previous\.content\)\s*\n\s*\? deepCopyLeadershipReportContent\(previous\.content\)\s*\n\s*: blankLeadershipReportContent\('', weekEndingText\)/)
+  })
+
+  test('weekEnding is always overridden to the VIEWED week\'s own date — never copied forward from the previous week', () => {
+    assert.match(curSrc, /const weekEndingText = formatLeadershipReportWeekEnding\(persisted\.periodEndDate\)/)
+    assert.match(curSrc, /const seeded: LeadershipReportContent = \{ \.\.\.base, weekEnding: weekEndingText \}/)
   })
 
   test('loading a week is read-only — fetchLeadershipReportDraft is called inside the load effect, saveLeadershipReportDraft is not', () => {
@@ -44,12 +58,17 @@ describe('LeadershipReportCurrent.tsx — loading a week loads its saved draft, 
   test('switching weeks re-fetches independently — the load effect depends only on week.weekStartDate', () => {
     assert.match(curSrc, /\}, \[week\.weekStartDate\]\)/)
   })
+
+  test('the previous-draft fetch happens once per load and is reused for both the Previous Work tab and copy-forward seeding — never fetched twice', () => {
+    const occurrences = curSrc.match(/fetchPreviousLeadershipReportDraft\(week\.weekStartDate\)/g) ?? []
+    assert.equal(occurrences.length, 1, 'expected fetchPreviousLeadershipReportDraft to be called exactly once per load')
+  })
 })
 
-describe('LeadershipReportCurrent.tsx — Save Draft sends the correct data and never mutates the ATS source', () => {
-  test('the fingerprint is computed over the LEFT ATS source (sourceReport) — never the right-side draft content', () => {
+describe('LeadershipReportCurrent.tsx — Save Draft sends the correct data and never mutates the Present Week Summary source', () => {
+  test('the fingerprint is computed over the LEFT Present Week Summary source (sourceReport) — never the right-side draft content', () => {
     assert.match(curSrc, /computeAtsContentFingerprint\(sourceReport\)/)
-    assert.equal(/computeAtsContentFingerprint\(draftReport\)/.test(curSrc), false)
+    assert.equal(/computeAtsContentFingerprint\(draftContent\)/.test(curSrc), false)
   })
 
   test('the save call sends the current week/source identifiers and the right-side draft as content', () => {
@@ -61,24 +80,25 @@ describe('LeadershipReportCurrent.tsx — Save Draft sends the correct data and 
     assert.match(callArgs, /periodLabel,/)
     assert.match(callArgs, /sourceAnalysisId,/)
     assert.match(callArgs, /sourceAtsFingerprint,/)
-    assert.match(callArgs, /content: draftReport/)
+    assert.match(callArgs, /content: draftContent/)
   })
 
-  test('a successful save updates local state (including the dirty-tracking baseline) from the server response and shows a "Draft saved" status', () => {
+  test('a successful save updates local state (including the dirty-tracking baseline) from the server response, guarded by shape, and shows a "Draft saved" status', () => {
     const tryStart = curSrc.indexOf('try {', curSrc.indexOf('const handleSaveDraft'))
     const tryEnd = curSrc.indexOf('} catch', tryStart)
     const tryBody = curSrc.slice(tryStart, tryEnd)
-    assert.match(tryBody, /setDraftReport\(saved\.content\)/)
+    assert.match(tryBody, /if \(isLeadershipReportContent\(saved\.content\)\) \{/)
+    assert.match(tryBody, /setDraftContent\(saved\.content\)/)
     assert.match(tryBody, /setBaselineContent\(saved\.content\)/)
     assert.match(tryBody, /setSaveStatus\('saved'\)/)
     assert.match(curSrc, /saveStatus === 'saved' && <span className="lr-save-status lr-save-status-saved">Draft saved<\/span>/)
   })
 
-  test('a failed save preserves the Admin\'s local edits — the catch block never resets draftReport', () => {
+  test('a failed save preserves the Admin\'s local edits — the catch block never resets draftContent', () => {
     const catchStart = curSrc.indexOf('} catch (err) {')
     const catchEnd = curSrc.indexOf('\n  }', catchStart)
     const catchBody = curSrc.slice(catchStart, catchEnd)
-    assert.equal(/setDraftReport\(/.test(catchBody), false, 'a save failure must never touch draftReport')
+    assert.equal(/setDraftContent\(/.test(catchBody), false, 'a save failure must never touch draftContent')
     assert.match(catchBody, /setSaveStatus\('error'\)/)
   })
 
@@ -87,14 +107,14 @@ describe('LeadershipReportCurrent.tsx — Save Draft sends the correct data and 
   })
 
   test('an in-flight or already-completed save cannot be re-triggered by handleSaveDraft itself — it guards on saveStatus === \'saving\'', () => {
-    assert.match(curSrc, /if \(!canSave \|\| saveStatus === 'saving' \|\| !draftReport \|\| !sourceReport \|\| !sourceAnalysisId \|\| !periodEndDate\) return/)
+    assert.match(curSrc, /if \(!canSave \|\| saveStatus === 'saving' \|\| !draftContent \|\| !sourceReport \|\| !sourceAnalysisId \|\| !periodEndDate\) return/)
   })
 
   test('further local edits clear a previous "Draft saved"/error status — handleDraftChange resets saveStatus to idle', () => {
-    const handlerStart = curSrc.indexOf('const handleDraftChange = (next: AtsReport) => {')
+    const handlerStart = curSrc.indexOf('const handleDraftChange = (next: LeadershipReportContent) => {')
     const handlerEnd = curSrc.indexOf('\n  }', handlerStart)
     const handlerBody = curSrc.slice(handlerStart, handlerEnd)
-    assert.match(handlerBody, /setDraftReport\(next\)/)
+    assert.match(handlerBody, /setDraftContent\(next\)/)
     assert.match(handlerBody, /setSaveStatus\('idle'\)/)
   })
 
@@ -109,71 +129,69 @@ describe('LeadershipReportCurrent.tsx reuses the dedicated, separately-tested AT
   })
 })
 
-describe('LeadershipReportCurrent.tsx — left column: ATS Format is the default tab, Previous Work is read-only', () => {
-  test('leftTab state defaults to \'ats\'', () => {
+describe('LeadershipReportCurrent.tsx — left column: Present Week Summary is the default tab, Previous Work is read-only, neither carries 1/2 numbering', () => {
+  test('leftTab state defaults to \'ats\' (internal identifier unchanged — only the visible label was renamed)', () => {
     assert.match(curSrc, /const \[leftTab, setLeftTab\] = useState<LeftTab>\('ats'\)/)
   })
 
-  test('the two left tabs are exactly "1  ATS Format" and "2  Previous Work"', () => {
-    assert.match(curSrc, /1&nbsp; ATS Format/)
-    assert.match(curSrc, /2&nbsp; Previous Work/)
+  test('the two left tabs are exactly "Present Week Summary" and "Previous Work" — no leading digit/numbering of any kind', () => {
+    assert.match(curSrc, />\s*Present Week Summary\s*</)
+    assert.match(curSrc, />\s*Previous Work\s*</)
+    assert.equal(/\d&nbsp;/.test(curSrc), false, 'no tab label may be prefixed with a numbered badge')
+    assert.equal(/ATS Format/.test(curSrc), false, 'the forbidden "ATS Format" wording must not remain')
   })
 
-  test('the Previous Work tab renders via the unmodified, read-only AtsReportView — no edit affordance, no selector of any kind', () => {
+  test('the Previous Work tab renders shape-aware: LeadershipReportFormView for the new shape, AtsReportView as a legacy fallback — no edit affordance, no selector of any kind', () => {
     const paneStart = curSrc.indexOf('<h2>My Previous Leadership Report</h2>')
     const paneEnd = curSrc.indexOf('<div className="lr-col-draft">')
     assert.ok(paneStart !== -1 && paneEnd !== -1 && paneStart < paneEnd)
     const paneJsx = curSrc.slice(paneStart, paneEnd)
-    assert.match(paneJsx, /<AtsReportView report=\{previousDraft\.content\}/)
-    assert.equal(/AtsTopicsEditForm|<select|<input|onChange=/.test(paneJsx), false)
+    assert.match(paneJsx, /isLeadershipReportContent\(previousDraft\.content\)/)
+    assert.match(paneJsx, /<LeadershipReportFormView content=\{previousDraft\.content\} \/>/)
+    assert.match(paneJsx, /<AtsReportView report=\{previousDraft\.content as AtsReport\}/)
+    assert.equal(/LeadershipReportForm |<select|<input|onChange=/.test(paneJsx), false)
   })
 
   test('fetching the previous draft passes only the current week\'s start date — no owner/user identifier of any kind is ever passed from this component', () => {
     assert.match(curSrc, /fetchPreviousLeadershipReportDraft\(week\.weekStartDate\)/)
   })
 
-  test('an absent previous draft shows the exact required empty-state copy, never substituting the ATS source or another owner\'s content', () => {
+  test('an absent previous draft shows the exact required empty-state copy, never substituting the Present Week Summary source or another owner\'s content', () => {
     assert.match(curSrc, /<p>No previous report available\.<\/p>/)
   })
 
-  test('the previous-report fetch is independent of, and does not gate on, this week\'s ATS source validity', () => {
+  test('the previous-report fetch is independent of, and does not gate on, this week\'s Present Week Summary source validity', () => {
     const fetchIndex = curSrc.indexOf('fetchPreviousLeadershipReportDraft(week.weekStartDate)')
     const atsFetchIndex = curSrc.indexOf("fetchPersistedAnalysis('weekly', week.weekStartDate)")
-    assert.ok(fetchIndex !== -1 && atsFetchIndex !== -1 && fetchIndex < atsFetchIndex, 'expected the previous-draft fetch to be independent of (and precede) the ATS source fetch/branching')
+    assert.ok(fetchIndex !== -1 && atsFetchIndex !== -1 && fetchIndex < atsFetchIndex, 'expected the previous-draft fetch to be independent of (and precede) the Present Week Summary source fetch/branching')
   })
 
-  test('the ATS Format tab is strictly read-only — no edit affordance anywhere in its branch, and has exactly one button (Print/Download ATS Report)', () => {
+  test('the Present Week Summary tab is strictly read-only — no edit affordance anywhere in its branch, and has exactly one button (Print/Download Present Week Summary)', () => {
     const atsStart = curSrc.indexOf("leftTab === 'ats' ? (")
     const atsEnd = curSrc.indexOf('<h2>My Previous Leadership Report</h2>', atsStart)
     const atsJsx = curSrc.slice(atsStart, atsEnd)
     assert.match(atsJsx, /<AtsReportView report=\{sourceReport\}/)
-    assert.equal(/AtsTopicsEditForm|onChange=/.test(atsJsx), false)
+    assert.equal(/LeadershipReportForm |onChange=/.test(atsJsx), false)
     const buttonCount = (atsJsx.match(/<button/g) ?? []).length
-    assert.equal(buttonCount, 1, 'expected exactly one button (Print / Download ATS Report) in the ATS Format tab')
-    assert.match(atsJsx, />\s*Print \/ Download ATS Report\s*</)
+    assert.equal(buttonCount, 1, 'expected exactly one button (Print / Download Present Week Summary) in the Present Week Summary tab')
+    assert.match(atsJsx, />\s*Print \/ Download Present Week Summary\s*</)
   })
 
-  test('an empty state explains the ATS report must be generated from Weekly Summary first, when none exists yet', () => {
-    assert.match(curSrc, /No ATS report has been generated for this week yet\./)
-    assert.match(curSrc, /Generate the weekly ATS report from Weekly Summary first, then return here\./)
+  test('an empty state explains the Present Week Summary report must be generated first, when none exists yet', () => {
+    assert.match(curSrc, /No Present Week Summary report has been generated for this week yet\./)
+    assert.match(curSrc, /Generate the weekly report from Present Week Summary first, then return here\./)
   })
 
   test('a distinct empty state handles a persisted-but-legacy-shaped (pre-ATS) analysis, without ever passing the wrong shape into AtsReportView', () => {
-    assert.match(curSrc, /This week&apos;s saved analysis is not in the ATS format Leadership Report requires\./)
+    assert.match(curSrc, /This week&apos;s saved analysis is not in the format Leadership Report requires\./)
     assert.match(curSrc, /!sourceIsAtsShaped \|\| !sourceReport/)
   })
 })
 
-describe('LeadershipReportCurrent.tsx — right column receives an independent deep copy, editable only in memory', () => {
-  test('deepCopyAtsReport builds new topic objects and a new bullets array per topic — never a shared reference to the source', () => {
-    assert.match(curSrc, /function deepCopyAtsReport\(report: AtsReport\): AtsReport \{/)
-    assert.match(curSrc, /bullets: \[\.\.\.topic\.bullets\],/)
-    assert.match(curSrc, /topics: report\.topics\.map\(\(topic\) => \(\{/)
-  })
-
-  test('editing (AtsTopicsEditForm) only ever targets draftReport — never sourceReport/setSourceReport', () => {
-    assert.match(curSrc, /<AtsTopicsEditForm report=\{draftReport\} onChange=\{handleDraftChange\} \/>/)
-    assert.equal(/AtsTopicsEditForm report=\{sourceReport\}/.test(curSrc), false)
+describe('LeadershipReportCurrent.tsx — right column receives an independent copy of the WFG Weekly Leadership Update content, editable only in memory', () => {
+  test('editing (LeadershipReportForm) only ever targets draftContent — never sourceReport/setSourceReport', () => {
+    assert.match(curSrc, /<LeadershipReportForm content=\{draftContent\} onChange=\{handleDraftChange\} \/>/)
+    assert.equal(/LeadershipReportForm content=\{sourceReport\}/.test(curSrc), false)
   })
 
   test('Edit/Done Editing toggles a local mode state only — no network call, no persistence call, of any kind', () => {
@@ -183,9 +201,9 @@ describe('LeadershipReportCurrent.tsx — right column receives an independent d
     assert.equal(/\.rpc\(/.test(curSrc), false)
   })
 
-  test('default right-side state is view mode, rendered via the unmodified, read-only AtsReportView', () => {
+  test('default right-side state is view mode, rendered via LeadershipReportFormView', () => {
     assert.match(curSrc, /const \[mode, setMode\] = useState<Mode>\('view'\)/)
-    assert.match(curSrc, /<AtsReportView report=\{draftReport\} periodLabel=\{periodLabel\} \/>/)
+    assert.match(curSrc, /<LeadershipReportFormView content=\{draftContent\} \/>/)
   })
 })
 
@@ -205,17 +223,17 @@ describe('LeadershipReportCurrent.tsx — right-side action visual hierarchy (Sa
 
   test('both Print / Download buttons are wired to their own dedicated print function, each disabled only when there is nothing to print', () => {
     assert.match(curSrc, /onClick=\{printLeadershipReportAtsOnly\}\s*\n\s*disabled=\{!hasSource \|\| !sourceIsAtsShaped \|\| !sourceReport\}/)
-    assert.match(curSrc, /onClick=\{printLeadershipReportDraftOnly\}\s*\n\s*disabled=\{!draftReport\}/)
+    assert.match(curSrc, /onClick=\{printLeadershipReportDraftOnly\}\s*\n\s*disabled=\{!draftContent\}/)
   })
 })
 
 describe('LeadershipReportCurrent.tsx — edit-mode presentation is refined at the page-container level only', () => {
-  test('a new .lr-edit-container wraps AtsTopicsEditForm in edit mode — AtsTopicsEditForm.tsx/its own CSS are never touched', () => {
-    assert.match(curSrc, /<div className="lr-edit-container">\s*\n\s*<AtsTopicsEditForm report=\{draftReport\} onChange=\{handleDraftChange\} \/>\s*\n\s*<\/div>/)
+  test('a .lr-edit-container wraps LeadershipReportForm in edit mode', () => {
+    assert.match(curSrc, /<div className="lr-edit-container">\s*\n\s*<LeadershipReportForm content=\{draftContent\} onChange=\{handleDraftChange\} \/>\s*\n\s*<\/div>/)
   })
 
-  test('the view-mode branch (AtsReportView) is unaffected — the new container is scoped to the edit-mode branch only', () => {
-    const viewModeIndex = curSrc.indexOf('<AtsReportView report={draftReport} periodLabel={periodLabel} />')
+  test('the view-mode branch (LeadershipReportFormView) is unaffected — the container is scoped to the edit-mode branch only', () => {
+    const viewModeIndex = curSrc.indexOf('<LeadershipReportFormView content={draftContent} />')
     const editContainerIndex = curSrc.indexOf('<div className="lr-edit-container">')
     assert.ok(viewModeIndex !== -1 && editContainerIndex !== -1 && editContainerIndex < viewModeIndex, 'expected the edit branch (with its container) before the view branch in source order')
   })
@@ -235,13 +253,11 @@ describe('LeadershipReportCurrent.tsx — week label and safe date-only formatti
   })
 })
 
-describe('LeadershipReportCurrent.tsx — frozen Executive Analysis/ATS components are reused unmodified', () => {
-  test('AtsReportView.tsx and AtsTopicsEditForm.tsx are reused unmodified — this file never redefines either exported name', () => {
+describe('LeadershipReportCurrent.tsx — frozen Present Week Summary components are reused unmodified', () => {
+  test('AtsReportView.tsx is reused unmodified for the Present Week Summary tab and legacy fallbacks — this file never redefines it', () => {
     const atsViewSrc = readFileSync(path.join(dir, '..', 'components', 'AtsReportView.tsx'), 'utf8')
-    const atsEditFormSrc = readFileSync(path.join(dir, '..', 'components', 'AtsTopicsEditForm.tsx'), 'utf8')
     assert.match(atsViewSrc, /export default function AtsReportView/)
-    assert.match(atsEditFormSrc, /export default function AtsTopicsEditForm/)
-    assert.equal(/function AtsReportView\(|function AtsTopicsEditForm\(/.test(curSrc), false)
+    assert.equal(/function AtsReportView\(/.test(curSrc), false)
   })
 
   test('calls no AI generation endpoint of any kind', () => {
@@ -250,7 +266,7 @@ describe('LeadershipReportCurrent.tsx — frozen Executive Analysis/ATS componen
   })
 })
 
-describe('LeadershipReport.css — two-column desktop layout (Phase 2E), no tabs/toggle-select, responsive stacking independent of print', () => {
+describe('LeadershipReport.css — two-column desktop layout, no tabs/toggle-select, responsive stacking independent of print', () => {
   test('two equal-width columns via CSS grid — approximately 1fr/1fr, per the approved hand-drawn layout', () => {
     assert.match(lrCss, /\.lr-columns \{\s*\n\s*display: grid;\s*\n\s*grid-template-columns: 1fr 1fr;/)
     assert.equal(/<select/.test(curSrc), false)
@@ -272,15 +288,15 @@ describe('LeadershipReport.css — two-column desktop layout (Phase 2E), no tabs
     assert.match(mediaPrintMatch[1], /\.lr-print-ats-only,\s*\n\s*\.lr-print-draft-only,\s*\n\s*\.lr-print-previous-only,\s*\n\s*\.lr-print-history-only \{\s*\n\s*display: block;/)
   })
 
-  test('.lr-edit-container is a light, restrained frame (white surface, thin border, comfortable padding) — not a second heavy visual layer, and declares no property that could shrink controls/inputs inside AtsTopicsEditForm', () => {
+  test('.lr-edit-container is a light, restrained frame (white surface, thin border, comfortable padding) — not a second heavy visual layer, and declares no property that could shrink controls/inputs inside the editable form', () => {
     assert.match(lrCss, /\.lr-edit-container \{\s*\n\s*background: var\(--white\);\s*\n\s*border: 1px solid var\(--soft-sand\);\s*\n\s*border-radius: 10px;\s*\n\s*padding: 20px;\s*\n\s*\}/)
     assert.equal(/\.lr-edit-container[^}]*font-size/.test(lrCss), false, 'must not override font sizes inside the edit form')
   })
 })
 
 describe('LeadershipReportCurrent.tsx — unsaved-edit protection before a week change', () => {
-  test('isDirty compares draftReport against baselineContent (the content as loaded or last saved), not merely "is in edit mode"', () => {
-    assert.match(curSrc, /const isDirty = draftReport !== null && baselineContent !== null && JSON\.stringify\(draftReport\) !== JSON\.stringify\(baselineContent\)/)
+  test('isDirty compares draftContent against baselineContent (the content as loaded or last saved), not merely "is in edit mode"', () => {
+    assert.match(curSrc, /const isDirty = draftContent !== null && baselineContent !== null && JSON\.stringify\(draftContent\) !== JSON\.stringify\(baselineContent\)/)
   })
 
   test('a clean week change bypasses the dialog entirely — requestWeekChange invokes the action immediately when not dirty', () => {
