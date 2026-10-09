@@ -93,17 +93,24 @@ export async function fetchLeadershipReportDraft(periodStartDate: string): Promi
   const { data, error } = await supabase
     .from('leadership_report_drafts')
     .select(
-      'id, period_start_date, period_end_date, period_label, source_analysis_id, source_ats_fingerprint, content, created_at, created_by, updated_at, updated_by',
+      'id, period_start_date, period_end_date, period_label, source_analysis_id, source_ats_fingerprint, content, created_at, created_by, updated_at, updated_by, is_shared',
     )
     .eq('period_start_date', periodStartDate)
-    .maybeSingle()
 
   if (error) {
     console.error('Failed to fetch Leadership Report draft:', error.message)
     return null
   }
-  if (!data) return null
-  return fromRow(data as LeadershipReportDraftRow)
+  if (!data || data.length === 0) return null
+
+  // Priority: User's own draft > Shared draft.
+  // Because of RLS, 'data' contains only the current user's draft and any shared drafts.
+  // We prioritize the one that is NOT shared (the user's own).
+  const userDraft = data.find((d) => !d.is_shared)
+  if (userDraft) return fromRow(userDraft as LeadershipReportDraftRow)
+
+  // Fallback to the first shared draft found.
+  return fromRow(data[0] as LeadershipReportDraftRow)
 }
 
 // Read-only, RLS-scoped: "my nearest saved draft strictly before this week."
@@ -114,19 +121,26 @@ export async function fetchPreviousLeadershipReportDraft(beforePeriodStartDate: 
   const { data, error } = await supabase
     .from('leadership_report_drafts')
     .select(
-      'id, period_start_date, period_end_date, period_label, source_analysis_id, source_ats_fingerprint, content, created_at, created_by, updated_at, updated_by',
+      'id, period_start_date, period_end_date, period_label, source_analysis_id, source_ats_fingerprint, content, created_at, created_by, updated_at, updated_by, is_shared',
     )
     .lt('period_start_date', beforePeriodStartDate)
     .order('period_start_date', { ascending: false })
-    .limit(1)
-    .maybeSingle()
 
   if (error) {
     console.error('Failed to fetch previous Leadership Report draft:', error.message)
     return null
   }
-  if (!data) return null
-  return fromRow(data as LeadershipReportDraftRow)
+  if (!data || data.length === 0) return null
+
+  // For history, we look for the most recent draft.
+  // If multiple drafts exist for the same most-recent date, prioritize the user's own.
+  const mostRecentDate = data[0].period_start_date
+  const candidates = data.filter((d) => d.period_start_date === mostRecentDate)
+
+  const userDraft = candidates.find((d) => !d.is_shared)
+  if (userDraft) return fromRow(userDraft as LeadershipReportDraftRow)
+
+  return fromRow(candidates[0] as LeadershipReportDraftRow)
 }
 
 // A pure, stateless client-side check of the CURRENT caller's own
