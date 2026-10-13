@@ -31,19 +31,16 @@ const userManagementSrc = readFileSync(path.join(dir, '..', 'components', 'UserM
 const printCss = readFileSync(path.join(dir, '..', 'print.css'), 'utf8')
 
 describe('AdminSidebar — exact approved order/grouping with real dividers', () => {
-  test('AdminDestination includes leadership-report as a 5th destination', () => {
-    assert.match(
-      sidebarSrc,
-      /export type AdminDestination = 'dashboard' \| 'user-management' \| 'reports-analytics' \| 'weekly-summary' \| 'leadership-report'/,
-    )
+  test('AdminDestination includes leadership-report as one of the destinations (the Video Creation phase later added a 6th, video-creation — see its own coverage in videoCreationWiring.test.ts)', () => {
+    assert.match(sidebarSrc, /\| 'leadership-report'/)
   })
 
-  test('groups render in the exact approved order: [Admin Dashboard], [Weekly Summary, Leadership Report], [User Management, Reports & Analytics]', () => {
+  test('groups render in the exact approved order: [Admin Dashboard], [Weekly Summary, Leadership Report, Video Creation], [User Management, Reports & Analytics]', () => {
     const groupsMatch = sidebarSrc.match(/const groups: [\s\S]*?\] = \[([\s\S]*?)\]\s*\n\n\s*return/)
     assert.ok(groupsMatch, 'could not locate the groups array')
     const groupsBody = groupsMatch[1]
     const order = [...groupsBody.matchAll(/key: '([a-z-]+)'/g)].map((m) => m[1])
-    assert.deepEqual(order, ['dashboard', 'weekly-summary', 'leadership-report', 'user-management', 'reports-analytics'])
+    assert.deepEqual(order, ['dashboard', 'weekly-summary', 'leadership-report', 'video-creation', 'user-management', 'reports-analytics'])
   })
 
   test('a real divider (not a spacer/margin hack) renders between each group, never before the first', () => {

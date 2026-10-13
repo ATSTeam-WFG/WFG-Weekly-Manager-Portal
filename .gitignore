@@ -15,6 +15,40 @@ dist-ssr
 .env.local
 .vercel
 
+# Basic Video Generation V1 — local-only rendered media (never persisted
+# to Supabase, never committed) and the in-flight storyboard JSON the
+# local render bridge (dev/local-video-render-plugin.ts) writes before
+# invoking scripts/render-storyboard.mts.
+output/
+
+# Locally-synthesized narration audio (scripts/lib/narrationAudio.mts) —
+# wiped and regenerated on every render, never a source asset to commit.
+remotion/public/narration/
+
+# Locally-generated FLUX.1-schnell environment assets (scripts/lib/fluxAssets.mts)
+# — a small, reusable, deterministically-cached set keyed by
+# story-engine + visual-subject, never a source asset to commit.
+# Regenerable at any time (falls back to the programmatic SVG illustrations
+# in remotion/illustrations/ if regeneration is ever needed but unavailable).
+remotion/public/flux-assets/
+
+# Stable, in-repo local Python venv for FLUX.1-schnell (mflux + mlx) —
+# large (~30GB+ once the model weights are cached inside it via
+# HF_HOME), never committed. See scripts/lib/fluxAssets.mts's own header
+# for why this lives in-repo rather than in an ephemeral scratch directory:
+# it must persist across sessions for asset caching/regeneration to work
+# the same way `npm run dev` always does.
+.flux-env/
+.flux-hf-cache/
+
+# Isolated FLUX/visual-sequencing prototypes (remotion-prototypes/) — never
+# wired into the production Video Creation pipeline (remotion/). Generated
+# FLUX image/audio assets and any local render output are gitignored; the
+# prototype .tsx/.mts source is left untracked-but-visible for review, the
+# same as every other new-phase file in this engagement.
+remotion-prototypes/*/public/
+remotion-prototypes/*/output/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

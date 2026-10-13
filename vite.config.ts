@@ -1,6 +1,9 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
 import { localApiPlugin } from './dev/local-api-plugin.js'
+import { localVideoRenderPlugin } from './dev/local-video-render-plugin.js'
+import { localCinematicGenerationPlugin } from './dev/local-cinematic-generation-plugin.js'
+import { localAvatarAssetPlugin } from './dev/local-avatar-asset-plugin.js'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -35,9 +38,23 @@ export default defineConfig(({ mode }) => {
   // copied through the same way so the local API middleware can see it once
   // it is.
   if (env.EMPLOYEE_TEMP_PASSWORD) process.env.EMPLOYEE_TEMP_PASSWORD = env.EMPLOYEE_TEMP_PASSWORD
+  // Cinematic generation executor (dev/local-cinematic-generation-plugin.ts)
+  // — read only by that plugin's own real-client path, which itself only
+  // ever runs when LUMA_LIVE_GENERATION is explicitly 'true'. Neither
+  // value is ever exposed to browser code.
+  if (env.LUMA_AGENTS_API_KEY) process.env.LUMA_AGENTS_API_KEY = env.LUMA_AGENTS_API_KEY
+  if (env.LUMA_LIVE_GENERATION) process.env.LUMA_LIVE_GENERATION = env.LUMA_LIVE_GENERATION
+  // Video Creation presenter providers (api/_lib/videoProviderClients.ts) —
+  // server-only, read exclusively there. VIDEO_PROVIDER_CALLS_ENABLED is the
+  // deliberate kill switch and stays unset/false until an explicit,
+  // authorized test; forwarding it here only makes the real .env.local value
+  // visible to the local API middleware, it never flips it on by itself.
+  if (env.HEYGEN_API_KEY) process.env.HEYGEN_API_KEY = env.HEYGEN_API_KEY
+  if (env.ELEVENLABS_API_KEY) process.env.ELEVENLABS_API_KEY = env.ELEVENLABS_API_KEY
+  if (env.VIDEO_PROVIDER_CALLS_ENABLED) process.env.VIDEO_PROVIDER_CALLS_ENABLED = env.VIDEO_PROVIDER_CALLS_ENABLED
 
   return {
-    plugins: [react(), localApiPlugin()],
+    plugins: [react(), localApiPlugin(), localVideoRenderPlugin(), localCinematicGenerationPlugin(), localAvatarAssetPlugin()],
     // This project's Supabase variables use the NEXT_PUBLIC_ prefix (Next.js convention);
     // Vite only exposes VITE_-prefixed vars to client code by default, so we opt this prefix in too.
     envPrefix: ['VITE_', 'NEXT_PUBLIC_'],

@@ -641,6 +641,34 @@ export async function listManagedUsers(): Promise<ManagedUserSummary[] | null> {
     .sort((a, b) => a.fullName.localeCompare(b.fullName))
 }
 
+export interface PresenterSubjectCandidate {
+  profileId: string
+  fullName: string | null
+  email: string
+  role: 'manager' | 'admin'
+}
+
+// Candidate "subject" list for the Photo Avatar + Cloned Voice consent
+// workflow's "is this you, or someone else" picker (see
+// VideoCreationPresenter.tsx). profiles.id IS the auth.users id — exactly
+// what video_media_consents.subject_profile_id needs (unlike
+// listManagedUsers' roster id above, which is approved_employees.id).
+// Active profiles only: an inactive/deactivated account cannot be a
+// generation subject going forward.
+export async function listPresenterSubjectCandidates(): Promise<PresenterSubjectCandidate[] | null> {
+  const client = getServiceClient()
+  const { data, error } = await client.from('profiles').select('id, full_name, email, role, is_active').eq('is_active', true)
+
+  if (error) {
+    console.error('supabaseServiceClient: listPresenterSubjectCandidates failed:', error.message)
+    return null
+  }
+
+  return (data ?? [])
+    .map((row) => ({ profileId: row.id as string, fullName: (row.full_name as string | null) ?? null, email: row.email as string, role: row.role as 'manager' | 'admin' }))
+    .sort((a, b) => (a.fullName ?? a.email).localeCompare(b.fullName ?? b.email))
+}
+
 async function fetchRosterAndProfileSnapshots(
   emailNormalized: string,
 ): Promise<{ roster: RosterEntrySnapshot | null; profile: ProfileSnapshot | null } | { error: true }> {
@@ -1282,4 +1310,50 @@ export async function updateManagedEmployee(
   }
 
   return { status: 'ok' }
+}
+
+// --- Video presenter media: narrow Storage access for server-side provider
+// integration jobs (api/_lib/videoProviderClients.ts) only. These run as a
+// background job on behalf of an already-authorize_video_generation-checked
+// request — never reachable from the browser — so the privileged client is
+// appropriate here, same reasoning as every other function in this file.
+const VIDEO_PRESENTER_BUCKET = 'video-presenter-media'
+
+// Downloads a private source photo/voice file's bytes server-side, for
+// forwarding to a provider's own upload mechanism. Never returns a public
+// URL — the caller gets the bytes directly, in memory, for exactly one
+// outbound request.
+export async function downloadPresenterMediaBytes(storagePath: string): Promise<{ bytes: Uint8Array; contentType: string }> {
+  const client = getServiceClient()
+  const { data, error } = await client.storage.from(VIDEO_PRESENTER_BUCKET).download(storagePath)
+  if (error || !data) {
+    throw new Error('Could not read the requested presenter media file.')
+  }
+  return { bytes: new Uint8Array(await data.arrayBuffer()), contentType: data.type || 'application/octet-stream' }
+}
+
+// Uploads provider-generated output (a synthesized narration clip, a
+// rendered avatar video) back into our OWN private bucket, under a
+// `generated/` prefix — the provider's own temporary/time-limited URL is
+// never the only copy, and is never handed to the browser directly.
+export async function uploadGeneratedPresenterMedia(path: string, bytes: Uint8Array, contentType: string): Promise<void> {
+  const client = getServiceClient()
+  const { error } = await client.storage.from(VIDEO_PRESENTER_BUCKET).upload(`generated/${path}`, bytes, { contentType, upsert: false })
+  if (error) {
+    throw new Error('Could not store the generated media file.')
+  }
+}
+
+// A short-lived signed URL for a file already in our private bucket —
+// used to hand HeyGen a fetchable audio_url for our own
+// ElevenLabs-generated narration, without making the bucket itself public.
+// Long enough for the provider's own async processing window, short enough
+// to bound exposure if the URL were ever logged or leaked.
+export async function createPresenterMediaSignedUrl(storagePath: string, expiresInSeconds: number): Promise<string> {
+  const client = getServiceClient()
+  const { data, error } = await client.storage.from(VIDEO_PRESENTER_BUCKET).createSignedUrl(storagePath, expiresInSeconds)
+  if (error || !data) {
+    throw new Error('Could not create a signed URL for the requested presenter media file.')
+  }
+  return data.signedUrl
 }

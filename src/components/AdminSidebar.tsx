@@ -1,11 +1,17 @@
 import type { ReactNode } from 'react'
 import './AdminSidebar.css'
 
-// The five (and only five) shared-shell destinations — ManagerReportView and
+// The six (and only six) shared-shell destinations — ManagerReportView and
 // the dual-role admin's own "My Weekly Report" view are deliberately NOT
 // part of this union, since neither is ever reachable while this sidebar is
 // showing (see App.tsx's render branching).
-export type AdminDestination = 'dashboard' | 'user-management' | 'reports-analytics' | 'weekly-summary' | 'leadership-report'
+export type AdminDestination =
+  | 'dashboard'
+  | 'user-management'
+  | 'reports-analytics'
+  | 'weekly-summary'
+  | 'leadership-report'
+  | 'video-creation'
 
 interface AdminSidebarProps {
   current: AdminDestination
@@ -14,6 +20,7 @@ interface AdminSidebarProps {
   onNavigateReportsAnalytics: () => void
   onNavigateWeeklySummary: () => void
   onNavigateLeadershipReport: () => void
+  onNavigateVideoCreation: () => void
 }
 
 function DashboardIcon() {
@@ -74,6 +81,18 @@ function LeadershipReportIcon() {
   )
 }
 
+// A simple framed play glyph — distinct from every other sidebar icon
+// (none of which use a circle+triangle), reads clearly as "video" at this
+// size.
+function VideoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M10.5 9.5l5 2.5-5 2.5v-5z" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
 // Purely decorative — an abstract layered-landscape treatment (CSS
 // shapes/gradients only, no image asset or external dependency) plus the
 // existing WFG brand copy. aria-hidden so it never appears to assistive
@@ -114,17 +133,19 @@ export default function AdminSidebar({
   onNavigateReportsAnalytics,
   onNavigateWeeklySummary,
   onNavigateLeadershipReport,
+  onNavigateVideoCreation,
 }: AdminSidebarProps) {
   // Approved grouping/order: Admin Dashboard — divider — Weekly Summary,
-  // Leadership Report — divider — User Management, Reports & Analytics.
-  // Groups, not a flat list, so a subtle divider can render between them
-  // without threading extra per-item flags through the existing single
-  // .map() below.
+  // Leadership Report, Video Creation — divider — User Management,
+  // Reports & Analytics. Groups, not a flat list, so a subtle divider can
+  // render between them without threading extra per-item flags through the
+  // existing single .map() below.
   const groups: { key: AdminDestination; label: string; onClick: () => void; icon: ReactNode }[][] = [
     [{ key: 'dashboard', label: 'Admin Dashboard', onClick: onNavigateDashboard, icon: <DashboardIcon /> }],
     [
       { key: 'weekly-summary', label: 'Present Week Summary', onClick: onNavigateWeeklySummary, icon: <DocumentIcon /> },
       { key: 'leadership-report', label: 'Leadership Report', onClick: onNavigateLeadershipReport, icon: <LeadershipReportIcon /> },
+      { key: 'video-creation', label: 'Video Creation', onClick: onNavigateVideoCreation, icon: <VideoIcon /> },
     ],
     [
       { key: 'user-management', label: 'User Management', onClick: onNavigateUserManagement, icon: <UsersIcon /> },

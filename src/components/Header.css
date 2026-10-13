@@ -40,6 +40,24 @@
   gap: 16px;
 }
 
+.header-consent-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--terracotta);
+  background: var(--white);
+  color: var(--terracotta);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.header-consent-badge:hover {
+  background: var(--terracotta);
+  color: var(--white);
+}
+
 .header-user {
   display: flex;
   align-items: center;
