@@ -185,7 +185,12 @@ BEGIN
     SET status = 'processing',
         attempt_count = j.attempt_count + 1,
         claimed_at = now(),
-        lease_expires_at = now() + interval '15 minutes',
+        -- Must safely exceed the worker's own render timeout
+        -- (RENDER_TIMEOUT_MS = 20 minutes in worker/video-worker.mjs) —
+        -- otherwise a still-legitimately-rendering job could be reclaimed
+        -- by a second worker before the first one finishes, causing a
+        -- duplicate concurrent render of the same job.
+        lease_expires_at = now() + interval '25 minutes',
         worker_token = gen_random_uuid(),
         started_at = COALESCE(j.started_at, now()),
         updated_at = now()
