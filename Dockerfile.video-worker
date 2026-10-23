@@ -1,0 +1,53 @@
+# WFG video rendering worker — real image.
+#
+# Same renderer already proven locally and in a Linux Docker test this
+# session (Kokoro TTS + Remotion's self-downloaded headless Chrome render
+# a valid MP4 on generic Linux once FLUX gracefully no-ops). This image
+# does NOT bundle FLUX (Apple-Silicon/MLX-only, cannot run here) — scenes
+# fall back to their existing deterministic SVG treatment automatically,
+# by design, with no code change needed.
+#
+# Never bakes in credentials. VIDEO_PROVIDER_CALLS_ENABLED is pinned to
+# false — this worker never calls HeyGen/ElevenLabs/Luma, only the local
+# Kokoro+Remotion render path. Real credentials (Supabase URL/key, worker
+# account email+password) are supplied at deploy time as Railway
+# variables, never written into this file or the image.
+FROM node:22-bookworm-slim
+
+# Remotion's own documented Debian dependency list for headless Chromium
+# rendering (confirmed sufficient in this session's own Docker test).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libnss3 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+    libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 \
+    libasound2 libpango-1.0-0 libcairo2 libatspi2.0-0 ca-certificates \
+    python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Only what scripts/render-storyboard.mts and the worker itself actually
+# need to run — the renderer, Remotion, and the shared storyboard/theme
+# code, nothing else from the app (no admin UI, no other API routes).
+COPY package.json package-lock.json ./
+COPY tsconfig.json tsconfig.node.json ./
+COPY remotion ./remotion
+COPY scripts ./scripts
+COPY src/lib ./src/lib
+COPY worker ./worker
+
+## NOTE: Remotion/Kokoro/zod etc. are devDependencies in package.json,
+## not dependencies (this is primarily a Vite app) — --omit=dev would
+## silently break the renderer, so a full install is required here.
+RUN npm ci --no-audit --no-fund
+
+ENV NODE_ENV=production
+ENV VIDEO_PROVIDER_CALLS_ENABLED=false
+ENV LUMA_LIVE_GENERATION=false
+
+USER node
+
+# Continuous polling worker — Railway runs this as a long-lived service.
+# Credentials (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+# VIDEO_RENDER_WORKER_EMAIL, VIDEO_RENDER_WORKER_PASSWORD) are set as
+# Railway service variables, never here.
+CMD ["node", "worker/video-worker.mjs", "--execute"]
