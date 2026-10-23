@@ -67,17 +67,22 @@
 
 /* Consolidated Report print-only elements — see print.css for the reveal
    rules under body.print-consolidated-report-only. Unconditionally
-   display:none outside @media print, so neither has any on-screen
+   display:none outside @media print, so none of these has any on-screen
    effect. */
 .ws-consolidated-part-label,
-.ws-consolidated-leadership-mirror {
+.ws-consolidated-manager-reports,
+.ws-consolidated-executive-summary {
   display: none;
 }
 
-.ws-consolidated-leadership-missing {
+.ws-consolidated-empty-note {
   font-size: 13px;
   color: var(--muted-gray);
   font-style: italic;
+}
+
+.ws-consolidated-manager-name {
+  margin: 0 0 8px;
 }
 
 .weekly-summary-stats {
