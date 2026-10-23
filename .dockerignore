@@ -1,0 +1,41 @@
+# Local dependencies and generated outputs
+node_modules
+dist
+output
+coverage
+.cache
+*.log
+
+# Git and editor files
+.git
+.github
+.vscode
+.idea
+
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*service-account*.json
+*credentials*.json
+
+# Local Supabase state
+supabase/.temp
+
+# Generated media and model caches
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.onnx
+*.safetensors
+*.ckpt
+
+# Local backups
+*.backup-*
+*.tar
+*.tar.gz
