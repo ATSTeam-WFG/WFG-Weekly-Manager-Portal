@@ -383,6 +383,7 @@ const finalVideoUrl = `/dev/rendered-video/${finalVideoFileName}`
           <VideoCreationGenerate
             storyboard={storyboard}
             narrationVoice={presenterVoice.narrationVoice}
+            periodStartDate={week.weekStartDate}
             onBack={handleBackToPreview}
             onRendered={handleRendered}
             onGoToPresenter={handleBackToPresenter}
