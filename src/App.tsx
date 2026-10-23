@@ -16,8 +16,12 @@ import WeeklySummary from './components/WeeklySummary'
 import ReportsAnalytics from './components/ReportsAnalytics'
 import UserManagement from './components/UserManagement'
 import LeadershipReportGate from './components/LeadershipReportGate'
+import VideoCreation from './components/VideoCreation'
+import VideoConsentInbox from './components/VideoConsentInbox'
 import ConfirmDialog from './components/ConfirmDialog'
 import { supabase } from './lib/supabaseClient'
+import { listMyPendingConsentRequests, getCurrentConsentPolicy } from './lib/videoConsentService'
+import type { MediaConsent, ConsentPolicy } from './lib/videoPresenterConsent'
 import {
   fetchWeekReport,
   saveReportV2,
@@ -93,6 +97,55 @@ function App() {
   const [reportsAnalyticsOpen, setReportsAnalyticsOpen] = useState(false)
   const [userManagementOpen, setUserManagementOpen] = useState(false)
   const [leadershipReportOpen, setLeadershipReportOpen] = useState(false)
+  // Phase 1A: navigation + page shell only — no data, no sub-state of its
+  // own yet. Declared here (before every authStatus-gated early return),
+  // alongside every other top-level destination flag, for the same reason
+  // leadershipReportDirty/pendingLeaveAction are: a hook declared after an
+  // early return changes React's per-render hook count and crashes the
+  // whole tree (see the Leadership Report blank-page fix this exact
+  // pattern already addressed once).
+  const [videoCreationOpen, setVideoCreationOpen] = useState(false)
+  // Reachable regardless of role/admin status — a Manager named as the
+  // subject of a Photo Avatar/Cloned Voice consent request (see
+  // VideoCreationAvatarConsent.tsx) never opens Video Creation at all, so
+  // this is their only route to confirm/decline it. Always declared here
+  // (same reasoning as videoCreationOpen's own comment above).
+  const [pendingConsentRequests, setPendingConsentRequests] = useState<MediaConsent[]>([])
+  const [consentPolicy, setConsentPolicy] = useState<ConsentPolicy | null>(null)
+  const [consentInboxOpen, setConsentInboxOpen] = useState(false)
+
+  // Declared here, before every authStatus-gated early return below (same
+  // reasoning as the comment on videoCreationOpen above) — independent of
+  // the big auth/session effect further down on purpose: this only needs
+  // profile.id, re-runs whenever it changes (sign-in, sign-out, a
+  // different account), and its failure mode (an empty badge) is never
+  // worth coupling to that effect's own error handling. Visible to a
+  // Manager and an Admin alike: the named subject of a consent request may
+  // be either.
+  useEffect(() => {
+    if (!profile?.id) {
+      setPendingConsentRequests([])
+      return
+    }
+    let cancelled = false
+    void listMyPendingConsentRequests()
+      .then((requests) => {
+        if (!cancelled) setPendingConsentRequests(requests.filter((r) => r.subjectProfileId === profile.id))
+      })
+      .catch(() => {
+        if (!cancelled) setPendingConsentRequests([])
+      })
+    void getCurrentConsentPolicy()
+      .then((policy) => {
+        if (!cancelled) setConsentPolicy(policy)
+      })
+      .catch(() => {
+        if (!cancelled) setConsentPolicy(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.id])
   // Deliberately independent from adminWeekOffset — Leadership Report is a
   // separate, potentially multi-session editing task, so navigating weeks
   // on Admin Dashboard/Weekly Summary must never shift the week an Admin is
@@ -648,18 +701,20 @@ function App() {
   const leadershipReportWeek = getReportingWeekByOffset(leadershipReportWeekOffset)
 
   // Derived, never a separate state variable — the same booleans App.tsx
-  // already owned before the shell existed (plus leadershipReportOpen)
-  // remain the single source of truth for which of the five destinations
-  // is showing.
+  // already owned before the shell existed (plus leadershipReportOpen and
+  // videoCreationOpen) remain the single source of truth for which of the
+  // six destinations is showing.
   const currentAdminDestination: AdminDestination = userManagementOpen
     ? 'user-management'
     : reportsAnalyticsOpen
       ? 'reports-analytics'
       : leadershipReportOpen
         ? 'leadership-report'
-        : weeklySummaryOpen
-          ? 'weekly-summary'
-          : 'dashboard'
+        : videoCreationOpen
+          ? 'video-creation'
+          : weeklySummaryOpen
+            ? 'weekly-summary'
+            : 'dashboard'
 
   // leadershipReportDirty/pendingLeaveAction are declared near the top of
   // this component, with the other useState calls (see above authStatus's
@@ -701,6 +756,7 @@ function App() {
       setReportsAnalyticsOpen(false)
       setUserManagementOpen(false)
       setLeadershipReportOpen(false)
+      setVideoCreationOpen(false)
     })
   }
   const handleNavigateToUserManagement = () => {
@@ -709,6 +765,7 @@ function App() {
       setReportsAnalyticsOpen(false)
       setUserManagementOpen(true)
       setLeadershipReportOpen(false)
+      setVideoCreationOpen(false)
     })
   }
   const handleNavigateToReportsAnalytics = () => {
@@ -717,6 +774,7 @@ function App() {
       setReportsAnalyticsOpen(true)
       setUserManagementOpen(false)
       setLeadershipReportOpen(false)
+      setVideoCreationOpen(false)
     })
   }
   const handleNavigateToWeeklySummary = () => {
@@ -725,16 +783,31 @@ function App() {
       setReportsAnalyticsOpen(false)
       setUserManagementOpen(false)
       setLeadershipReportOpen(false)
+      setVideoCreationOpen(false)
     })
   }
   const handleNavigateToLeadershipReport = () => {
     setWeeklySummaryOpen(false)
     setReportsAnalyticsOpen(false)
     setUserManagementOpen(false)
+    setVideoCreationOpen(false)
     setLeadershipReportOpen(true)
     // Defensive reset only — a freshly (re-)mounted Gate/Current reports its
     // own real value within its first effect anyway.
     setLeadershipReportDirty(false)
+  }
+  const handleNavigateToVideoCreation = () => {
+    requestLeaveLeadershipReportIfDirty(() => {
+      setWeeklySummaryOpen(false)
+      setReportsAnalyticsOpen(false)
+      setUserManagementOpen(false)
+      setLeadershipReportOpen(false)
+      setVideoCreationOpen(true)
+    })
+  }
+
+  const handleConsentRequestDecided = (consentId: string) => {
+    setPendingConsentRequests((prev) => prev.filter((r) => r.id !== consentId))
   }
 
   return (
@@ -751,7 +824,22 @@ function App() {
         />
       )}
 
-      <Header displayName={displayName} roleLabel={roleLabel} onSignOut={handleSignOut} />
+      <Header
+        displayName={displayName}
+        roleLabel={roleLabel}
+        onSignOut={handleSignOut}
+        pendingConsentRequestCount={pendingConsentRequests.length}
+        onOpenConsentInbox={() => setConsentInboxOpen(true)}
+      />
+
+      {consentInboxOpen && (
+        <VideoConsentInbox
+          policy={consentPolicy}
+          requests={pendingConsentRequests}
+          onDecided={handleConsentRequestDecided}
+          onClose={() => setConsentInboxOpen(false)}
+        />
+      )}
 
       {isAdmin && !myReportOpen ? (
         selectedManager ? (
@@ -769,6 +857,7 @@ function App() {
             onNavigateReportsAnalytics={handleNavigateToReportsAnalytics}
             onNavigateWeeklySummary={handleNavigateToWeeklySummary}
             onNavigateLeadershipReport={handleNavigateToLeadershipReport}
+            onNavigateVideoCreation={handleNavigateToVideoCreation}
           >
             {weeklySummaryOpen ? (
               <WeeklySummary
@@ -793,6 +882,11 @@ function App() {
                 onNextWeek={() => setLeadershipReportWeekOffset((offset) => Math.min(0, offset + 1))}
                 onDirtyChange={setLeadershipReportDirty}
               />
+            ) : videoCreationOpen ? (
+              // Phase 1A: navigation + page shell only. No week/data state
+              // of its own yet — that arrives with the content-source
+              // implementation in a later phase.
+              <VideoCreation currentProfileId={profile?.id ?? ''} />
             ) : reportsAnalyticsOpen ? (
               <ReportsAnalytics onBack={() => setReportsAnalyticsOpen(false)} />
             ) : userManagementOpen ? (

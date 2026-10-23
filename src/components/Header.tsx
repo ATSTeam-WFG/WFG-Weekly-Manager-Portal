@@ -6,9 +6,15 @@ interface HeaderProps {
   displayName: string
   roleLabel: string
   onSignOut: () => void
+  // Optional: omitted entirely by any caller that hasn't wired the consent
+  // inbox (keeps this component's existing callers unaffected). Rendered
+  // only when count > 0, so the vast majority of users who are never named
+  // as a Photo Avatar/Cloned Voice subject never see this at all.
+  pendingConsentRequestCount?: number
+  onOpenConsentInbox?: () => void
 }
 
-export default function Header({ displayName, roleLabel, onSignOut }: HeaderProps) {
+export default function Header({ displayName, roleLabel, onSignOut, pendingConsentRequestCount, onOpenConsentInbox }: HeaderProps) {
   return (
     <header className="header">
       <div className="header-brand">
@@ -18,6 +24,12 @@ export default function Header({ displayName, roleLabel, onSignOut }: HeaderProp
       </div>
 
       <div className="header-right">
+        {!!pendingConsentRequestCount && onOpenConsentInbox && (
+          <button type="button" className="header-consent-badge" onClick={onOpenConsentInbox}>
+            Video Consent Requests ({pendingConsentRequestCount})
+          </button>
+        )}
+
         <div className="header-user">
           <span className="header-user-avatar" aria-hidden="true">
             {getInitials(displayName)}

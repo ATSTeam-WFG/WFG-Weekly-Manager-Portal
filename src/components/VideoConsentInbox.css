@@ -1,0 +1,96 @@
+/* Reachable regardless of role — classes here are scoped (vci-*), no
+   dependency on VideoCreation.css, since a non-admin subject may never
+   load that stylesheet at all. */
+
+.vci-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(41, 37, 36, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px;
+  z-index: 1000;
+  overflow-y: auto;
+}
+
+.vci-panel {
+  background: var(--white);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 640px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(41, 37, 36, 0.25);
+}
+
+.vci-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.vci-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--dark-charcoal);
+}
+
+.vci-empty {
+  color: var(--muted-gray);
+  font-size: 14px;
+}
+
+.vci-request {
+  border: 1px solid var(--soft-sand);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.vci-request-summary {
+  font-size: 14px;
+  color: var(--espresso);
+  margin: 0 0 12px;
+}
+
+.vci-confirmations {
+  margin-bottom: 12px;
+}
+
+.vci-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--espresso);
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.vci-checkbox input {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.vci-error {
+  color: #a33b3b;
+  font-size: 13px;
+  margin: 0 0 10px;
+}
+
+.vci-request-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .vci-overlay {
+    padding: 16px;
+  }
+
+  .vci-request-actions {
+    flex-direction: column-reverse;
+  }
+}

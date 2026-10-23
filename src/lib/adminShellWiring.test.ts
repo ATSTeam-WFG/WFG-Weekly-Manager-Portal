@@ -30,28 +30,32 @@ const adminDashboardSrc = readFileSync(path.join(dir, '..', 'components', 'Admin
 // Originally "exactly four destinations" — the Leadership Report phase
 // (see leadershipReportWiring.test.ts, its own dedicated coverage) added a
 // 5th, restructuring the flat `items` array into grouped `groups` with
-// dividers. This describe block's own intent (a fixed, fully-enumerated set
-// of destinations, no stray extras like a manager-report/my-report item)
-// still holds — just against the current count and structure.
-describe('AdminSidebar.tsx — exactly five destinations, no more, no fewer', () => {
-  test('AdminDestination is exactly the five-value union (not merely a superset — checked with an end anchor)', () => {
+// dividers; the Video Creation phase (see leadershipReportWiring.test.ts's
+// AdminSidebar describe block, updated alongside this one) added a 6th,
+// reformatting the union onto multiple lines. This describe block's own
+// intent (a fixed, fully-enumerated set of destinations, no stray extras
+// like a manager-report/my-report item) still holds — just against the
+// current count and structure.
+describe('AdminSidebar.tsx — exactly six destinations, no more, no fewer', () => {
+  test('AdminDestination is exactly the six-value union (not merely a superset — checked with an end anchor)', () => {
     assert.match(
       sidebarSrc,
-      /export type AdminDestination = 'dashboard' \| 'user-management' \| 'reports-analytics' \| 'weekly-summary' \| 'leadership-report'\s*\n/,
+      /export type AdminDestination =\s*\n\s*\| 'dashboard'\s*\n\s*\| 'user-management'\s*\n\s*\| 'reports-analytics'\s*\n\s*\| 'weekly-summary'\s*\n\s*\| 'leadership-report'\s*\n\s*\| 'video-creation'\s*\n\s*\n\s*interface AdminSidebarProps/,
     )
   })
 
-  test('the rendered groups array has exactly five entries total across its groups, one per destination, each with its own label', () => {
+  test('the rendered groups array has exactly six entries total across its groups, one per destination, each with its own label', () => {
     const groupsMatch = sidebarSrc.match(/const groups: \{[\s\S]*?\}\[\]\[\] = \[([\s\S]*?)\n  \]\s*\n/)
     assert.ok(groupsMatch, 'could not locate the groups array')
     const body = groupsMatch[1]
     assert.match(body, /key: 'dashboard', label: 'Admin Dashboard'/)
     assert.match(body, /key: 'weekly-summary', label: 'Present Week Summary'/)
     assert.match(body, /key: 'leadership-report', label: 'Leadership Report'/)
+    assert.match(body, /key: 'video-creation', label: 'Video Creation'/)
     assert.match(body, /key: 'user-management', label: 'User Management'/)
     assert.match(body, /key: 'reports-analytics', label: 'Reports & Analytics'/)
-    // Exactly five — no sixth entry (e.g. a manager-report or my-report item).
-    assert.equal((body.match(/key: '/g) ?? []).length, 5)
+    // Exactly six — no seventh entry (e.g. a manager-report or my-report item).
+    assert.equal((body.match(/key: '/g) ?? []).length, 6)
   })
 
   test('the active item gets aria-current="page" and the -active modifier class; inactive items get neither', () => {
@@ -93,10 +97,10 @@ describe('App.tsx — current destination is derived from existing state, never 
   // leadershipReportOpen — still a plain derived const, still no new
   // navigation-state model (see leadershipReportWiring.test.ts for that
   // phase's own dedicated coverage of the extension itself).
-  test('currentAdminDestination is a plain derived const, not a useState — reads the same booleans (now including leadershipReportOpen)', () => {
+  test('currentAdminDestination is a plain derived const, not a useState — reads the same booleans (now including leadershipReportOpen and videoCreationOpen)', () => {
     assert.match(
       appSrc,
-      /const currentAdminDestination: AdminDestination = userManagementOpen\s*\n\s*\? 'user-management'\s*\n\s*: reportsAnalyticsOpen\s*\n\s*\? 'reports-analytics'\s*\n\s*: leadershipReportOpen\s*\n\s*\? 'leadership-report'\s*\n\s*: weeklySummaryOpen\s*\n\s*\? 'weekly-summary'\s*\n\s*: 'dashboard'/,
+      /const currentAdminDestination: AdminDestination = userManagementOpen\s*\n\s*\? 'user-management'\s*\n\s*: reportsAnalyticsOpen\s*\n\s*\? 'reports-analytics'\s*\n\s*: leadershipReportOpen\s*\n\s*\? 'leadership-report'\s*\n\s*: videoCreationOpen\s*\n\s*\? 'video-creation'\s*\n\s*: weeklySummaryOpen\s*\n\s*\? 'weekly-summary'\s*\n\s*: 'dashboard'/,
     )
     assert.equal(/useState<AdminDestination>/.test(appSrc), false)
   })

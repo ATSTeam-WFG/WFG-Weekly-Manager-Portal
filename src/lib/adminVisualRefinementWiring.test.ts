@@ -27,11 +27,23 @@ const dashboardCss = readFileSync(path.join(dir, '..', 'components', 'AdminDashb
 const initialsSrc = readFileSync(path.join(dir, '..', 'utils', 'initials.ts'), 'utf8')
 
 describe('Header.tsx — presentation-only refinement; Sign Out and the props interface are untouched', () => {
-  test('HeaderProps is unchanged — still exactly displayName/roleLabel/onSignOut, no new required prop', () => {
-    assert.match(
-      headerSrc,
-      /interface HeaderProps \{\s*\n\s*displayName: string\s*\n\s*roleLabel: string\s*\n\s*onSignOut: \(\) => void\s*\n\}/,
-    )
+  test('HeaderProps still requires exactly displayName/roleLabel/onSignOut — any later addition (e.g. the video-consent badge) must be optional, never a new required prop', () => {
+    const interfaceBlock = headerSrc.match(/interface HeaderProps \{([\s\S]*?)\n\}/)
+    assert.ok(interfaceBlock, 'could not locate the HeaderProps interface')
+    assert.match(interfaceBlock[1], /displayName: string/)
+    assert.match(interfaceBlock[1], /roleLabel: string/)
+    assert.match(interfaceBlock[1], /onSignOut: \(\) => void/)
+    // Every field other than the three required ones above must be
+    // optional (name?: type) — a required addition would silently break
+    // every existing caller that doesn't pass it.
+    const fieldLines = interfaceBlock[1]
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith('//'))
+    for (const line of fieldLines) {
+      if (/^(displayName|roleLabel|onSignOut):/.test(line)) continue
+      assert.match(line, /^\w+\?:/, `unexpected required field in HeaderProps: "${line}"`)
+    }
   })
 
   test('Sign Out button is byte-identical in behavior — same className, same onClick, same label', () => {
@@ -90,10 +102,10 @@ describe('AdminSidebar.tsx — decorative lower-sidebar treatment is aria-hidden
   // sibling, after every nav destination, and the destination count itself
   // is unaffected by the decoration) still holds, just against the new
   // `groups` structure.
-  test('the decoration is still the last sibling after every nav destination — now 5, one added by the Leadership Report phase, unrelated to this decoration', () => {
+  test('the decoration is still the last sibling after every nav destination — now 6, two added by later phases (Leadership Report, Video Creation), unrelated to this decoration', () => {
     const groupsMatch = sidebarSrc.match(/const groups: [\s\S]*?\] = \[[\s\S]*?\n  \]\s*\n/)
     assert.ok(groupsMatch)
-    assert.equal((groupsMatch[0].match(/key: '/g) ?? []).length, 5)
+    assert.equal((groupsMatch[0].match(/key: '/g) ?? []).length, 6)
     assert.match(sidebarSrc, /\{groups\.map\(\(group, groupIndex\) => \([\s\S]*?\)\)\}\s*\n\s*<SidebarDecoration \/>/)
   })
 
