@@ -637,7 +637,7 @@ export function buildStoryboardFromAtsReport(
       // The deterministic path narrates the SAME paragraph already shown
       // on screen verbatim — never a second, independently-written summary
       // of it (see this file's own "no second independent narration" note).
-      narrationText: openingParagraph,
+      narrationText: openingParagraph.length <= 210 ? openingParagraph : undefined,
     })
   }
 

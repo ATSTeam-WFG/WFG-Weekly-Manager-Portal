@@ -108,6 +108,28 @@ describe('buildStoryboardFromAtsReport — executive snapshot is conditional on 
     assert.equal(snapshot.body, BASE_REPORT.openingParagraph)
   })
 
+  test('long opening paragraphs preserve on-screen content without exceeding narration limit', () => {
+    const longParagraph = 'A'.repeat(421)
+    const report: AtsReport = {
+      ...BASE_REPORT,
+      openingParagraph: longParagraph,
+    }
+
+    const storyboard = buildStoryboardFromAtsReport(
+      report,
+      'Week Ending Oct 23, 2026',
+      'weekly-summary',
+    )
+
+    const snapshot = storyboard.scenes.find(
+      (scene) => scene.type === 'executive-snapshot',
+    )
+
+    assert.ok(snapshot)
+    assert.equal(snapshot.body, longParagraph)
+    assert.equal(snapshot.narrationText, undefined)
+  })
+
   test('no executive-snapshot scene is fabricated when openingParagraph is empty/whitespace-only', () => {
     const report: AtsReport = { ...BASE_REPORT, openingParagraph: '   ' }
     const storyboard = buildStoryboardFromAtsReport(report, 'Week Ending Sep 26, 2026', 'weekly-summary')
