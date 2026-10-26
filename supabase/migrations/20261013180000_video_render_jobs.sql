@@ -82,6 +82,50 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
+-- Explicit worker identity. The render worker authenticates as its own
+-- real Supabase user (VIDEO_RENDER_WORKER_EMAIL/PASSWORD — never the
+-- service_role key), same as before, but "is an admin" alone is not
+-- enough to tell that account apart from any other human Admin signed
+-- into the portal: is_admin() returns true for both. Without this table,
+-- claim/complete/fail_video_render_job below were only ever gated on
+-- is_admin(), so any ordinary Admin's own browser session could call
+-- these RPCs directly (e.g. via the Supabase client in devtools) and
+-- claim, complete, or fail a render job queued by a DIFFERENT admin —
+-- there was no ownership check in the claim candidate query, and
+-- complete/fail only check the worker_token, which the attacker could
+-- mint for themselves by claiming the job first.
+--
+-- This table is the explicit, minimal fix: a one-row (today) allowlist of
+-- user ids that ARE the dedicated worker account, populated by a manual
+-- INSERT once the worker's Supabase user exists (see this migration's own
+-- deployment notes) — never derived from role/profile data, and never
+-- exposed to any client (no GRANTs at all; only is_video_render_worker()
+-- below, itself SECURITY DEFINER, can read it).
+CREATE TABLE public.video_render_workers (
+  user_id uuid PRIMARY KEY REFERENCES auth.users(id),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.video_render_workers ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON public.video_render_workers FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.is_video_render_worker()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT auth.uid() IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM public.video_render_workers w WHERE w.user_id = auth.uid()
+    )
+$$;
+
+REVOKE ALL ON FUNCTION public.is_video_render_worker() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.is_video_render_worker() TO authenticated;
+
 
 -- Admin-only, idempotent job creation.
 -- This is a local draft and must be reviewed before applying.
@@ -145,8 +189,13 @@ GRANT EXECUTE ON FUNCTION public.create_video_render_job(uuid, jsonb, text)
   TO authenticated;
 
 
--- Worker lifecycle functions.
--- REVIEW ONLY: No execution grants until worker authentication is designed.
+-- Worker lifecycle functions. Gated on BOTH is_admin() and
+-- is_video_render_worker() — the worker's account is still provisioned as
+-- a real admin (same pattern as the existing scheduler-bot account; see
+-- adminAuth.ts's own authenticateSchedulerBot), but must now also be
+-- explicitly enrolled in video_render_workers, above. An ordinary Admin
+-- who is not enrolled gets FORBIDDEN here, closing the gap where any
+-- admin session could otherwise claim/complete/fail another admin's job.
 
 CREATE OR REPLACE FUNCTION public.claim_video_render_job()
 RETURNS TABLE(job_id uuid, claim_token uuid, job_storyboard jsonb, job_voice_option text)
@@ -155,12 +204,7 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-  -- The worker authenticates as a real Supabase user (its own admin
-  -- account, provisioned the same way as any other admin or the existing
-  -- scheduler-bot account — see adminAuth.ts's own authenticateSchedulerBot)
-  -- and is checked the same way any admin caller is, rather than
-  -- introducing a separate, parallel worker-role concept.
-  IF auth.uid() IS NULL OR NOT public.is_admin() THEN
+  IF auth.uid() IS NULL OR NOT public.is_admin() OR NOT public.is_video_render_worker() THEN
     RAISE EXCEPTION 'FORBIDDEN';
   END IF;
 
@@ -216,7 +260,7 @@ AS $$
 DECLARE
   v_updated integer;
 BEGIN
-  IF auth.uid() IS NULL OR NOT public.is_admin() THEN
+  IF auth.uid() IS NULL OR NOT public.is_admin() OR NOT public.is_video_render_worker() THEN
     RAISE EXCEPTION 'FORBIDDEN';
   END IF;
 
@@ -243,10 +287,6 @@ BEGIN
 END;
 $$;
 
--- Worker identity: the same admin-authenticated-caller pattern as every
--- other admin RPC in this app (see is_admin() checks above) — the worker
--- runs as a dedicated admin account, not a new/separate role, and not
--- the service_role key.
 REVOKE ALL ON FUNCTION public.claim_video_render_job()
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.claim_video_render_job()
@@ -272,7 +312,7 @@ AS $$
 DECLARE
   v_updated integer;
 BEGIN
-  IF auth.uid() IS NULL OR NOT public.is_admin() THEN
+  IF auth.uid() IS NULL OR NOT public.is_admin() OR NOT public.is_video_render_worker() THEN
     RAISE EXCEPTION 'FORBIDDEN';
   END IF;
 
@@ -312,15 +352,37 @@ REVOKE ALL ON FUNCTION public.fail_video_render_job(uuid, uuid, text)
 GRANT EXECUTE ON FUNCTION public.fail_video_render_job(uuid, uuid, text)
   TO authenticated;
 
--- Storage access for the private video-render-outputs bucket: the worker
--- (an admin account) can write/read completed renders; any admin can
--- read their own job's output via a signed URL request server-side
--- (api/video/get-render-job.ts) — never a public/anon read, and never
--- the bucket itself marked public (see its own INSERT above, public:false).
-CREATE POLICY video_render_outputs_admin_rw
+-- Storage access for the private video-render-outputs bucket. Previously
+-- this was a single FOR ALL policy keyed only on is_admin(), which let any
+-- admin read, overwrite, or delete every other admin's rendered video —
+-- not just their own. Split into two narrower policies instead:
+--
+-- 1. The worker (is_video_render_worker(), same identity as the lifecycle
+--    RPCs above) gets full read/write — it uploads the rendered MP4 under
+--    a path it controls (worker/video-worker.mjs's own `${jobId}.mp4`).
+-- 2. An ordinary admin gets SELECT-only, and only for the specific object
+--    that is their OWN job's output_storage_path — the exact access
+--    api/video/get-render-job.ts needs to mint a signed URL via the
+--    admin's own scoped Supabase client (never a service_role key), and
+--    no more than that.
+CREATE POLICY video_render_outputs_worker_rw
   ON storage.objects
   FOR ALL TO authenticated
-  USING (bucket_id = 'video-render-outputs' AND public.is_admin())
-  WITH CHECK (bucket_id = 'video-render-outputs' AND public.is_admin());
+  USING (bucket_id = 'video-render-outputs' AND public.is_video_render_worker())
+  WITH CHECK (bucket_id = 'video-render-outputs' AND public.is_video_render_worker());
+
+CREATE POLICY video_render_outputs_owner_read
+  ON storage.objects
+  FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'video-render-outputs'
+    AND public.is_admin()
+    AND EXISTS (
+      SELECT 1
+      FROM public.video_render_jobs j
+      WHERE j.output_storage_path = storage.objects.name
+        AND j.created_by = auth.uid()
+    )
+  );
 
 COMMIT;
