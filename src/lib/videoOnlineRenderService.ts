@@ -13,7 +13,8 @@ import {
 // server-side ONLINE_VIDEO_RENDERING_ENABLED env var set — see
 // api/video/create-render-job.ts, which independently re-checks that same
 // env var and is the real gate; this client-side flag only controls the UI.
-export const ONLINE_VIDEO_RENDERING_ENABLED = false
+export const ONLINE_VIDEO_RENDERING_ENABLED =
+  import.meta.env.VITE_ONLINE_VIDEO_RENDERING_ENABLED === 'true'
 
 async function getAccessToken(): Promise<string> {
   const { data, error } = await supabase.auth.getSession()
