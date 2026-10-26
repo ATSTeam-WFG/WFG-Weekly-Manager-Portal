@@ -144,7 +144,7 @@ export default function VideoCreationGenerate({ storyboard, narrationVoice, peri
 
       {renderError && <p className="vc-template-error">{renderError}</p>}
 
-      {canRenderLocally && confirmingMissingPresenter && (
+      {confirmingMissingPresenter && (
         <div className="vc-template-hint" role="alert">
           <p>This video will use the standard logo-card opening and closing — your talking presenter clips aren&apos;t ready yet.</p>
           <div className="vc-storyboard-actions">
