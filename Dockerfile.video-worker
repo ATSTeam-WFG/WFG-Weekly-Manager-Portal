@@ -44,6 +44,8 @@ ENV NODE_ENV=production
 ENV VIDEO_PROVIDER_CALLS_ENABLED=false
 ENV LUMA_LIVE_GENERATION=false
 
+# Allow the non-root worker to create generated visual assets.
+RUN mkdir -p /app/remotion/public/flux-assets && chown -R node:node /app/remotion/public
 USER node
 
 # Continuous polling worker — Railway runs this as a long-lived service.
