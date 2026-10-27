@@ -48,7 +48,8 @@ ENV LUMA_LIVE_GENERATION=false
 RUN mkdir -p /app/remotion/public/flux-assets && chown -R node:node /app/remotion/public
 # Allow Kokoro's Hugging Face library to cache its model files.
 RUN mkdir -p /app/node_modules/@huggingface/transformers/.cache && chown -R node:node /app/node_modules/@huggingface/transformers/.cache
-
+# Allow Remotion to download and cache headless Chrome.
+RUN mkdir -p /app/node_modules/.remotion && chown -R node:node /app/node_modules/.remotion
 USER node
 
 # Continuous polling worker — Railway runs this as a long-lived service.
