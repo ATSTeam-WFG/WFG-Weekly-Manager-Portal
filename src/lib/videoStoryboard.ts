@@ -463,6 +463,110 @@ function tryParseMetricBullet(bullet: string): VideoSceneMetric | null {
   return { label, value }
 }
 
+// Splits a paragraph into whole sentences (kept WITH their own trailing
+// punctuation) so buildGroundedNarration, below, can include or drop a
+// paragraph's sentences one at a time rather than treating the whole
+// paragraph as a single unbreakable unit. Pure regex, not NLP — a
+// paragraph with no sentence-ending punctuation at all (or none before its
+// first whitespace) comes back as one single "sentence", which
+// buildGroundedNarration's own word-boundary fallback already handles.
+function splitIntoSentences(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0)
+}
+
+// Ends a narration part with terminal punctuation for natural-sounding
+// speech, without altering anything else about it — a plain bullet like
+// "Interviewed 14 candidates" (no trailing punctuation, since it's written
+// for an on-screen list) reads as a dangling clause otherwise. A part that
+// already ends in ./!/? (every sentence from splitIntoSentences, and most
+// already-punctuated source text) is returned completely unchanged, and so
+// is one already ending in the "…" truncateAtWordBoundary appends (a
+// truncated title gaining a trailing "…." would be an odd-looking artifact
+// of this function, not a second, more-honest signal of anything).
+function asSpokenSentence(part: string): string {
+  return /[.!?…]$/.test(part) ? part : `${part}.`
+}
+
+// Shortens `text` to fit within maxChars by cutting at the last whole word
+// boundary and appending "…" — never a mid-word/mid-number slice. Shared by
+// buildGroundedNarration's own "not even the first part fits" fallback and
+// truncateTitleForNarration below, so both apply the exact same rule.
+function truncateAtWordBoundary(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text
+  const truncated = text.slice(0, maxChars - 1)
+  const lastSpace = truncated.lastIndexOf(' ')
+  return `${(lastSpace > 0 ? truncated.slice(0, lastSpace) : truncated).trimEnd()}…`
+}
+
+// A topic's title can be arbitrary free text a manager typed into the
+// Weekly Leadership Update — nothing bounds its length. Narrated at full
+// length as just another leading "part", an unusually long title could
+// consume most or all of a scene's 210-character narration budget, leaving
+// little or no room for the metrics/bullets/next that are the actual
+// reason the scene exists — the video would end up "narrating the heading"
+// instead of the report. Capping the TITLE'S OWN narrated length — to
+// roughly 30% of the shared NARRATION_TEXT_MAX_LENGTH contract, derived
+// rather than a second hard-coded constant so the two numbers can't drift
+// apart if that contract ever changes — guarantees the remaining ~70% of
+// every scene's narration budget for real source content, while a
+// shortened title (ending in "…", same visible-truncation rule as
+// everywhere else in this file) still identifies the topic. A title
+// already under the cap narrates completely unchanged, exactly as before.
+const MAX_TITLE_NARRATION_CHARS = Math.floor(NARRATION_TEXT_MAX_LENGTH * 0.3)
+
+function truncateTitleForNarration(title: string): string {
+  return truncateAtWordBoundary(title, MAX_TITLE_NARRATION_CHARS)
+}
+
+// Assembles a scene's spoken narration purely by reading its OWN existing
+// on-screen content aloud, in order — never a freshly written sentence,
+// never a paraphrase, never an inference about why something matters. Each
+// element of `parts` must already be a complete, independent unit (a
+// title, a sentence, a "label: value" metric, a bullet, a next/action
+// line) exactly as it will appear (or already appears) on screen; this
+// function only ever decides how MANY of them fit, never rewrites their
+// content; every number it can ever produce is therefore already present
+// verbatim in that same scene's other fields, which is what keeps this
+// trivially consistent with api/_lib/videoRenderReportGrounding.ts's
+// defense-in-depth numeric-claim check without this function needing any
+// awareness of that validator.
+//
+// Fits as many LEADING parts as possible under maxLength (NARRATION_TEXT_MAX_LENGTH
+// by default — the one shared contract documented above); a part that
+// would only partially fit is left out ENTIRELY, never spliced mid-word or
+// mid-number, so the spoken result always ends on a complete sentence. The
+// one case that cannot be satisfied by omission alone — a single part that
+// alone already exceeds maxLength (e.g. one long run-on opening paragraph
+// with no sentence breaks) — is truncated at its last whole word boundary
+// and ends with an explicit "…", so a shortened narration is always a
+// visible, deliberate choice rather than a silent cut-off mid-speech.
+function buildGroundedNarration(parts: string[], maxLength: number = NARRATION_TEXT_MAX_LENGTH): string | undefined {
+  const sentences = parts.map((part) => part.trim()).filter((part) => part.length > 0).map(asSpokenSentence)
+  if (sentences.length === 0) return undefined
+
+  let result = ''
+  for (const sentence of sentences) {
+    const candidate = result ? `${result} ${sentence}` : sentence
+    if (candidate.length <= maxLength) {
+      result = candidate
+      continue
+    }
+    if (result) {
+      // What's accumulated so far is already a complete, grounded
+      // narration; the next sentence simply doesn't fit alongside it.
+      break
+    }
+    // Even this FIRST sentence alone doesn't fit — truncate at the last
+    // whole word under the limit rather than fabricate a shorter rewrite.
+    result = truncateAtWordBoundary(sentence, maxLength)
+    break
+  }
+  return result || undefined
+}
+
 const MIN_SCENE_DURATION_SECONDS = 3
 const MAX_SCENE_DURATION_SECONDS = 15
 
@@ -635,9 +739,15 @@ export function buildStoryboardFromAtsReport(
       visualConcept: DETERMINISTIC_VISUAL_CONCEPT_BY_SCENE_TYPE['executive-snapshot'],
       visualPlan: DETERMINISTIC_VISUAL_PLAN_BY_SCENE_TYPE['executive-snapshot'],
       // The deterministic path narrates the SAME paragraph already shown
-      // on screen verbatim — never a second, independently-written summary
-      // of it (see this file's own "no second independent narration" note).
-      narrationText: openingParagraph.length <= 210 ? openingParagraph : undefined,
+      // on screen — never a second, independently-written summary of it
+      // (see this file's own "no second independent narration" note).
+      // When the paragraph fits within NARRATION_TEXT_MAX_LENGTH it is
+      // narrated verbatim, exactly as before; a longer paragraph used to
+      // be narrated as undefined (silence) rather than ever risk a
+      // too-long narrationText — buildGroundedNarration instead narrates
+      // as many of the paragraph's own complete sentences as fit, so a
+      // long Executive Snapshot still speaks instead of going silent.
+      narrationText: buildGroundedNarration(splitIntoSentences(openingParagraph)),
     })
   }
 
@@ -686,11 +796,29 @@ export function buildStoryboardFromAtsReport(
       visualConcept: DETERMINISTIC_VISUAL_CONCEPT_BY_SCENE_TYPE[sceneType],
       visualPlan: DETERMINISTIC_VISUAL_PLAN_BY_SCENE_TYPE[sceneType],
       storyEngine: inferStoryEngine({ sceneType, hasMetrics: sceneMetrics !== undefined }),
-      // No narrationText: writing a spoken version of a topic's content is
-      // a semantic judgment the deterministic path deliberately never
-      // attempts (same restraint as leadershipImportance, above) — this
-      // scene simply plays silently/on its own durationSeconds when the AI
-      // path is unavailable, rather than fabricating a narrated summary.
+      // Writing a fresh spoken SUMMARY of a topic — deciding what it means
+      // or why it matters — is still a semantic judgment this deterministic
+      // path never attempts (same restraint as leadershipImportance,
+      // above). But reading the scene's OWN already-selected on-screen
+      // content aloud is not a new judgment — it's the same title/body/
+      // metrics/bullets/next this scene already shows, merely spoken too
+      // (buildGroundedNarration only ever assembles existing parts; it
+      // never invents, paraphrases, or infers). This closes the gap where
+      // a topic scene used to render completely silent whenever the
+      // AI-assisted path was unavailable.
+      //
+      // The title is narrated via truncateTitleForNarration, not verbatim —
+      // a topic title is arbitrary free text with no length limit of its
+      // own, and narrating it in full could otherwise consume most or all
+      // of the 210-character budget before any actual content is ever
+      // reached, leaving the scene naming itself but saying nothing.
+      narrationText: buildGroundedNarration([
+        truncateTitleForNarration(topic.title),
+        ...(body ? [body] : []),
+        ...(sceneMetrics ?? []).map((metric) => `${metric.label}: ${metric.value}`),
+        ...(sceneBullets ?? []),
+        ...(sceneNext ? [sceneNext] : []),
+      ]),
     })
   })
 
@@ -714,7 +842,10 @@ export function buildStoryboardFromAtsReport(
       leadershipImportance: 'next-priority',
       visualConcept: DETERMINISTIC_VISUAL_CONCEPT_BY_SCENE_TYPE['forward-look'],
       visualPlan: DETERMINISTIC_VISUAL_PLAN_BY_SCENE_TYPE['forward-look'],
-      // No narrationText — same restraint as the topic-derived scenes above.
+      // Same approach as the topic-derived scenes above: narrate the SAME
+      // "Title: next" lines already shown as this scene's own bullets,
+      // never a fresh "looking ahead"-style summary of them.
+      narrationText: buildGroundedNarration(forwardLookBullets),
     })
   }
 

@@ -108,7 +108,7 @@ describe('buildStoryboardFromAtsReport — executive snapshot is conditional on 
     assert.equal(snapshot.body, BASE_REPORT.openingParagraph)
   })
 
-  test('long opening paragraphs preserve on-screen content without exceeding narration limit', () => {
+  test('a long opening paragraph with no sentence breaks preserves on-screen content, and is narrated truncated (never silently dropped) within the narration limit', () => {
     const longParagraph = 'A'.repeat(421)
     const report: AtsReport = {
       ...BASE_REPORT,
@@ -126,8 +126,50 @@ describe('buildStoryboardFromAtsReport — executive snapshot is conditional on 
     )
 
     assert.ok(snapshot)
+    // The ON-SCREEN body is always the full paragraph, verbatim, regardless
+    // of length — only the SPOKEN narration is ever bounded.
     assert.equal(snapshot.body, longParagraph)
-    assert.equal(snapshot.narrationText, undefined)
+    assert.equal(typeof snapshot.narrationText, 'string')
+    assert.ok(snapshot.narrationText!.length <= 210)
+    // No sentence-ending punctuation anywhere in the source means there is
+    // no safe "complete sentence" boundary to stop at — the fallback is an
+    // explicit, visible truncation (ending in an ellipsis), never a silent
+    // mid-word cut with no indication anything was shortened.
+    assert.ok(snapshot.narrationText!.endsWith('…'))
+    assert.ok(longParagraph.startsWith(snapshot.narrationText!.slice(0, -1)))
+  })
+
+  test('a long opening paragraph made of real sentences is narrated as its own leading complete sentences, never a mid-sentence cut', () => {
+    const sentences = [
+      'Commercial transactions grew significantly across every region this week.',
+      'Agency leadership credits the new referral program for most of the increase.',
+      'Underwriting capacity remains the primary constraint on further growth.',
+      'Recruiting pipeline activity stayed flat compared to the prior month.',
+      'The technology team shipped two of the three planned platform updates.',
+      'Client satisfaction scores held steady across every surveyed region.',
+    ]
+    const longParagraph = sentences.join(' ')
+    const report: AtsReport = { ...BASE_REPORT, openingParagraph: longParagraph }
+
+    const storyboard = buildStoryboardFromAtsReport(report, 'Week Ending Oct 23, 2026', 'weekly-summary')
+    const snapshot = storyboard.scenes.find((scene) => scene.type === 'executive-snapshot')
+
+    assert.ok(snapshot)
+    assert.equal(snapshot.body, longParagraph)
+    assert.ok(snapshot.narrationText)
+    assert.ok(snapshot.narrationText!.length <= 210)
+    // Every narrated sentence is a COMPLETE, verbatim sentence from the
+    // source paragraph — the narration is a leading prefix of real
+    // sentences, not a reflowed or reworded summary.
+    assert.ok(longParagraph.startsWith(snapshot.narrationText!))
+    assert.ok(/[.!?]$/.test(snapshot.narrationText!), 'narration should end on a complete sentence, not mid-sentence')
+  })
+
+  test('an opening paragraph that already fits is narrated verbatim, unchanged from before', () => {
+    const storyboard = buildStoryboardFromAtsReport(BASE_REPORT, 'Week Ending Sep 26, 2026', 'weekly-summary')
+    const snapshot = storyboard.scenes.find((scene) => scene.type === 'executive-snapshot')
+    assert.ok(snapshot)
+    assert.equal(snapshot.narrationText, BASE_REPORT.openingParagraph)
   })
 
   test('no executive-snapshot scene is fabricated when openingParagraph is empty/whitespace-only', () => {
@@ -351,7 +393,7 @@ describe('buildStoryboardFromAtsReport — leadershipImportance/visualConcept: d
     assert.equal(recruiting?.leadershipImportance, undefined)
   })
 
-  test('the deterministic transformer only narrates its own FIXED, app-owned copy (opening/closing framing, and the executive-snapshot paragraph read back verbatim) — it never writes an independent narrated summary of topic-derived business content', () => {
+  test('the deterministic transformer narrates its own FIXED, app-owned copy for opening/closing, and the executive-snapshot paragraph read back verbatim', () => {
     const storyboard = buildStoryboardFromAtsReport(BASE_REPORT, 'Week Ending Sep 26, 2026', 'weekly-summary')
     const opening = storyboard.scenes.find((s) => s.type === 'opening')
     const closing = storyboard.scenes.find((s) => s.type === 'closing')
@@ -363,11 +405,133 @@ describe('buildStoryboardFromAtsReport — leadershipImportance/visualConcept: d
     // on screen, verbatim — never a second, independently-written summary.
     assert.equal(snapshot?.narrationText, snapshot?.body)
     assert.equal(snapshot?.narrationText, BASE_REPORT.openingParagraph)
+  })
+
+  test('every topic-derived and forward-look scene now gets REAL narration too — assembled only from that scene\'s own existing title/body/metrics/bullets/next, never a fresh written summary', () => {
+    const storyboard = buildStoryboardFromAtsReport(BASE_REPORT, 'Week Ending Sep 26, 2026', 'weekly-summary')
 
     for (const scene of storyboard.scenes) {
       if (scene.type === 'opening' || scene.type === 'closing' || scene.type === 'executive-snapshot') continue
-      assert.equal(scene.narrationText, undefined, `topic-derived scene ${scene.id} unexpectedly has a deterministic narrationText`)
+      assert.equal(typeof scene.narrationText, 'string', `scene ${scene.id} (${scene.type}) should have narration, not silence`)
+      assert.ok(scene.narrationText!.length > 0)
+      assert.ok(scene.narrationText!.length <= 210, `scene ${scene.id}'s narration exceeds the 210-char limit`)
     }
+  })
+
+  test('a topic scene\'s narration always starts with that topic\'s own title, verbatim, when the title is short enough to narrate in full', () => {
+    const storyboard = buildStoryboardFromAtsReport(BASE_REPORT, 'Week Ending Sep 26, 2026', 'weekly-summary')
+    const recruiting = storyboard.scenes.find((s) => s.title === 'Recruiting')
+    const training = storyboard.scenes.find((s) => s.title === 'Training')
+    assert.ok(recruiting?.narrationText?.startsWith('Recruiting.'))
+    assert.ok(training?.narrationText?.startsWith('Training.'))
+  })
+
+  test('an unusually long topic title never crowds out the scene\'s actual content — the title is capped so real metrics/bullets/next still get narrated', () => {
+    // A topic title has no length limit of its own (free text a manager
+    // typed into the report); narrated in full it could otherwise consume
+    // the entire 210-character budget by itself, before any real content
+    // is ever reached.
+    const longTitle =
+      'Application Process, Rate Calculators, Jacket Generators, Systems Integration Friction, and New York Agent Retention Concerns Across All Regions This Quarter and Next'
+    const report: AtsReport = {
+      openingParagraph: 'x',
+      topics: [
+        {
+          title: longTitle,
+          statusSummary: 'This is the real, important, grounded status update that should be spoken.',
+          bullets: ['Open tickets: 42'],
+          next: 'Resolve the top three integration issues by Friday.',
+        },
+      ],
+    }
+
+    const storyboard = buildStoryboardFromAtsReport(report, 'Week Ending Oct 27, 2026', 'weekly-summary')
+    const scene = storyboard.scenes.find((s) => s.id === 'topic-0')
+
+    assert.ok(scene?.narrationText)
+    assert.ok(scene.narrationText!.length <= 210)
+    assert.ok(scene.narrationText!.includes('…'))
+    // It still identifies the topic: narration starts with a real, whole-word
+    // PREFIX of the actual title (never invented wording), visibly marked as
+    // shortened — and that prefix is SHORTER than the full title, i.e. the
+    // title was actually capped, not narrated verbatim.
+    const titlePrefix = scene.narrationText!.slice(0, scene.narrationText!.indexOf('…'))
+    assert.ok(titlePrefix.length > 0)
+    assert.ok(titlePrefix.length < longTitle.length)
+    assert.ok(longTitle.startsWith(titlePrefix))
+    // Most importantly: the actual grounded content now survives alongside
+    // the (shortened) title, instead of being silently crowded out.
+    assert.ok(scene.narrationText!.includes('This is the real, important, grounded status update that should be spoken.'))
+    assert.ok(scene.narrationText!.includes('Open tickets: 42'))
+    assert.ok(scene.narrationText!.includes('Resolve the top three integration issues by Friday.'))
+  })
+
+  test('a topic title right at or just under the narration title cap is still narrated completely unchanged (no needless truncation)', () => {
+    // 60 chars comfortably clears real short/medium titles without tripping
+    // the ~63-char cap (30% of the 210-char narration limit).
+    const normalTitle = 'Commercial Growth and New Agent Signings This Quarter'.slice(0, 60)
+    const report: AtsReport = {
+      openingParagraph: 'x',
+      topics: [{ title: normalTitle, statusSummary: 'On track.', bullets: [], next: '' }],
+    }
+    const storyboard = buildStoryboardFromAtsReport(report, 'Week Ending Oct 27, 2026', 'weekly-summary')
+    const scene = storyboard.scenes.find((s) => s.id === 'topic-0')
+    assert.equal(scene?.narrationText, `${normalTitle}. On track.`)
+    assert.ok(!scene!.narrationText!.includes('…'))
+  })
+
+  test('a topic scene\'s narration contains only text that is itself a substring of that topic\'s own title/statusSummary/bullets/next — never invented wording', () => {
+    const storyboard = buildStoryboardFromAtsReport(BASE_REPORT, 'Week Ending Sep 26, 2026', 'weekly-summary')
+    const recruiting = storyboard.scenes.find((s) => s.title === 'Recruiting')
+    const sourceTopic = BASE_REPORT.topics[0]
+    const sourceFragments = [sourceTopic.title, sourceTopic.statusSummary, sourceTopic.next, ...sourceTopic.bullets]
+
+    assert.ok(recruiting?.narrationText)
+    // Strip the sentence-ending punctuation this function adds, then every
+    // remaining clause must be found verbatim somewhere in the topic's own
+    // original fields.
+    const clauses = recruiting.narrationText!.split('. ').map((clause) => clause.replace(/\.$/, ''))
+    for (const clause of clauses) {
+      assert.ok(
+        sourceFragments.some((fragment) => fragment.includes(clause)),
+        `narrated clause "${clause}" was not found verbatim in the source topic`,
+      )
+    }
+  })
+
+  test('a bare topic with only a title and statusSummary (no bullets, metrics, or next) still gets narration from exactly those two fields', () => {
+    const training = buildStoryboardFromAtsReport(BASE_REPORT, 'Week Ending Sep 26, 2026', 'weekly-summary')
+      .scenes.find((s) => s.title === 'Training')
+    assert.equal(training?.narrationText, 'Training. No bullets or next this week.')
+  })
+
+  test('the forward-look scene is narrated from the exact same "Title: next" lines already shown as its own bullets', () => {
+    const storyboard = buildStoryboardFromAtsReport(BASE_REPORT, 'Week Ending Sep 26, 2026', 'weekly-summary')
+    const forwardLook = storyboard.scenes.find((s) => s.type === 'forward-look')
+    assert.ok(forwardLook)
+    assert.equal(forwardLook.narrationText, 'Recruiting: Extend two offers before Friday.')
+    assert.deepEqual(forwardLook.bullets, ['Recruiting: Extend two offers before Friday.'])
+  })
+
+  test('a forward-look scene with more "Title: next" lines than fit in 210 characters narrates only as many COMPLETE lines as fit, never a partial line', () => {
+    const report: AtsReport = {
+      openingParagraph: 'x',
+      topics: [
+        { title: 'Commercial Growth Initiative', statusSummary: 's', bullets: [], next: 'Finalize the new referral agreement with our top three regional partners by end of week.' },
+        { title: 'Underwriting Capacity Expansion', statusSummary: 's', bullets: [], next: 'Complete the second round of candidate interviews for the open underwriter roles.' },
+        { title: 'Technology Platform Migration', statusSummary: 's', bullets: [], next: 'Finish migrating the remaining two regions onto the new reporting platform.' },
+      ],
+    }
+    const storyboard = buildStoryboardFromAtsReport(report, 'Week Ending Oct 23, 2026', 'weekly-summary')
+    const forwardLook = storyboard.scenes.find((s) => s.type === 'forward-look')
+
+    assert.ok(forwardLook)
+    assert.ok(forwardLook.narrationText!.length <= 210)
+    // Every included line is a COMPLETE, exact bullet — never a truncated
+    // fragment of one of them.
+    const includedBullets = (forwardLook.bullets ?? []).filter((bullet) => forwardLook.narrationText!.includes(bullet))
+    assert.ok(includedBullets.length >= 1)
+    assert.ok(includedBullets.length < (forwardLook.bullets?.length ?? 0), 'expected the fixture to exceed 210 chars and leave at least one line out')
   })
 
   test('the deterministic transformer never produces a \'risk\' scene type, so no DETERMINISTIC_VISUAL_CONCEPT_BY_SCENE_TYPE entry for it is required (an AI-generated risk scene always supplies its own visualConcept)', () => {
