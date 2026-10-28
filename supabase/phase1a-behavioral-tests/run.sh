@@ -105,6 +105,7 @@ run_sql "Migration 1: sales_rep_role"                       "$MIGRATIONS_DIR/202
 run_sql "Migration 2: reports_restrict_to_manager_admin"    "$MIGRATIONS_DIR/20261027140100_reports_restrict_to_manager_admin.sql"
 run_sql "Migration 3: rep_manager_assignments"              "$MIGRATIONS_DIR/20261027140200_rep_manager_assignments.sql"
 run_sql "Migration 4: rep_reports"                          "$MIGRATIONS_DIR/20261027140300_rep_reports.sql"
+run_sql "Migration 5 (Phase 1B): rep_reports_submission_governance" "$MIGRATIONS_DIR/20261027150000_rep_reports_submission_governance.sql"
 
 echo ""
 echo "== Concurrency race: two REAL concurrent assign_sales_rep calls for the same rep =="
@@ -153,6 +154,71 @@ BEGIN
     RAISE EXCEPTION 'FAIL: expected exactly 2 total assignment rows after the race (one per concurrent call, no duplicates/orphans), found %.', total_count;
   END IF;
   RAISE NOTICE 'PASSED: two concurrent assign_sales_rep calls for the same rep serialized cleanly — exactly 1 active row, 2 total rows, no raw unique_violation.';
+END \$\$;
+"
+
+echo ""
+echo "== Concurrency race 2: two REAL concurrent resubmit_rejected_rep_report calls competing for ONE unused exception =="
+run_sql "Resubmission race fixture" "$SCRIPT_DIR/03-resubmission-race-fixture.sql"
+
+docker cp "$SCRIPT_DIR/resubmission-race-call.sql" "$CONTAINER_NAME:/tmp/resubmission-race-call.sql"
+
+set +e
+docker exec -u postgres "$CONTAINER_NAME" psql -v ON_ERROR_STOP=1 -f /tmp/resubmission-race-call.sql > /tmp/phase1b-resub-race-1.log 2>&1 &
+PID1=$!
+docker exec -u postgres "$CONTAINER_NAME" psql -v ON_ERROR_STOP=1 -f /tmp/resubmission-race-call.sql > /tmp/phase1b-resub-race-2.log 2>&1 &
+PID2=$!
+wait $PID1; EXIT1=$?
+wait $PID2; EXIT2=$?
+set -e
+
+echo "--- resubmission race call 1 exit=$EXIT1 ---"
+cat /tmp/phase1b-resub-race-1.log
+echo "--- resubmission race call 2 exit=$EXIT2 ---"
+cat /tmp/phase1b-resub-race-2.log
+
+# Exactly ONE of the two concurrent calls may succeed. The per-rep/week
+# advisory lock inside resubmit_rejected_rep_report fully serializes the
+# two overlapping transactions, so the loser's own fresh read (after
+# waiting for the lock) sees review_status already flipped to 'pending' by
+# the winner and is refused with INVALID_STATE — never a raw
+# unique_violation, and never a second consumption of the same exception
+# row (the FOR UPDATE row lock around the exception SELECT is a second,
+# independent layer of defense against double-consumption, relevant to any
+# future call site that might select the same exception without also
+# holding this advisory lock).
+SUCCESS_COUNT=0
+[ "$EXIT1" -eq 0 ] && SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+[ "$EXIT2" -eq 0 ] && SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+if [ "$SUCCESS_COUNT" -ne 1 ]; then
+  echo "FAIL: expected exactly 1 of the 2 concurrent resubmit calls to succeed (the other correctly refused), got $SUCCESS_COUNT successes."
+  exit 1
+fi
+if ! grep -q "INVALID_STATE" /tmp/phase1b-resub-race-1.log /tmp/phase1b-resub-race-2.log; then
+  echo "FAIL: expected the losing concurrent resubmit call to fail with INVALID_STATE (review_status already moved to pending by the winner), but neither log shows it."
+  exit 1
+fi
+
+echo ""
+echo "== Verifying post-race consistency (resubmission) =="
+docker exec -u postgres "$CONTAINER_NAME" psql -v ON_ERROR_STOP=1 -c "
+DO \$\$
+DECLARE
+  consumed_count integer;
+  pending_count integer;
+BEGIN
+  SELECT count(*) INTO consumed_count FROM public.rep_report_late_submission_exceptions
+    WHERE report_id = (SELECT id FROM public.rep_reports WHERE rep_id = 'd0000000-0000-0000-0000-00000000000a' AND week_start_date = '2026-02-02')
+      AND consumed_at IS NOT NULL;
+  SELECT count(*) INTO pending_count FROM public.rep_reports
+    WHERE rep_id = 'd0000000-0000-0000-0000-00000000000a' AND week_start_date = '2026-02-02' AND review_status = 'pending';
+  IF consumed_count <> 1 THEN
+    RAISE EXCEPTION 'FAIL: expected exactly 1 consumed exception after the race, found %.', consumed_count;
+  END IF;
+  IF pending_count <> 1 THEN
+    RAISE EXCEPTION 'FAIL: expected exactly 1 report row in pending review_status after the race, found %.', pending_count;
+  END IF;
+  RAISE NOTICE 'PASSED: two concurrent resubmit_rejected_rep_report calls competing for the SAME single unused exception serialized cleanly — exactly 1 consumed, exactly 1 successful resubmission, no double-consumption.';
 END \$\$;
 "
 

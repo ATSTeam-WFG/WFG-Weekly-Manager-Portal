@@ -102,10 +102,10 @@ describe('AdminSidebar.tsx — decorative lower-sidebar treatment is aria-hidden
   // sibling, after every nav destination, and the destination count itself
   // is unaffected by the decoration) still holds, just against the new
   // `groups` structure.
-  test('the decoration is still the last sibling after every nav destination — now 6, two added by later phases (Leadership Report, Video Creation), unrelated to this decoration', () => {
+  test('the decoration is still the last sibling after every nav destination — now 7, three added by later phases (Leadership Report, Video Creation, Sales Reps), unrelated to this decoration', () => {
     const groupsMatch = sidebarSrc.match(/const groups: [\s\S]*?\] = \[[\s\S]*?\n  \]\s*\n/)
     assert.ok(groupsMatch)
-    assert.equal((groupsMatch[0].match(/key: '/g) ?? []).length, 6)
+    assert.equal((groupsMatch[0].match(/key: '/g) ?? []).length, 7)
     assert.match(sidebarSrc, /\{groups\.map\(\(group, groupIndex\) => \([\s\S]*?\)\)\}\s*\n\s*<SidebarDecoration \/>/)
   })
 

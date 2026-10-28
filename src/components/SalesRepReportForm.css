@@ -1,0 +1,73 @@
+/* Sales Rep report form — reuses the shared .report-form/.report-section/
+   .report-textarea/.btn primitives already established by ReportForm.css
+   and shared.css (both loaded app-wide), and only adds what's genuinely new
+   here: the rejection banner and the deadline-passed notice. Intentionally
+   does NOT redefine .report-form/.report-section/.report-textarea/.btn* —
+   those come from ReportForm.css and shared.css, already loaded globally. */
+
+.sales-rep-report-form {
+  max-width: 800px;
+}
+
+.submitted-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--green);
+  background: rgba(22, 131, 75, 0.12);
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+
+.submitted-badge.rejected-badge {
+  color: var(--terracotta);
+  background: rgba(183, 101, 74, 0.12);
+}
+
+.rejection-banner {
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+  border-left: 4px solid var(--terracotta);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.rejection-banner-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 6px;
+}
+
+.rejection-banner-reason {
+  font-size: 14px;
+  color: var(--espresso);
+  white-space: pre-wrap;
+  margin: 0 0 8px;
+}
+
+.rejection-banner-helper {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0;
+}
+
+.deadline-passed-notice {
+  font-size: 13px;
+  color: var(--terracotta);
+  background: var(--warm-cream);
+  border: 1px dashed var(--terracotta);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 480px) {
+  .sales-rep-report-form {
+    padding: 20px 16px 80px;
+  }
+}

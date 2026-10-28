@@ -32,19 +32,20 @@ const adminDashboardSrc = readFileSync(path.join(dir, '..', 'components', 'Admin
 // 5th, restructuring the flat `items` array into grouped `groups` with
 // dividers; the Video Creation phase (see leadershipReportWiring.test.ts's
 // AdminSidebar describe block, updated alongside this one) added a 6th,
-// reformatting the union onto multiple lines. This describe block's own
-// intent (a fixed, fully-enumerated set of destinations, no stray extras
-// like a manager-report/my-report item) still holds — just against the
-// current count and structure.
-describe('AdminSidebar.tsx — exactly six destinations, no more, no fewer', () => {
-  test('AdminDestination is exactly the six-value union (not merely a superset — checked with an end anchor)', () => {
+// reformatting the union onto multiple lines. Phase 1B (see
+// salesRepRoutingWiring.test.ts) added a 7th, "Sales Reps". This describe
+// block's own intent (a fixed, fully-enumerated set of destinations, no
+// stray extras like a manager-report/my-report item) still holds — just
+// against the current count and structure.
+describe('AdminSidebar.tsx — exactly seven destinations, no more, no fewer', () => {
+  test('AdminDestination is exactly the seven-value union (not merely a superset — checked with an end anchor)', () => {
     assert.match(
       sidebarSrc,
-      /export type AdminDestination =\s*\n\s*\| 'dashboard'\s*\n\s*\| 'user-management'\s*\n\s*\| 'reports-analytics'\s*\n\s*\| 'weekly-summary'\s*\n\s*\| 'leadership-report'\s*\n\s*\| 'video-creation'\s*\n\s*\n\s*interface AdminSidebarProps/,
+      /export type AdminDestination =\s*\n\s*\| 'dashboard'\s*\n\s*\| 'user-management'\s*\n\s*\| 'reports-analytics'\s*\n\s*\| 'weekly-summary'\s*\n\s*\| 'leadership-report'\s*\n\s*\| 'video-creation'\s*\n\s*\| 'sales-reps'\s*\n\s*\n\s*interface AdminSidebarProps/,
     )
   })
 
-  test('the rendered groups array has exactly six entries total across its groups, one per destination, each with its own label', () => {
+  test('the rendered groups array has exactly seven entries total across its groups, one per destination, each with its own label', () => {
     const groupsMatch = sidebarSrc.match(/const groups: \{[\s\S]*?\}\[\]\[\] = \[([\s\S]*?)\n  \]\s*\n/)
     assert.ok(groupsMatch, 'could not locate the groups array')
     const body = groupsMatch[1]
@@ -54,8 +55,9 @@ describe('AdminSidebar.tsx — exactly six destinations, no more, no fewer', () 
     assert.match(body, /key: 'video-creation', label: 'Video Creation'/)
     assert.match(body, /key: 'user-management', label: 'User Management'/)
     assert.match(body, /key: 'reports-analytics', label: 'Reports & Analytics'/)
-    // Exactly six — no seventh entry (e.g. a manager-report or my-report item).
-    assert.equal((body.match(/key: '/g) ?? []).length, 6)
+    assert.match(body, /key: 'sales-reps', label: 'Sales Reps'/)
+    // Exactly seven — no eighth entry (e.g. a manager-report or my-report item).
+    assert.equal((body.match(/key: '/g) ?? []).length, 7)
   })
 
   test('the active item gets aria-current="page" and the -active modifier class; inactive items get neither', () => {
@@ -97,10 +99,10 @@ describe('App.tsx — current destination is derived from existing state, never 
   // leadershipReportOpen — still a plain derived const, still no new
   // navigation-state model (see leadershipReportWiring.test.ts for that
   // phase's own dedicated coverage of the extension itself).
-  test('currentAdminDestination is a plain derived const, not a useState — reads the same booleans (now including leadershipReportOpen and videoCreationOpen)', () => {
+  test('currentAdminDestination is a plain derived const, not a useState — reads the same booleans (now including leadershipReportOpen, videoCreationOpen, and salesRepManagementOpen)', () => {
     assert.match(
       appSrc,
-      /const currentAdminDestination: AdminDestination = userManagementOpen\s*\n\s*\? 'user-management'\s*\n\s*: reportsAnalyticsOpen\s*\n\s*\? 'reports-analytics'\s*\n\s*: leadershipReportOpen\s*\n\s*\? 'leadership-report'\s*\n\s*: videoCreationOpen\s*\n\s*\? 'video-creation'\s*\n\s*: weeklySummaryOpen\s*\n\s*\? 'weekly-summary'\s*\n\s*: 'dashboard'/,
+      /const currentAdminDestination: AdminDestination = userManagementOpen\s*\n\s*\? 'user-management'\s*\n\s*: reportsAnalyticsOpen\s*\n\s*\? 'reports-analytics'\s*\n\s*: leadershipReportOpen\s*\n\s*\? 'leadership-report'\s*\n\s*: videoCreationOpen\s*\n\s*\? 'video-creation'\s*\n\s*: weeklySummaryOpen\s*\n\s*\? 'weekly-summary'\s*\n\s*: salesRepManagementOpen\s*\n\s*\? 'sales-reps'\s*\n\s*: 'dashboard'/,
     )
     assert.equal(/useState<AdminDestination>/.test(appSrc), false)
   })
@@ -173,7 +175,10 @@ describe('App.tsx — ManagerReportView and My Weekly Report remain OUTSIDE the 
   })
 
   test('the isAdmin && !myReportOpen top-level split is unchanged — My Weekly Report still routes to the entirely separate Manager-facing branch, never through AdminShell', () => {
-    assert.match(appSrc, /\{isAdmin && !myReportOpen \? \(/)
+    // Phase 1B wrapped this split as the second arm of a new top-level
+    // isSalesRep ternary (see salesRepRoutingWiring.test.ts) — the check
+    // itself, and everything downstream of it, is otherwise unchanged.
+    assert.match(appSrc, /: isAdmin && !myReportOpen \? \(/)
     assert.equal(shellSrc.includes('myReportOpen'), false)
     assert.equal(sidebarSrc.includes('myReportOpen'), false)
   })

@@ -1,0 +1,369 @@
+/* Sales Rep's own dashboard — structurally mirrors Dashboard.css (the
+   Manager dashboard) at the same breakpoints/spacing/radius values, but
+   scoped under its own rep- prefixed classes throughout since this is a
+   brand-new, self-contained component dropped in alongside the existing
+   Dashboard, never sharing a class name with it. */
+
+.sales-rep-dashboard-page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 24px 100px;
+}
+
+.rep-dashboard-loading {
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+  padding: 60px 0;
+}
+
+.rep-dashboard-error {
+  text-align: center;
+  color: var(--dark-charcoal);
+  font-size: 14px;
+  padding: 60px 0;
+}
+
+.rep-dashboard-error p {
+  margin: 0 0 16px;
+}
+
+.rep-dashboard-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.rep-dashboard-heading h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.rep-dashboard-subtitle {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0;
+}
+
+.rep-dashboard-heading-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.rep-dashboard-week {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--espresso);
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 999px;
+  padding: 7px 16px;
+  white-space: nowrap;
+}
+
+.sign-out-btn {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-gray);
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 999px;
+  padding: 7px 16px;
+  cursor: pointer;
+}
+
+.sign-out-btn:hover {
+  color: var(--terracotta);
+  border-color: var(--terracotta);
+}
+
+.rep-hero-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-top: 4px solid var(--terracotta);
+  border-radius: 16px;
+  padding: 28px 32px;
+  margin-bottom: 20px;
+  box-shadow: 0 20px 40px -28px rgba(48, 42, 39, 0.35);
+}
+
+.rep-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.rep-hero-week-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-gray);
+}
+
+.rep-status-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+.rep-status-not_started {
+  color: var(--muted-gray);
+  background: var(--soft-sand);
+}
+
+.rep-status-draft {
+  color: var(--amber);
+  background: rgba(217, 119, 6, 0.12);
+}
+
+.rep-status-pending {
+  color: var(--terracotta);
+  background: rgba(183, 101, 74, 0.12);
+}
+
+.rep-status-approved {
+  color: var(--green);
+  background: rgba(22, 131, 75, 0.12);
+}
+
+.rep-status-rejected {
+  color: var(--terracotta);
+  background: rgba(183, 101, 74, 0.18);
+}
+
+.rep-hero-deadline-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.rep-hero-deadline {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--espresso);
+  margin: 0;
+}
+
+.rep-hero-deadline strong {
+  color: var(--dark-charcoal);
+}
+
+.rep-hero-deadline-passed {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--terracotta);
+  background: var(--soft-sand);
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+.rep-deadline-notice {
+  font-size: 13px;
+  color: var(--terracotta);
+  background: var(--warm-cream);
+  border: 1px dashed var(--terracotta);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 0 0 16px;
+}
+
+.rep-rejection-summary-banner {
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+  border-left: 4px solid var(--terracotta);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+
+.rep-rejection-summary-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.rep-rejection-summary-reason {
+  font-size: 13px;
+  color: var(--espresso);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.rep-hero-action {
+  text-align: center;
+}
+
+.rep-hero-readonly-note {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px dashed var(--soft-sand);
+  border-radius: 10px;
+  background: var(--warm-cream);
+  color: var(--dark-charcoal);
+  font-size: 14px;
+  text-align: center;
+}
+
+.rep-readonly-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.rep-readonly-section {
+  margin-bottom: 16px;
+}
+
+.rep-readonly-section:last-child {
+  margin-bottom: 0;
+}
+
+.rep-readonly-section-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 6px;
+}
+
+.rep-readonly-bullets {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--espresso);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.rep-readonly-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--espresso);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.rep-readonly-empty {
+  font-size: 13px;
+  color: var(--muted-gray);
+  font-style: italic;
+  margin: 0;
+}
+
+.rep-history-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.rep-history-card h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 12px;
+}
+
+.rep-history-error {
+  text-align: center;
+  padding: 16px 0;
+}
+
+.rep-history-error p {
+  color: var(--muted-gray);
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+
+.rep-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rep-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  margin: 0 -12px;
+  border-top: 1px solid var(--soft-sand);
+}
+
+.rep-history-row:first-child {
+  border-top: none;
+}
+
+.rep-history-week {
+  flex: 1;
+  font-size: 14px;
+  color: var(--espresso);
+}
+
+.rep-history-empty {
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+  padding: 24px 0;
+  margin: 0;
+}
+
+@media (max-width: 860px) {
+  .rep-dashboard-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .rep-hero-card {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sales-rep-dashboard-page {
+    padding: 24px 16px 80px;
+  }
+
+  .rep-dashboard-heading h1 {
+    font-size: 22px;
+  }
+
+  .rep-dashboard-heading-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .rep-hero-card,
+  .rep-readonly-card,
+  .rep-history-card {
+    padding: 20px 16px;
+  }
+
+  .rep-hero-deadline-block {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
