@@ -106,6 +106,7 @@ run_sql "Migration 2: reports_restrict_to_manager_admin"    "$MIGRATIONS_DIR/202
 run_sql "Migration 3: rep_manager_assignments"              "$MIGRATIONS_DIR/20261027140200_rep_manager_assignments.sql"
 run_sql "Migration 4: rep_reports"                          "$MIGRATIONS_DIR/20261027140300_rep_reports.sql"
 run_sql "Migration 5 (Phase 1B): rep_reports_submission_governance" "$MIGRATIONS_DIR/20261027150000_rep_reports_submission_governance.sql"
+run_sql "Migration 6 (Phase 1C): manager_report_rep_consolidation" "$MIGRATIONS_DIR/20261028090000_manager_report_rep_consolidation.sql"
 
 echo ""
 echo "== Concurrency race: two REAL concurrent assign_sales_rep calls for the same rep =="

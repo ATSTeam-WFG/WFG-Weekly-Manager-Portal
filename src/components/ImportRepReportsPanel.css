@@ -1,0 +1,166 @@
+/* Phase 1C — mirrors the app's existing centered-modal convention (see
+   AddEmployeeModal.css/ReminderPanel.css) under its own class names, so
+   nothing here can ever collide with or affect those unrelated features. */
+.irp-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(41, 37, 34, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+}
+
+.irp-panel {
+  width: 100%;
+  max-width: 640px;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--white);
+  border-radius: 16px;
+  border: 1px solid var(--soft-sand);
+  box-shadow: 0 24px 60px -20px rgba(48, 42, 39, 0.45);
+  padding: 20px 24px 24px;
+}
+
+.irp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.irp-header h2 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0;
+}
+
+.irp-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  line-height: 1;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted-gray);
+  cursor: pointer;
+}
+
+.irp-close-btn:hover {
+  background: var(--warm-cream);
+  color: var(--terracotta);
+}
+
+.irp-helper {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0 0 16px;
+}
+
+.irp-status {
+  font-size: 13px;
+  color: var(--muted-gray);
+  padding: 12px 0;
+}
+
+.irp-status-error {
+  color: var(--terracotta);
+}
+
+.irp-rep-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.irp-rep-card {
+  border: 1px solid var(--soft-sand);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--warm-cream);
+}
+
+.irp-rep-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--espresso);
+  margin: 0 0 8px;
+}
+
+.irp-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 16px;
+}
+
+.irp-field-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--espresso);
+  cursor: pointer;
+}
+
+.irp-field-checkbox-empty {
+  color: var(--muted-gray);
+  cursor: not-allowed;
+}
+
+.irp-preview {
+  border-top: 1px solid var(--soft-sand);
+  padding-top: 12px;
+  margin-bottom: 12px;
+}
+
+.irp-preview-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin: 0 0 6px;
+}
+
+.irp-preview-text {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--dark-charcoal);
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  padding: 12px;
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.irp-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+@media (max-width: 480px) {
+  .irp-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .irp-actions {
+    flex-direction: column-reverse;
+  }
+
+  .irp-actions .btn {
+    width: 100%;
+  }
+}
