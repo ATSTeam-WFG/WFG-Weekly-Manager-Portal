@@ -24,11 +24,19 @@ describe('leadershipReportDraftService.ts — save_leadership_report_draft is th
     assert.equal(/\.delete\(/.test(draftServiceSrc), false, 'must never call .delete() directly')
   })
 
-  test('fetchLeadershipReportDraft is a plain SELECT scoped by period_start_date, relying on existing RLS — reused as-is by both the Current tab and History', () => {
-    assert.match(draftServiceSrc, /\.from\('leadership_report_drafts'\)/)
-    assert.match(draftServiceSrc, /\.select\(/)
-    assert.match(draftServiceSrc, /\.eq\('period_start_date', periodStartDate\)/)
-    assert.match(draftServiceSrc, /\.maybeSingle\(\)/)
+  test('fetchLeadershipReportDraft is a SELECT scoped by period_start_date, relying on existing RLS, that prioritizes the caller\'s own draft over a shared one when RLS returns both', () => {
+    const fnStart = draftServiceSrc.indexOf('export async function fetchLeadershipReportDraft')
+    const fnEnd = draftServiceSrc.indexOf('\n}', fnStart)
+    const fnBody = draftServiceSrc.slice(fnStart, fnEnd)
+    assert.match(fnBody, /\.from\('leadership_report_drafts'\)/)
+    assert.match(fnBody, /\.select\(/)
+    assert.match(fnBody, /\.eq\('period_start_date', periodStartDate\)/)
+    // Intentionally NOT .maybeSingle(): RLS can legitimately return two rows
+    // for the same period (the caller's own draft AND a shared one), and
+    // .maybeSingle() throws on more than one row — it would break the
+    // sharing feature below rather than enforce anything meaningful.
+    assert.equal(/\.maybeSingle\(\)/.test(fnBody), false, 'must not use .maybeSingle() — RLS can return both an own and a shared row for the same period')
+    assert.match(fnBody, /data\.find\(\(d\) => !d\.is_shared\)/, "must prefer the caller's own (non-shared) draft when RLS returns more than one row")
   })
 
   test('every RPC parameter is mapped with the exact p_ prefix save_leadership_report_draft expects', () => {
@@ -60,15 +68,21 @@ describe('leadershipReportDraftService.ts — save_leadership_report_draft is th
 })
 
 describe('leadershipReportDraftService.ts — fetchPreviousLeadershipReportDraft is the nearest-prior-week, owner-blind read', () => {
-  test('queries strictly before the given week, ordered descending, limited to one row', () => {
+  test('queries strictly before the given week, ordered descending, then picks the most recent date and prioritizes the caller\'s own draft over a shared one at that date', () => {
     const fnStart = draftServiceSrc.indexOf('export async function fetchPreviousLeadershipReportDraft')
     const fnEnd = draftServiceSrc.indexOf('\n}', fnStart)
     const fnBody = draftServiceSrc.slice(fnStart, fnEnd)
     assert.match(fnBody, /\.from\('leadership_report_drafts'\)/)
     assert.match(fnBody, /\.lt\('period_start_date', beforePeriodStartDate\)/)
     assert.match(fnBody, /\.order\('period_start_date', \{ ascending: false \}\)/)
-    assert.match(fnBody, /\.limit\(1\)/)
-    assert.match(fnBody, /\.maybeSingle\(\)/)
+    // Intentionally NOT .limit(1)/.maybeSingle(): the most-recent date can
+    // have two rows (the caller's own draft and a shared one), and a bare
+    // single-row fetch would risk returning the shared row by an arbitrary
+    // tiebreak instead of preferring the caller's own — the client-side
+    // filter below is what actually enforces that preference.
+    assert.equal(/\.limit\(1\)/.test(fnBody), false, 'must not use .limit(1) — the most-recent date can have both an own and a shared row, and the own one must be preferred')
+    assert.match(fnBody, /data\[0\]\.period_start_date/, 'must derive the most recent date from the fetched rows')
+    assert.match(fnBody, /candidates\.find\(\(d\) => !d\.is_shared\)/, "must prefer the caller's own (non-shared) draft among same-date candidates")
   })
 
   test('accepts no owner_id parameter, and never filters by owner_id — RLS alone scopes this to the caller', () => {
