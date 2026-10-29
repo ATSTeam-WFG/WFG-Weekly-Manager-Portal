@@ -270,7 +270,7 @@ describe('Nothing in Step 1 touches the protected files or shared classes', () =
   test('AdminShell never replaces or imports Header — the two are separate, independently-editable siblings in App.tsx (Header itself was later authorized for a separate, presentation-only refinement — see headerRefinementWiring coverage)', () => {
     assert.equal(shellSrc.includes('Header'), false)
     assert.match(headerSrc, /<header className="header">/)
-    assert.match(headerSrc, /<span className="header-title">Weekly Manager Report<\/span>/)
+    assert.match(headerSrc, /<span className="header-title">OneReport Pulse<\/span>/)
   })
 
   test('the shared classes AdminDashboard/ReportsAnalytics both rely on are never redefined by the new shell files', () => {

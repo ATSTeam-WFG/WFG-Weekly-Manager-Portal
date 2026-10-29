@@ -717,7 +717,7 @@ function App() {
   // designated as also submitting their own weekly report. See src/types.ts.
   const isSubmitter = profile?.submitsWeeklyReport === true
   const displayName = profile?.fullName || userEmail || 'Manager'
-  const roleLabel = isAdmin ? 'Admin' : 'Manager'
+  const roleLabel = isAdmin ? 'Admin' : isSalesRep ? 'Sales Rep' : 'Manager'
   const adminWeek = getReportingWeekByOffset(adminWeekOffset)
   const weeklySummaryWeek = getReportingWeekByOffset(weeklySummaryWeekOffset)
   const leadershipReportWeek = getReportingWeekByOffset(leadershipReportWeekOffset)

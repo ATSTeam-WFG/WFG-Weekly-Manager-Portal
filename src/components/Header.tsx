@@ -20,7 +20,7 @@ export default function Header({ displayName, roleLabel, onSignOut, pendingConse
       <div className="header-brand">
         <img src={wfgLogo} alt="WFG" className="header-logo" />
         <span className="header-divider" aria-hidden="true" />
-        <span className="header-title">Weekly Manager Report</span>
+        <span className="header-title">OneReport Pulse</span>
       </div>
 
       <div className="header-right">

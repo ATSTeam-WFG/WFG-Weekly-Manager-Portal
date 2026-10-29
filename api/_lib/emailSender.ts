@@ -35,7 +35,7 @@ export function getWeeklyUpdatesFromEmail(): string {
 }
 
 export function getReminderFromName(): string {
-  return process.env.REMINDER_FROM_NAME || 'WFG Weekly Manager Reports (Test Sender)'
+  return process.env.REMINDER_FROM_NAME || 'WFG OneReport Pulse (Test Sender)'
 }
 
 // Safe local/manual test path: this never delivers anywhere. No third-party

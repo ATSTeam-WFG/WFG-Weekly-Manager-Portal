@@ -68,9 +68,9 @@ describe('Header.tsx — presentation-only refinement; Sign Out and the props in
     assert.match(headerSrc, /<img src=\{wfgLogo\} alt="WFG" className="header-logo" \/>/)
   })
 
-  test('the divider and title still both exist alongside the logo, unchanged text', () => {
+  test('the divider and title still both exist alongside the logo', () => {
     assert.match(headerSrc, /<span className="header-divider" aria-hidden="true" \/>/)
-    assert.match(headerSrc, /<span className="header-title">Weekly Manager Report<\/span>/)
+    assert.match(headerSrc, /<span className="header-title">OneReport Pulse<\/span>/)
   })
 
   test('the mobile breakpoint still hides the identity block (and now also the divider) exactly as it hid the title — no new behavior at that breakpoint beyond presentation', () => {
