@@ -109,8 +109,8 @@ export default function Dashboard({
           <div className="reminder-banner-text">
             <p className="reminder-banner-title">
               {status === 'draft'
-                ? 'OneReport Pulse report not yet submitted'
-                : 'OneReport Pulse report not started'}
+                ? 'Your weekly report not yet submitted'
+                : 'Your weekly report not started'}
             </p>
             <p className="reminder-banner-subtitle">
               {status === 'draft'
