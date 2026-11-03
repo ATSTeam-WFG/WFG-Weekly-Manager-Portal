@@ -797,10 +797,12 @@ describe('complete-profile.ts creates a profile with the approved roster role, i
     assert.match(fnMatch[0], /role:\s*employee\.portalRole/)
   })
 
-  test('toApprovedEmployee accepts both manager and admin portal_role values — an admin roster row is never filtered out before reaching complete-profile', () => {
+  test('toApprovedEmployee accepts manager, admin, sales_rep, and sales_admin portal_role values — none is filtered out before reaching complete-profile (the condition may now span multiple lines, so this checks each exclusion is present, not that they are adjacent on one line)', () => {
     const fnMatch = serviceClientSrc.match(/function toApprovedEmployee\([\s\S]*?\n\}/)
     assert.ok(fnMatch, 'could not locate toApprovedEmployee')
-    assert.match(fnMatch[0], /row\.portal_role !== 'manager' && row\.portal_role !== 'admin'/)
+    for (const role of ['manager', 'admin', 'sales_rep', 'sales_admin']) {
+      assert.match(fnMatch[0], new RegExp(`row\\.portal_role !== '${role}'`))
+    }
   })
 
   test('createProfileFromApprovedEmployee copies submits_weekly_report verbatim from the roster employee — never hardcoded, never inferred from role', () => {

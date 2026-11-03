@@ -23,12 +23,13 @@ export function isWfgEmail(email: string): boolean {
 }
 
 export interface RosterEntrySnapshot {
-  // Widened (Phase 1B) to include 'sales_rep' so this snapshot can
-  // correctly represent a sales rep's existing roster row — decision
-  // functions below must treat it as role_conflict, never as "no roster
-  // row" (which would let Add Manager silently upsert portal_role='manager'
-  // over an existing sales rep).
-  portalRole: 'manager' | 'admin' | 'sales_rep'
+  // Widened (Phase 1B) to include 'sales_rep', then (Sales Admin role) to
+  // include 'sales_admin', so this snapshot can correctly represent either
+  // existing roster row — decision functions below must treat each as
+  // role_conflict, never as "no roster row" (which would let Add Manager
+  // silently upsert portal_role='manager' over an existing sales rep or
+  // sales admin).
+  portalRole: 'manager' | 'admin' | 'sales_rep' | 'sales_admin'
   isActive: boolean
   accountCreated: boolean
 }
@@ -79,8 +80,14 @@ export function decideCreateManagerAccountAction(
   // Phase 1B: a sales_rep roster row is just as much a "higher/different
   // privileged entry already exists" case as an Admin one — Add Manager
   // must never silently upsert portal_role='manager' over an existing
-  // sales rep (see RosterEntrySnapshot's own comment on this type).
-  if (existingRoster && (existingRoster.portalRole === 'admin' || existingRoster.portalRole === 'sales_rep')) {
+  // sales rep (see RosterEntrySnapshot's own comment on this type). Sales
+  // Admin role: a sales_admin roster row must be treated identically — Add
+  // Manager must never silently reassign Joey Grampa (or any future Sales
+  // Admin) to a manager roster row.
+  if (
+    existingRoster &&
+    (existingRoster.portalRole === 'admin' || existingRoster.portalRole === 'sales_rep' || existingRoster.portalRole === 'sales_admin')
+  ) {
     return { action: 'role_conflict' }
   }
   if (!existingRoster) return { action: 'create_roster_and_account' }

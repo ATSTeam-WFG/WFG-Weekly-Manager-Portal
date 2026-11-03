@@ -55,16 +55,18 @@ export interface ApprovedEmployee {
   title: string | null
   email: string
   emailNormalized: string
-  // Phase 1B: widened to include 'sales_rep' — this type/lookup is shared
-  // by the ONBOARDING flows (complete-profile.ts, sync-profile-status.ts,
-  // request-access.ts), which must resolve a sales_rep's own roster row
-  // exactly like a manager's or admin's, not treat it as "no roster match
-  // at all" (see toApprovedEmployee below). This is a DIFFERENT, more
-  // general type than the Manager/Admin-only RosterEntrySnapshot used by
-  // the Add-Manager/Edit-Employee decision logic in adminUserManagement.ts
-  // — those intentionally stay scoped narrower where a sales_rep roster row
-  // must never be silently treated as eligible for a Manager/Admin action.
-  portalRole: 'manager' | 'admin' | 'sales_rep'
+  // Phase 1B: widened to include 'sales_rep', then (Sales Admin role)
+  // 'sales_admin' — this type/lookup is shared by the ONBOARDING flows
+  // (complete-profile.ts, sync-profile-status.ts, request-access.ts), which
+  // must resolve a sales_rep's or sales_admin's own roster row exactly like
+  // a manager's or admin's, not treat it as "no roster match at all" (see
+  // toApprovedEmployee below). This is a DIFFERENT, more general type than
+  // the Manager/Admin-only RosterEntrySnapshot used by the Add-Manager/
+  // Edit-Employee decision logic in adminUserManagement.ts — those
+  // intentionally stay scoped narrower where a sales_rep/sales_admin roster
+  // row must never be silently treated as eligible for a Manager/Admin
+  // action.
+  portalRole: 'manager' | 'admin' | 'sales_rep' | 'sales_admin'
   isActive: boolean
   accountCreated: boolean
   // Explicit, never inferred — see submits_weekly_report on both
@@ -97,10 +99,18 @@ interface ApprovedEmployeeRow {
 function toApprovedEmployee(row: ApprovedEmployeeRow): ApprovedEmployee | null {
   // A row with no portal_role assigned yet (or a genuinely unrecognized
   // value) is not eligible for anything — treated identically to no roster
-  // match at all. 'sales_rep' is a real, valid role (Phase 1B) and must
-  // resolve here — onboarding must be able to find a sales rep's own
-  // roster row, not silently treat it as absent.
-  if (row.portal_role !== 'manager' && row.portal_role !== 'admin' && row.portal_role !== 'sales_rep') return null
+  // match at all. 'sales_rep' and 'sales_admin' are both real, valid roles
+  // and must resolve here — onboarding must be able to find a sales rep's
+  // or sales admin's own roster row, not silently treat it as absent (the
+  // sales_admin omission here would otherwise break Joey Grampa's own
+  // first-login profile resolution in complete-profile.ts).
+  if (
+    row.portal_role !== 'manager' &&
+    row.portal_role !== 'admin' &&
+    row.portal_role !== 'sales_rep' &&
+    row.portal_role !== 'sales_admin'
+  )
+    return null
   return {
     id: row.id,
     fullName: row.full_name,
@@ -525,10 +535,10 @@ export async function createProfileFromApprovedEmployee(userId: string, employee
 }
 
 export type SyncOutcome =
-  // Widened (Phase 1B) to include 'sales_rep' — this feeds App.tsx's
-  // finishSigningIn, which assigns it straight into profile.role (already
-  // the wider ProfileRole type).
-  | { status: 'synced'; role: 'manager' | 'admin' | 'sales_rep'; isActive: boolean }
+  // Widened (Phase 1B) to include 'sales_rep', then (Sales Admin role)
+  // 'sales_admin' — this feeds App.tsx's finishSigningIn, which assigns it
+  // straight into profile.role (already the wider ProfileRole type).
+  | { status: 'synced'; role: 'manager' | 'admin' | 'sales_rep' | 'sales_admin'; isActive: boolean }
   | { status: 'unchanged' }
   | { status: 'denied' }
   | { status: 'no-profile' }
