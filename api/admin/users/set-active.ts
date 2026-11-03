@@ -1,4 +1,4 @@
-import { authenticateAdmin } from '../../_lib/adminAuth.js'
+import { authenticateAdminOrSalesAdmin } from '../../_lib/adminAuth.js'
 import { setManagedUserActive } from '../../_lib/supabaseServiceClient.js'
 
 interface VercelRequest {
@@ -19,18 +19,23 @@ function sendError(res: VercelResponse, status: number, code: string, message: s
   res.status(status).json({ error: code, message })
 }
 
-// Deactivate/reactivate — Admin-only. One endpoint handles both directions
+// Deactivate/reactivate — Admin (unrestricted) or Sales Admin (restricted
+// to sales_rep targets only). One endpoint handles both directions
 // (isActive: false | true) since the underlying operation is identical —
 // update approved_employees.is_active, and profiles.is_active if a profile
 // already exists, together. Never touches role/portal_role: a
-// deactivate-then-reactivate cycle always preserves the original role.
+// deactivate-then-reactivate cycle always preserves the original role. A
+// Sales Admin caller can never deactivate/reactivate a Manager, Admin, or
+// another Sales Admin account — setManagedUserActive enforces this
+// server-side via restrictToPortalRole before any write, not merely by
+// what this endpoint's own caller happens to pass.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'POST') {
       return sendError(res, 405, 'METHOD_NOT_ALLOWED', 'Only POST requests are supported.')
     }
 
-    const auth = await authenticateAdmin({
+    const auth = await authenticateAdminOrSalesAdmin({
       supabaseUrl: SUPABASE_URL,
       supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY,
       authorizationHeader: req.headers.authorization,
@@ -47,13 +52,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return sendError(res, 400, 'INVALID_REQUEST', 'An email and isActive (true/false) are required.')
     }
 
-    const outcome = await setManagedUserActive(email, isActive)
+    const outcome = await setManagedUserActive(email, isActive, auth.role === 'sales_admin' ? 'sales_rep' : undefined)
 
     switch (outcome.status) {
       case 'ok':
         return res.status(200).json({ status: 'ok', isActive })
       case 'not_found':
         return sendError(res, 404, 'NOT_FOUND', 'No user was found for this email.')
+      case 'forbidden':
+        return sendError(res, 403, 'FORBIDDEN', 'A Sales Admin may only manage Sales Rep accounts.')
       default:
         return sendError(res, 500, 'UPDATE_FAILED', 'Could not update this user.')
     }

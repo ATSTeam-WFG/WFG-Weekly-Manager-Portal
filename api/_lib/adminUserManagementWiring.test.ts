@@ -23,11 +23,16 @@ const setActiveSrc = readFileSync(path.join(dir, '..', 'admin', 'users', 'set-ac
 const updateSrc = readFileSync(path.join(dir, '..', 'admin', 'users', 'update.ts'), 'utf8')
 
 describe('Admin authorization — every Admin User Management endpoint authenticates before any privileged action', () => {
+  // set-active.ts is deliberately NOT in this list — it now uses
+  // authenticateAdminOrSalesAdmin (shared with the Sales Admin role), not
+  // the plain admin-only authenticateAdmin every endpoint below still uses
+  // exclusively. Its own authorization wiring (including the
+  // sales_rep-only restriction a sales_admin caller is held to) is verified
+  // in src/lib/salesAdminWiring.test.ts instead.
   for (const [name, src] of [
     ['list.ts', listSrc],
     ['invite.ts', inviteSrc],
     ['create-account.ts', createAccountSrc],
-    ['set-active.ts', setActiveSrc],
     ['update.ts', updateSrc],
   ] as const) {
     test(`${name} calls authenticateAdmin (never authenticateRequest/scheduler path) and checks auth.ok before proceeding`, () => {

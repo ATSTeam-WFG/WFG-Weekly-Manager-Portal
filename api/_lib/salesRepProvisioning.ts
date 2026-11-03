@@ -17,7 +17,7 @@
 import { isWfgEmail } from './adminUserManagement.js'
 
 export interface SalesRepRosterSnapshot {
-  portalRole: 'manager' | 'admin' | 'sales_rep'
+  portalRole: 'manager' | 'admin' | 'sales_rep' | 'sales_admin'
   isActive: boolean
   accountCreated: boolean
 }
@@ -54,7 +54,10 @@ export function decideCreateSalesRepAccountAction(
   existingProfile: { isActive: boolean } | null,
 ): CreateSalesRepAccountAction {
   if (!isWfgEmail(email)) return { action: 'invalid_domain' }
-  if (existingRoster && (existingRoster.portalRole === 'manager' || existingRoster.portalRole === 'admin')) {
+  if (
+    existingRoster &&
+    (existingRoster.portalRole === 'manager' || existingRoster.portalRole === 'admin' || existingRoster.portalRole === 'sales_admin')
+  ) {
     return { action: 'role_conflict' }
   }
   if (!existingRoster) return { action: 'create_roster_and_account' }

@@ -48,15 +48,15 @@ function getTsFunctionBody(src: string, functionName: string): string {
 describe('decideCreateSalesRepAccountAction treats an existing manager or admin roster role as role_conflict', () => {
   const fn = getTsFunctionBody(salesRepProvisioningSrc, 'decideCreateSalesRepAccountAction')
 
-  test('role_conflict fires for an existing roster role of manager OR admin, in one combined condition', () => {
+  test('role_conflict fires for an existing roster role of manager, admin, OR sales_admin (widened for the Sales Admin role — see salesAdminWiring.test.ts)', () => {
     assert.match(
       fn,
-      /if \(existingRoster && \(existingRoster\.portalRole === 'manager' \|\| existingRoster\.portalRole === 'admin'\)\) \{\s*\n\s*return \{ action: 'role_conflict' \}/,
+      /existingRoster\.portalRole === 'manager' \|\| existingRoster\.portalRole === 'admin' \|\| existingRoster\.portalRole === 'sales_admin'/,
     )
   })
 
-  test('role_conflict is NOT conditioned on is_active — a deactivated manager/admin row still conflicts', () => {
-    const conflictLine = fn.match(/if \(existingRoster && \([\s\S]*?role_conflict' \}\s*\n\s*\}/)
+  test('role_conflict is NOT conditioned on is_active — a deactivated manager/admin/sales_admin row still conflicts', () => {
+    const conflictLine = fn.match(/if \(\s*\n?\s*existingRoster &&[\s\S]*?role_conflict' \}\s*\n\s*\}/)
     assert.ok(conflictLine)
     assert.doesNotMatch(conflictLine[0], /isActive/)
   })
@@ -74,9 +74,9 @@ describe('decideCreateSalesRepAccountAction treats an existing manager or admin 
   })
 
   test('an existing sales_rep roster role is never part of the role_conflict condition', () => {
-    const conflictLine = fn.match(/if \(existingRoster && \([\s\S]*?\)\) \{/)
+    const conflictLine = fn.match(/if \(\s*\n?\s*existingRoster &&[\s\S]*?\) \{/)
     assert.ok(conflictLine)
-    assert.doesNotMatch(conflictLine[0], /sales_rep/)
+    assert.doesNotMatch(conflictLine[0], /'sales_rep'/)
   })
 })
 
@@ -85,8 +85,8 @@ describe('invite-sales-rep.ts requires POST + admin auth, and never reads a role
     assert.match(inviteSalesRepSrc, /req\.method !== 'POST'/)
   })
 
-  test('calls authenticateAdmin before doing anything else', () => {
-    assert.match(inviteSalesRepSrc, /authenticateAdmin\(/)
+  test('calls authenticateAdminOrSalesAdmin before doing anything else (widened for the Sales Admin role — see salesAdminWiring.test.ts)', () => {
+    assert.match(inviteSalesRepSrc, /authenticateAdminOrSalesAdmin\(/)
   })
 
   test('the request body is destructured for fullName/email only — never a role field', () => {
@@ -101,15 +101,15 @@ describe('invite-sales-rep.ts requires POST + admin auth, and never reads a role
 })
 
 describe('list-sales-reps.ts and list-managers.ts both require admin auth and GET', () => {
-  test('list-sales-reps.ts requires GET and admin auth, and calls listSalesReps()', () => {
+  test('list-sales-reps.ts requires GET and admin-or-sales-admin auth, and calls listSalesReps()', () => {
     assert.match(listSalesRepsSrc, /req\.method !== 'GET'/)
-    assert.match(listSalesRepsSrc, /authenticateAdmin\(/)
+    assert.match(listSalesRepsSrc, /authenticateAdminOrSalesAdmin\(/)
     assert.match(listSalesRepsSrc, /listSalesReps\(\)/)
   })
 
-  test('list-managers.ts requires GET and admin auth, and calls listActiveManagers()', () => {
+  test('list-managers.ts requires GET and admin-or-sales-admin auth, and calls listActiveManagers()', () => {
     assert.match(listManagersSrc, /req\.method !== 'GET'/)
-    assert.match(listManagersSrc, /authenticateAdmin\(/)
+    assert.match(listManagersSrc, /authenticateAdminOrSalesAdmin\(/)
     assert.match(listManagersSrc, /listActiveManagers\(\)/)
   })
 })
@@ -152,7 +152,7 @@ describe('Sales Rep provisioning is a fully separate surface — it never touche
     assert.match(supabaseServiceClientSrc, /await createAccountAndMarkRoster\(emailNormalized, email\)/)
   })
 
-  test('SalesRepManagement.tsx is exported as a standalone component taking onBack, matching UserManagement.tsx\'s own prop convention', () => {
-    assert.match(salesRepManagementComponentSrc, /export default function SalesRepManagement\(\{ onBack \}: SalesRepManagementProps\)/)
+  test('SalesRepManagement.tsx is exported as a standalone component taking onBack (plus an optional restricted flag for the Sales Admin role, added later — see salesAdminWiring.test.ts), matching UserManagement.tsx\'s own prop convention', () => {
+    assert.match(salesRepManagementComponentSrc, /export default function SalesRepManagement\(\{ onBack, restricted = false \}: SalesRepManagementProps\)/)
   })
 })

@@ -20,6 +20,7 @@ import VideoCreation from './components/VideoCreation'
 import VideoConsentInbox from './components/VideoConsentInbox'
 import ConfirmDialog from './components/ConfirmDialog'
 import SalesRepManagement from './components/SalesRepManagement'
+import SalesAdminShell from './components/SalesAdminShell'
 import SalesRepDashboard from './components/SalesRepDashboard'
 import MyReps from './components/MyReps'
 import { supabase } from './lib/supabaseClient'
@@ -712,12 +713,20 @@ function App() {
   // exclusive roles — see profiles_role_check), so this never conflicts
   // with isAdmin/isSubmitter below.
   const isSalesRep = profile?.role === 'sales_rep'
+  // A distinct, restricted admin role — never isAdmin, never any of the
+  // existing Admin-only branches below. Checked alongside isSalesRep,
+  // before the isAdmin/Manager split, for the same reason: sales_admin is
+  // mutually exclusive with every other role (profiles_role_check), so a
+  // sales_admin profile must never fall through into the plain Manager
+  // <Dashboard> branch (which is exactly what would happen without this
+  // explicit check, since isAdmin alone would be false for it).
+  const isSalesAdmin = profile?.role === 'sales_admin'
   // Explicit, additive flag — never inferred from role. True for every
   // Manager and for a dual-role admin submitter — an Admin explicitly
   // designated as also submitting their own weekly report. See src/types.ts.
   const isSubmitter = profile?.submitsWeeklyReport === true
   const displayName = profile?.fullName || userEmail || 'Manager'
-  const roleLabel = isAdmin ? 'Admin' : isSalesRep ? 'Sales Rep' : 'Manager'
+  const roleLabel = isAdmin ? 'Admin' : isSalesAdmin ? 'Sales Admin' : isSalesRep ? 'Sales Rep' : 'Manager'
   const adminWeek = getReportingWeekByOffset(adminWeekOffset)
   const weeklySummaryWeek = getReportingWeekByOffset(weeklySummaryWeekOffset)
   const leadershipReportWeek = getReportingWeekByOffset(leadershipReportWeekOffset)
@@ -883,6 +892,8 @@ function App() {
 
       {isSalesRep ? (
         <SalesRepDashboard repId={managerId ?? ''} />
+      ) : isSalesAdmin ? (
+        <SalesAdminShell />
       ) : isAdmin && !myReportOpen ? (
         selectedManager ? (
           <ManagerReportView

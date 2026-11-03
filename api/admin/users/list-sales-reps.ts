@@ -1,4 +1,4 @@
-import { authenticateAdmin } from '../../_lib/adminAuth.js'
+import { authenticateAdminOrSalesAdmin } from '../../_lib/adminAuth.js'
 import { listSalesReps } from '../../_lib/supabaseServiceClient.js'
 
 interface VercelRequest {
@@ -19,19 +19,22 @@ function sendError(res: VercelResponse, status: number, code: string, message: s
   res.status(status).json({ error: code, message })
 }
 
-// Admin-only: lists every approved_employees row with portal_role='sales_rep',
-// joined against profiles and rep_manager_assignments, for the Sales Rep
-// Management table (name, email, status, current manager). Mirrors
-// api/admin/users/list.ts exactly. Never reachable by a Manager —
-// authenticateAdmin independently re-verifies role='admin' and is_active on
-// every request, never trusting anything the client claims about itself.
+// Admin or Sales Admin: lists every approved_employees row with
+// portal_role='sales_rep', joined against profiles and
+// rep_manager_assignments, for the Sales Rep Management table (name, email,
+// status, current manager). currentManagerName is deliberately included —
+// Sales Admin is explicitly authorized to see Manager names in exactly this
+// assignment-management context, never beyond it. Never reachable by a
+// plain Manager — authenticateAdminOrSalesAdmin independently re-verifies
+// role is admin or sales_admin, and is_active, on every request, never
+// trusting anything the client claims about itself.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'GET') {
       return sendError(res, 405, 'METHOD_NOT_ALLOWED', 'Only GET requests are supported.')
     }
 
-    const auth = await authenticateAdmin({
+    const auth = await authenticateAdminOrSalesAdmin({
       supabaseUrl: SUPABASE_URL,
       supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY,
       authorizationHeader: req.headers.authorization,

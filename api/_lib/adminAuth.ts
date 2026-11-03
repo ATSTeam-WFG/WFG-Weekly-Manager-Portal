@@ -114,6 +114,87 @@ export async function authenticateAdmin(config: AdminAuthConfig): Promise<AdminA
   return { ok: true, supabase, userId: userData.user.id, via: 'admin-session' }
 }
 
+export interface AdminOrSalesAdminAuthSuccess {
+  ok: true
+  supabase: SupabaseClient
+  userId: string
+  role: 'admin' | 'sales_admin'
+}
+
+export type AdminOrSalesAdminAuthResult = AdminOrSalesAdminAuthSuccess | AdminAuthFailure
+
+// A separate, parallel function to authenticateAdmin above — NOT a
+// refactor of it — so every existing admin-only endpoint that still calls
+// authenticateAdmin is completely unaffected by the addition of the
+// sales_admin role. Used only by the handful of endpoints Sales Admin is
+// explicitly authorized for (inviting/listing Sales Reps, listing Manager
+// names for the assignment selector, and — scoped further by the caller —
+// deactivating/reactivating a Sales Rep account). Deliberately returns
+// which role actually matched, so a caller-side endpoint can apply any
+// extra restriction a sales_admin-authenticated request still needs (e.g.
+// set-active.ts restricting the target to a sales_rep row) without
+// duplicating the authentication logic itself.
+export async function authenticateAdminOrSalesAdmin(config: AdminAuthConfig): Promise<AdminOrSalesAdminAuthResult> {
+  const { supabaseUrl, supabasePublishableKey, authorizationHeader } = config
+
+  if (!supabaseUrl || !supabasePublishableKey) {
+    return { ok: false, status: 500, code: 'SERVER_MISCONFIGURED', message: 'Server is missing required configuration.' }
+  }
+
+  const authValue = Array.isArray(authorizationHeader) ? authorizationHeader[0] : authorizationHeader
+  if (!authValue || !authValue.startsWith('Bearer ')) {
+    return { ok: false, status: 401, code: 'UNAUTHORIZED', message: 'Missing or invalid Authorization header.' }
+  }
+  const accessToken = authValue.slice('Bearer '.length).trim()
+  if (!accessToken) {
+    return { ok: false, status: 401, code: 'UNAUTHORIZED', message: 'Missing access token.' }
+  }
+
+  const supabase = createClient(supabaseUrl, supabasePublishableKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false },
+  })
+
+  const { data: userData, error: userError } = await supabase.auth.getUser(accessToken)
+  if (userError || !userData.user) {
+    console.error('adminAuth: getUser() rejected the bearer token:', {
+      name: userError?.name,
+      status: userError?.status,
+      code: userError?.code,
+      message: userError?.message,
+    })
+    return { ok: false, status: 401, code: 'UNAUTHORIZED', message: 'Invalid or expired session.' }
+  }
+
+  if (userData.user.app_metadata?.password_change_required === true) {
+    return {
+      ok: false,
+      status: 403,
+      code: 'PASSWORD_CHANGE_REQUIRED',
+      message: 'You must set your own password before continuing.',
+    }
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('role, is_active')
+    .eq('id', userData.user.id)
+    .maybeSingle()
+
+  if (profileError) {
+    console.error('adminAuth: profile lookup failed:', profileError.message)
+    return { ok: false, status: 500, code: 'PROFILE_LOOKUP_FAILED', message: 'Could not verify access.' }
+  }
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'sales_admin')) {
+    return { ok: false, status: 403, code: 'FORBIDDEN', message: 'Admin or Sales Admin access is required.' }
+  }
+  if (!profile.is_active) {
+    return { ok: false, status: 403, code: 'FORBIDDEN', message: 'Admin or Sales Admin access is required.' }
+  }
+
+  return { ok: true, supabase, userId: userData.user.id, role: profile.role }
+}
+
 // Compares two secrets in constant time regardless of length. Buffers of
 // different lengths can't be passed to crypto.timingSafeEqual directly (it
 // throws), so on a length mismatch we still perform an equal-cost comparison

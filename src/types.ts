@@ -2,7 +2,7 @@ export type ReportStatus = 'not_started' | 'draft' | 'submitted'
 
 export type SubmissionSource = 'manual' | 'automatic'
 
-export type ProfileRole = 'manager' | 'admin' | 'sales_rep'
+export type ProfileRole = 'manager' | 'admin' | 'sales_rep' | 'sales_admin'
 
 export interface Profile {
   id: string

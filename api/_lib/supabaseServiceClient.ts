@@ -813,9 +813,14 @@ export async function createAccountForExistingEmployee(email: string): Promise<C
   return { status: 'created' }
 }
 
-export type SetManagedUserActiveOutcome = { status: 'ok' } | { status: 'not_found' } | { status: 'error' }
+export type SetManagedUserActiveOutcome =
+  | { status: 'ok' }
+  | { status: 'not_found' }
+  | { status: 'forbidden' }
+  | { status: 'error' }
 
-// Deactivate/reactivate — Admin-only, from api/admin/users/set-active.ts.
+// Deactivate/reactivate — from api/admin/users/set-active.ts, callable by
+// Admin (unrestricted) or Sales Admin (restricted, via restrictToPortalRole).
 // Updates approved_employees.is_active immediately (the roster is the
 // source of truth Admin User Management manages directly) and, if a
 // profile already exists, profiles.is_active too, in the same call — this
@@ -823,13 +828,25 @@ export type SetManagedUserActiveOutcome = { status: 'ok' } | { status: 'not_foun
 // which gates a completely separate mechanism (automatic login-time
 // reconciliation), not direct Admin action. Never touches role/portal_role
 // — role is always preserved across a deactivate/reactivate cycle.
-export async function setManagedUserActive(email: string, isActive: boolean): Promise<SetManagedUserActiveOutcome> {
+//
+// restrictToPortalRole: when set (Sales Admin's only allowed use of this
+// function), the target roster row's portal_role must match exactly or the
+// call is refused with 'forbidden' BEFORE any write — a Sales Admin must
+// never be able to deactivate/reactivate a Manager, Admin, or another Sales
+// Admin account through this endpoint. Full Admin always calls this with
+// the restriction omitted, preserving its existing unrestricted behavior
+// exactly.
+export async function setManagedUserActive(
+  email: string,
+  isActive: boolean,
+  restrictToPortalRole?: 'sales_rep',
+): Promise<SetManagedUserActiveOutcome> {
   const emailNormalized = normalizeEmail(email)
   const client = getServiceClient()
 
   const { data: rosterRow, error: rosterSelectError } = await client
     .from('approved_employees')
-    .select('id')
+    .select('id, portal_role')
     .eq('email_normalized', emailNormalized)
     .maybeSingle()
 
@@ -838,6 +855,9 @@ export async function setManagedUserActive(email: string, isActive: boolean): Pr
     return { status: 'error' }
   }
   if (!rosterRow) return { status: 'not_found' }
+  if (restrictToPortalRole && rosterRow.portal_role !== restrictToPortalRole) {
+    return { status: 'forbidden' }
+  }
 
   const { error: rosterUpdateError } = await client
     .from('approved_employees')
@@ -1409,7 +1429,11 @@ async function fetchSalesRepRosterAndProfileSnapshots(
   if (profileLookup.status === 'error') return { error: true }
 
   const roster: SalesRepRosterSnapshot | null =
-    rosterRow && (rosterRow.portal_role === 'manager' || rosterRow.portal_role === 'admin' || rosterRow.portal_role === 'sales_rep')
+    rosterRow &&
+    (rosterRow.portal_role === 'manager' ||
+      rosterRow.portal_role === 'admin' ||
+      rosterRow.portal_role === 'sales_rep' ||
+      rosterRow.portal_role === 'sales_admin')
       ? { portalRole: rosterRow.portal_role, isActive: rosterRow.is_active, accountCreated: rosterRow.account_created_at !== null }
       : null
 

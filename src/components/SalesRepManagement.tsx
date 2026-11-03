@@ -13,15 +13,24 @@ import {
 import './StatusBadge.css'
 import './SalesRepManagement.css'
 
-// Admin-only Sales Rep provisioning screen — Phase 1B. A completely
-// separate, parallel surface from UserManagement.tsx (Manager/Admin
-// roster): same house UI conventions (KPI row, filter/search controls,
-// div-based semantic table, per-row action/message pattern), but its own
-// component, its own service module, its own API routes. Not wired into
-// App.tsx's navigation — that happens in a separate step outside this
-// component's own scope; this is just the screen itself.
+// Sales Rep provisioning screen — Phase 1B, reused by both Full Admin and
+// the restricted Sales Admin role. A completely separate, parallel surface
+// from UserManagement.tsx (Manager/Admin roster): same house UI conventions
+// (KPI row, filter/search controls, div-based semantic table, per-row
+// action/message pattern), but its own component, its own service module,
+// its own API routes.
+//
+// restricted (default false): set by SalesAdminShell for a sales_admin
+// caller. Hides the "Back to Admin Dashboard" link (meaningless outside the
+// Full Admin shell — Sales Admin has its own, separate nav) and the "Grant
+// Late Exception" control entirely. This is a UX/visibility concern only,
+// never the actual security boundary — grant_rep_report_late_submission_exception
+// itself is still is_admin()-only server-side regardless of this prop, so a
+// sales_admin caller would be refused there even if this flag were ever
+// wrong or bypassed.
 interface SalesRepManagementProps {
   onBack: () => void
+  restricted?: boolean
 }
 
 const STATUS_LABELS: Record<SalesRep['status'], string> = {
@@ -78,7 +87,7 @@ function lateExceptionErrorMessage(err: unknown): string {
   return 'Could not grant the exception. Please try again.'
 }
 
-export default function SalesRepManagement({ onBack }: SalesRepManagementProps) {
+export default function SalesRepManagement({ onBack, restricted = false }: SalesRepManagementProps) {
   const [reps, setReps] = useState<SalesRep[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<{ code: string; message: string } | null>(null)
@@ -234,9 +243,11 @@ export default function SalesRepManagement({ onBack }: SalesRepManagementProps) 
 
   return (
     <div className="sales-rep-management">
-      <button type="button" className="link-btn back-link" onClick={onBack}>
-        &larr; Back to Admin Dashboard
-      </button>
+      {!restricted && (
+        <button type="button" className="link-btn back-link" onClick={onBack}>
+          &larr; Back to Admin Dashboard
+        </button>
+      )}
 
       <div className="srm-header">
         <div className="srm-header-titles">
@@ -366,15 +377,17 @@ export default function SalesRepManagement({ onBack }: SalesRepManagementProps) 
                       )}
                     </div>
                     <div className="srm-cell srm-cell-actions" role="cell">
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        disabled={!rep.profileId}
-                        title={rep.profileId ? undefined : "This rep hasn't completed onboarding yet."}
-                        onClick={() => handleToggleException(rep)}
-                      >
-                        {expandedExceptionRepId === rep.id ? 'Close' : 'Grant Late Exception'}
-                      </button>
+                      {!restricted && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled={!rep.profileId}
+                          title={rep.profileId ? undefined : "This rep hasn't completed onboarding yet."}
+                          onClick={() => handleToggleException(rep)}
+                        >
+                          {expandedExceptionRepId === rep.id ? 'Close' : 'Grant Late Exception'}
+                        </button>
+                      )}
                     </div>
                   </div>
 

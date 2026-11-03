@@ -1,4 +1,4 @@
-import { authenticateAdmin } from '../../_lib/adminAuth.js'
+import { authenticateAdminOrSalesAdmin } from '../../_lib/adminAuth.js'
 import { addOrCreateSalesRepAccount } from '../../_lib/supabaseServiceClient.js'
 
 interface VercelRequest {
@@ -19,21 +19,22 @@ function sendError(res: VercelResponse, status: number, code: string, message: s
   res.status(status).json({ error: code, message })
 }
 
-// "Add Sales Rep" — Admin-only. Creates an approved_employees roster entry
-// (role: sales_rep) if one doesn't already exist, then creates the rep's
-// Auth account directly with the shared temporary password (see
+// "Add Sales Rep" — Admin or Sales Admin. Creates an approved_employees
+// roster entry (role: sales_rep) if one doesn't already exist, then creates
+// the rep's Auth account directly with the shared temporary password (see
 // createEmployeeAccount in supabaseServiceClient.ts) — no invitation email,
 // no invite link. Mirrors api/admin/users/invite.ts exactly, but for the
 // sales_rep role: this endpoint NEVER reads a role from the request body —
 // the role is always hardcoded to sales_rep via addOrCreateSalesRepAccount,
-// and an existing manager/admin roster entry is never touched (role_conflict).
+// and an existing manager/admin/sales_admin roster entry is never touched
+// (role_conflict).
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'POST') {
       return sendError(res, 405, 'METHOD_NOT_ALLOWED', 'Only POST requests are supported.')
     }
 
-    const auth = await authenticateAdmin({
+    const auth = await authenticateAdminOrSalesAdmin({
       supabaseUrl: SUPABASE_URL,
       supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY,
       authorizationHeader: req.headers.authorization,
