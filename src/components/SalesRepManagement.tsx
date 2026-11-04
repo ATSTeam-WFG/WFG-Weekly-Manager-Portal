@@ -366,7 +366,7 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
                           <option value="">Unassigned</option>
                           {managers.map((m) => (
                             <option key={m.id} value={m.id}>
-                              {m.fullName ?? m.id}
+                              {m.fullName ?? m.id} — {m.email}
                             </option>
                           ))}
                         </select>

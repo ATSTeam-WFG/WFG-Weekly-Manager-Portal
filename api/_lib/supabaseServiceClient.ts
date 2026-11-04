@@ -1619,16 +1619,47 @@ export async function listSalesReps(): Promise<SalesRepSummary[] | null> {
     .sort((a, b) => a.fullName.localeCompare(b.fullName))
 }
 
-// Candidate list for the "Assign Manager" dropdown — active Managers only
-// (profiles.role = 'manager', is_active = true). This is NOT a security
-// boundary: assign_sales_rep itself independently re-validates server-side
-// that the target is really an active manager, so a stale/tampered id
-// reaching that RPC is rejected there regardless of what this list ever
-// returned. This endpoint exists purely to populate the dropdown with a
-// clean, pre-filtered list rather than making the browser re-filter
-// listManagedUsers()'s broader (manager+admin, every status) result.
-export async function listActiveManagers(): Promise<{ id: string; fullName: string | null }[]> {
-  const { data, error } = await getServiceClient().from('profiles').select('id, full_name').eq('role', 'manager').eq('is_active', true)
+// Phase 1A real-employee onboarding (November 2026) — TEMPORARY, explicit
+// allowlist of the 10 real, verified Manager profile ids (see that
+// engagement's own roster reconciliation). Deliberately an allowlist, not a
+// name- or email-pattern exclusion: "Demo Manager"'s own email is a real
+// @wfgtitle.com address, indistinguishable by pattern from a genuine
+// Manager's, and no existing schema column marks an account as test-only —
+// adding one would be a schema migration for what is otherwise a pure
+// read-filter concern. An allowlist also fails safe: a future test/demo
+// Manager account would never appear here by accident, where a blocklist
+// would have to be remembered and updated for every new one. Safe to widen
+// or remove once a real, data-level test-account marker exists, or once
+// this specific onboarding effort is complete and no longer needs to
+// exclude "Demo Manager"/"Dry Run Manager" from the real assignment flow.
+const VERIFIED_REAL_MANAGER_IDS = new Set([
+  '58b6d0e7-24f7-4f21-b6bb-8aa941cf9fe0', // Chad Hansen
+  'b8c7c5ef-049a-4fd4-ba56-0955f44820b4', // Rhonda Utecht
+  'ff7334b7-9837-47a5-b32b-e5b1742dbc43', // Cary Williams
+  '09ee9917-519e-4426-a34f-91ed3e2f6e86', // Tina Arcarese
+  '4388e6c2-1a63-439c-baef-36faad8d758d', // David Rebadow
+  '2fe50f76-bef4-4377-b4ba-615c654df0f8', // Gene Rebadow
+  '280af92c-b6a7-4868-a783-b0fc5646e5fe', // David Silverstein
+  '166feed6-c66f-4c46-93a4-42ef0e80f55d', // Lauren McCaskill
+  'aed29211-56dc-485e-bf2b-0e3c4ea9397c', // Robert Bauchle
+  '62dce027-e514-4831-ad35-09697eee01b6', // Clint Yarborough
+])
+
+// Candidate list for the "Assign Manager" dropdown — active, verified-real
+// Managers only (profiles.role = 'manager', is_active = true, AND in the
+// explicit allowlist above). This is NOT a security boundary:
+// assign_sales_rep itself independently re-validates server-side that the
+// target is really an active manager, so a stale/tampered id reaching that
+// RPC is rejected there regardless of what this list ever returned — the
+// allowlist filter here only narrows which existing, already-authorized
+// Managers populate the dropdown, it never grants anything. This endpoint
+// exists purely to populate the dropdown with a clean, pre-filtered list
+// rather than making the browser re-filter listManagedUsers()'s broader
+// (manager+admin, every status) result. email is included so the UI can
+// disambiguate similarly-named Managers (e.g. two different people
+// surnamed Rebadow in this exact roster).
+export async function listActiveManagers(): Promise<{ id: string; fullName: string | null; email: string }[]> {
+  const { data, error } = await getServiceClient().from('profiles').select('id, full_name, email').eq('role', 'manager').eq('is_active', true)
 
   if (error) {
     console.error('supabaseServiceClient: listActiveManagers failed:', error.message)
@@ -1636,6 +1667,7 @@ export async function listActiveManagers(): Promise<{ id: string; fullName: stri
   }
 
   return (data ?? [])
-    .map((row) => ({ id: row.id as string, fullName: (row.full_name as string | null) ?? null }))
+    .filter((row) => VERIFIED_REAL_MANAGER_IDS.has(row.id as string))
+    .map((row) => ({ id: row.id as string, fullName: (row.full_name as string | null) ?? null, email: row.email as string }))
     .sort((a, b) => (a.fullName ?? '').localeCompare(b.fullName ?? ''))
 }

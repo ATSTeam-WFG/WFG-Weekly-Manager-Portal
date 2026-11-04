@@ -87,6 +87,7 @@ export async function fetchSalesReps(): Promise<FetchSalesRepsOutcome> {
 export interface ActiveManager {
   id: string
   fullName: string | null
+  email: string
 }
 
 // Populates the "Assign Manager" dropdown. Never itself a security
