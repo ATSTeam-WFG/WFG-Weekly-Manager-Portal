@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import StatusBadge from './StatusBadge'
 import ReminderPanel from './ReminderPanel'
 import { fetchManagersForWeek, type ManagerSummary } from '../lib/adminService'
+import AdminManagerRepOverview from './AdminManagerRepOverview'
 import { getReminderTargets, type ReminderTarget } from '../lib/reminderService'
 import { supabase } from '../lib/supabaseClient'
 import { getDaysUntilDeadline, type ReportingWeek } from '../utils/week'
@@ -337,6 +338,15 @@ export default function AdminDashboard({
           </div>
         </>
       )}
+
+      {/* Phase 2 — Leadership Dashboard Manager-to-Sales-Rep visibility.
+          Shares this screen's selected reporting week but is otherwise a
+          fully independent data source/component from the Managers table
+          above: it never touches `reports`/ManagerSummary, and the
+          Managers table above never touches rep_manager_assignments/
+          rep_reports. Rendered unconditionally (it owns its own loading
+          state) rather than nested inside the `loading` branch above. */}
+      <AdminManagerRepOverview weekStartDate={week.weekStartDate} weekLabel={week.label} />
 
       {reminderTarget && (
         <ReminderPanel

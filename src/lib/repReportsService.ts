@@ -477,3 +477,47 @@ export async function fetchMyCurrentManagerAssignment(repId: string): Promise<Re
   }
   return data ? assignmentFromRow(data as RepManagerAssignmentRow) : null
 }
+
+// Admin-only in practice (see RLS note below) — every CURRENTLY active
+// rep-manager assignment in the system, with no manager_id filter. Used by
+// the Leadership Dashboard's Manager-to-Sales-Rep visibility overview to
+// compute a rep count per Manager across all Managers in one query, rather
+// than one fetchMyCurrentReps call per Manager. Relies entirely on the
+// pre-existing rep_manager_assignments_select_admin RLS policy (USING
+// (is_admin())) from 20261027140200_rep_manager_assignments.sql — no new
+// policy, no new RPC. A non-admin caller (including sales_admin, which has
+// no SELECT policy of its own on this table) gets zero rows back, the same
+// RLS-scoped fail-safe every other read in this file relies on.
+export async function fetchAllCurrentAssignments(): Promise<RepManagerAssignment[]> {
+  const { data, error } = await supabase
+    .from('rep_manager_assignments')
+    .select('id, rep_id, manager_id, assigned_at, assigned_by, unassigned_at, unassigned_by')
+    .is('unassigned_at', null)
+
+  if (error) {
+    console.error('Failed to fetch all current assignments:', error.message)
+    return []
+  }
+  return (data ?? []).map((row) => assignmentFromRow(row as RepManagerAssignmentRow))
+}
+
+// Admin-only in practice — every rep_reports row for a given week, with no
+// rep_id filter. The Leadership Dashboard's own bulk fetch for computing
+// per-Manager submission status breakdowns without an N+1 query per rep.
+// Relies on the pre-existing rep_reports_select_admin RLS policy
+// (is_admin()) from 20261027140300_rep_reports.sql. sales_admin also has
+// read access to rep_reports via its own later migration, but sales_admin
+// never reaches the component that calls this function — AdminDashboard.tsx
+// is never rendered for that role (see App.tsx's role routing).
+export async function fetchAllRepReportsForWeek(weekStartDate: string): Promise<RepReport[]> {
+  const { data, error } = await supabase
+    .from('rep_reports')
+    .select(REP_REPORT_COLUMNS)
+    .eq('week_start_date', weekStartDate)
+
+  if (error) {
+    console.error('Failed to fetch all rep reports for week:', error.message)
+    return []
+  }
+  return (data ?? []).map((row) => fromRow(row as RepReportRow))
+}

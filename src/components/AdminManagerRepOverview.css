@@ -1,0 +1,190 @@
+/* Mirrors AdminDashboard.css's own div-based "table" pattern
+   (.adp-table/.adp-row/.adp-cell-manager etc.) at the same colors/spacing,
+   under its own amro- prefix so nothing here ever collides with or
+   overrides the existing Managers table's styles. */
+
+.amro-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 24px;
+  margin-top: 20px;
+}
+
+.amro-card h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 2px;
+}
+
+.amro-subtitle {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0 0 16px;
+}
+
+.amro-loading,
+.amro-empty {
+  color: var(--muted-gray);
+  font-size: 14px;
+  padding: 24px 0;
+  text-align: center;
+  margin: 0;
+}
+
+.amro-table {
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.amro-table-header-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--warm-cream);
+  border-bottom: 1px solid var(--soft-sand);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-gray);
+}
+
+.amro-table-header-row-overview {
+  grid-template-columns: 1.8fr 0.9fr 0.9fr 0.9fr 0.9fr 1.1fr 0.9fr;
+}
+
+.amro-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.amro-row-overview {
+  grid-template-columns: 1.8fr 0.9fr 0.9fr 0.9fr 0.9fr 1.1fr 0.9fr;
+}
+
+.amro-row:last-child {
+  border-bottom: none;
+}
+
+.amro-row-clickable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.amro-row-clickable:hover,
+.amro-row-clickable:focus-visible {
+  background: var(--warm-cream);
+  outline: none;
+}
+
+.amro-cell-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.amro-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--soft-sand);
+  color: var(--espresso);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.amro-person-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.amro-person-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--espresso);
+}
+
+.amro-person-email {
+  font-size: 12px;
+  color: var(--muted-gray);
+}
+
+.amro-person-email-missing {
+  font-style: italic;
+}
+
+.amro-cell-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--espresso);
+  text-align: center;
+}
+
+.amro-status-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.amro-status-missing {
+  color: var(--muted-gray);
+  background: var(--soft-sand);
+}
+
+.amro-status-pending {
+  color: var(--terracotta);
+  background: rgba(183, 101, 74, 0.12);
+}
+
+.amro-status-approved {
+  color: var(--green);
+  background: rgba(22, 131, 75, 0.12);
+}
+
+.amro-status-rejected {
+  color: var(--terracotta);
+  background: rgba(183, 101, 74, 0.18);
+}
+
+@media (max-width: 860px) {
+  .amro-table-header-row-overview {
+    display: none;
+  }
+
+  .amro-row-overview {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 14px 16px;
+  }
+
+  .amro-cell-count {
+    text-align: left;
+  }
+
+  .amro-cell-count::before {
+    content: attr(data-label) ': ';
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--muted-gray);
+  }
+}
