@@ -85,6 +85,52 @@
   border-color: var(--terracotta);
 }
 
+.rep-manager-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 16px;
+  padding: 18px 32px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.rep-manager-card-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted-gray);
+  flex-shrink: 0;
+}
+
+.rep-manager-card-details {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+}
+
+.rep-manager-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.rep-manager-card-email {
+  font-size: 13px;
+  color: var(--muted-gray);
+}
+
+.rep-manager-card-loading,
+.rep-manager-card-empty {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0;
+}
+
 .rep-hero-card {
   background: var(--white);
   border: 1px solid var(--soft-sand);
@@ -336,7 +382,8 @@
     align-items: flex-start;
   }
 
-  .rep-hero-card {
+  .rep-hero-card,
+  .rep-manager-card {
     padding: 24px;
   }
 }
@@ -356,9 +403,16 @@
   }
 
   .rep-hero-card,
+  .rep-manager-card,
   .rep-readonly-card,
   .rep-history-card {
     padding: 20px 16px;
+  }
+
+  .rep-manager-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
   }
 
   .rep-hero-deadline-block {

@@ -4,6 +4,7 @@ import {
   fetchRepReport,
   fetchRepReportHistory,
   fetchRepReportReviewHistory,
+  fetchMyCurrentManagerAssignment,
   saveSalesRepReportDraft,
   submitSalesRepReport,
   resubmitRejectedSalesRepReport,
@@ -11,6 +12,7 @@ import {
   type RepReport,
   type RepReportReviewHistoryEntry,
 } from '../lib/repReportsService'
+import { fetchProfilesByIds, type RepProfileSummary } from '../lib/repRosterService'
 import { isRepSubmissionPastCutoff } from '../lib/repReportLock'
 import { getCurrentReportingWeek, getReportingWeekFromStartDate } from '../utils/week'
 import { EMPTY_SALES_REP_REPORT_SECTIONS, type SalesRepReportSections } from '../types'
@@ -83,6 +85,40 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
 
   const [reloadToken, setReloadToken] = useState(0)
   const retryLoad = () => setReloadToken((t) => t + 1)
+
+  // Manager identity — kept entirely separate from the report-loading
+  // effects below (own loading/error state) since it's informational, never
+  // blocking: a failure here should never prevent the rep from seeing or
+  // working on their own report.
+  const [manager, setManager] = useState<RepProfileSummary | null>(null)
+  const [managerLoading, setManagerLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    setManagerLoading(true)
+
+    fetchMyCurrentManagerAssignment(repId)
+      .then(async (assignment) => {
+        if (!active) return
+        if (!assignment) {
+          setManager(null)
+          return
+        }
+        const profiles = await fetchProfilesByIds([assignment.managerId])
+        if (!active) return
+        setManager(profiles[0] ?? null)
+      })
+      .catch(() => {
+        if (active) setManager(null)
+      })
+      .finally(() => {
+        if (active) setManagerLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [repId, reloadToken])
 
   useEffect(() => {
     let active = true
@@ -273,6 +309,20 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
             </button>
           )}
         </div>
+      </div>
+
+      <div className="rep-manager-card">
+        <span className="rep-manager-card-label">Your Manager</span>
+        {managerLoading ? (
+          <p className="rep-manager-card-loading">Loading…</p>
+        ) : manager ? (
+          <p className="rep-manager-card-details">
+            <span className="rep-manager-card-name">{manager.fullName ?? 'Unnamed Manager'}</span>
+            <span className="rep-manager-card-email">{manager.email}</span>
+          </p>
+        ) : (
+          <p className="rep-manager-card-empty">Manager not assigned yet</p>
+        )}
       </div>
 
       <div className="rep-hero-card">

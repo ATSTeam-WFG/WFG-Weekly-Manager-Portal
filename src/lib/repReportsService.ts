@@ -454,3 +454,26 @@ export async function fetchMyCurrentReps(managerId: string): Promise<RepManagerA
   }
   return (data ?? []).map((row) => assignmentFromRow(row as RepManagerAssignmentRow))
 }
+
+// Read-only, RLS-scoped: the mirror image of fetchMyCurrentReps, for the
+// Sales Rep Dashboard's own "who is my Manager" lookup. A rep has at most
+// one current assignment (unassigned_at is null), never a list — see
+// 20261104090000_profiles_select_assigned_manager_for_rep.sql's own
+// current-assignment-only standard. Returns null, never throws, when the
+// rep has no Manager assigned yet (a brand-new rep, or one just
+// unassigned) — the caller renders a "Manager not assigned yet" message for
+// that case rather than treating it as an error.
+export async function fetchMyCurrentManagerAssignment(repId: string): Promise<RepManagerAssignment | null> {
+  const { data, error } = await supabase
+    .from('rep_manager_assignments')
+    .select('id, rep_id, manager_id, assigned_at, assigned_by, unassigned_at, unassigned_by')
+    .eq('rep_id', repId)
+    .is('unassigned_at', null)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Failed to fetch current manager assignment:', error.message)
+    return null
+  }
+  return data ? assignmentFromRow(data as RepManagerAssignmentRow) : null
+}

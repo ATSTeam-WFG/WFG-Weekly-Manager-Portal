@@ -32,6 +32,7 @@ import path from 'node:path'
 const dir = path.dirname(fileURLToPath(import.meta.url))
 const formSrc = readFileSync(path.join(dir, '..', 'components', 'SalesRepReportForm.tsx'), 'utf8')
 const dashboardSrc = readFileSync(path.join(dir, '..', 'components', 'SalesRepDashboard.tsx'), 'utf8')
+const repReportsServiceSrc = readFileSync(path.join(dir, 'repReportsService.ts'), 'utf8')
 
 describe('SalesRepReportForm.tsx — wires useAutosave through the SAME persistence path as the manual Save Draft button', () => {
   test('imports useAutosave and RepReportError', () => {
@@ -174,5 +175,55 @@ describe('SalesRepDashboard.tsx — no autosubmit: Submit/Resubmit only ever fir
   test('handleSubmit is only ever referenced as the onSubmit prop passed to SalesRepReportForm (a user-initiated button click inside that form), never called from a useEffect/timer', () => {
     assert.equal(/setInterval|setTimeout/.test(dashboardSrc), false, 'SalesRepDashboard must never schedule any automatic timer-driven action')
     assert.match(dashboardSrc, /onSubmit=\{handleSubmit\}/)
+  })
+})
+
+// Phase 1 (Sales Rep Dashboard Manager Visibility) — the rep's assigned
+// Manager's name/email, backed by the new
+// 20261104090000_profiles_select_assigned_manager_for_rep.sql RLS policy
+// (assigned/unrelated/reassigned authorization itself is verified live by
+// that migration's own embedded self-test against a disposable Postgres
+// instance, not re-derived here via source inspection).
+describe('SalesRepDashboard.tsx — Manager identity card', () => {
+  test('imports fetchMyCurrentManagerAssignment from repReportsService and fetchProfilesByIds from repRosterService', () => {
+    assert.match(dashboardSrc, /fetchMyCurrentManagerAssignment/)
+    assert.match(dashboardSrc, /import \{ fetchProfilesByIds, type RepProfileSummary \} from '\.\.\/lib\/repRosterService'/)
+  })
+
+  test('the manager-identity effect is a separate effect from the report-loading effect, with its own loading state, and never blocks report rendering on failure', () => {
+    assert.match(dashboardSrc, /const \[manager, setManager\] = useState<RepProfileSummary \| null>\(null\)/)
+    assert.match(dashboardSrc, /const \[managerLoading, setManagerLoading\] = useState\(true\)/)
+    const effectMatch = dashboardSrc.match(/useEffect\(\(\) => \{\s*\n\s*let active = true\s*\n\s*setManagerLoading\(true\)[\s\S]*?\n {2}\}, \[repId, reloadToken\]\)/)
+    assert.ok(effectMatch, 'could not locate the manager-identity effect')
+    assert.match(effectMatch[0], /\.catch\(\(\) => \{\s*\n\s*if \(active\) setManager\(null\)/)
+  })
+
+  test('renders "Manager not assigned yet" when the rep has no current manager assignment', () => {
+    assert.match(dashboardSrc, /Manager not assigned yet/)
+  })
+
+  test('renders the manager\'s full name and email when present', () => {
+    assert.match(dashboardSrc, /manager\.fullName \?\? 'Unnamed Manager'/)
+    assert.match(dashboardSrc, /\{manager\.email\}/)
+  })
+})
+
+describe('repReportsService.ts — fetchMyCurrentManagerAssignment is scoped to the caller\'s own CURRENT assignment only', () => {
+  test('filters rep_manager_assignments by rep_id = repId and unassigned_at IS NULL, returning at most one row', () => {
+    const match = repReportsServiceSrc.match(/export async function fetchMyCurrentManagerAssignment\(repId: string\): Promise<RepManagerAssignment \| null> \{[\s\S]*?\n\}/)
+    assert.ok(match, 'could not locate fetchMyCurrentManagerAssignment')
+    const body = match[0]
+    assert.match(body, /\.eq\('rep_id', repId\)/)
+    assert.match(body, /\.is\('unassigned_at', null\)/)
+    assert.match(body, /\.maybeSingle\(\)/)
+  })
+
+  test('never throws on a missing assignment or a query error — returns null both times', () => {
+    const match = repReportsServiceSrc.match(/export async function fetchMyCurrentManagerAssignment\(repId: string\): Promise<RepManagerAssignment \| null> \{[\s\S]*?\n\}/)
+    assert.ok(match)
+    const body = match[0]
+    assert.doesNotMatch(body, /throw/)
+    assert.match(body, /if \(error\) \{[\s\S]*?return null\s*\n\s*\}/)
+    assert.match(body, /return data \? assignmentFromRow\(data as RepManagerAssignmentRow\) : null/)
   })
 })
