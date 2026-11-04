@@ -40,6 +40,9 @@
 }
 
 .myreps-week-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
   font-weight: 600;
   color: var(--espresso);
@@ -48,6 +51,38 @@
   border-radius: 999px;
   padding: 7px 14px;
   white-space: nowrap;
+}
+
+/* Phase 3 — weekly Sales Rep submission summary. Mirrors AdminDashboard's
+   own .adp-kpi-row/.adp-kpi-card cards (equal white cards, same border/
+   radius/spacing) under its own myreps- prefix, per this file's own header
+   comment (styled to match, never sharing a class with, AdminDashboard.css). */
+.myreps-summary-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.myreps-summary-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.myreps-summary-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.myreps-summary-label {
+  font-size: 12px;
+  color: var(--muted-gray);
 }
 
 .myreps-loading,
@@ -394,6 +429,23 @@
 
   .myreps-top-row-right {
     justify-content: space-between;
+  }
+
+  /* The shared .week-selector-label (AdminDashboard.css, never redefined —
+     see this file's own header comment) has no internal flex-wrap of its
+     own, so at narrow widths its three children (prev/label/next) can
+     overflow rather than wrap. This is a scoped, additive override for
+     MyReps' own usage context only — it does not touch the base
+     .week-selector-label/.week-nav-btn/.week-current-badge declarations, so
+     AdminDashboard/ReportsAnalytics are completely unaffected. */
+  .myreps-top-row-right .week-selector-label {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 6px;
+  }
+
+  .myreps-summary-row {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .myreps-table-header-row {

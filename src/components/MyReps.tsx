@@ -9,22 +9,28 @@ import {
   type RepReportReviewHistoryEntry,
 } from '../lib/repReportsService'
 import { fetchProfilesByIds, type RepProfileSummary } from '../lib/repRosterService'
-import { getCurrentReportingWeek } from '../utils/week'
+import { getReportingWeekByOffset } from '../utils/week'
+import { deriveRepReportBucket, type RepReportBucket } from '../lib/repReportBucket'
 import type { SalesRepReportSections } from '../types'
 import './MyReps.css'
 
 // Phase 1B's small, additive Manager-facing screen: see assigned reps'
-// current-week status and review (approve/reject) a submitted report. This
-// is deliberately NOT a replacement for Dashboard/AdminDashboard — it's a
+// weekly status and review (approve/reject) a submitted report. This is
+// deliberately NOT a replacement for Dashboard/AdminDashboard — it's a
 // self-contained, droppable component (managerId + onBack only) that a
 // caller navigates to alongside a manager's own report dashboard; wiring it
 // into App.tsx's navigation happens in a separate step, out of scope here.
 //
-// Minimum-integration scope, called out explicitly in the Phase 1B brief:
-// only the CURRENT reporting week's status + review action is covered.
-// Browsing a rep's older weeks/history from this screen is a Phase 1C
-// candidate (fetchRepReportHistory already exists and is ready to use for
-// that later) — not built here.
+// Phase 3 (Manager Dashboard Enhancements) added the week selector and the
+// summary counts below — both self-contained (weekOffset is local state,
+// exactly like every other week-nav screen in this app — AdminDashboard,
+// WeeklySummary, LeadershipReportCurrent/History all do the same), so
+// nothing about this component's props or its caller changed. The summary
+// counts reuse deriveRepReportBucket from repReportBucket.ts (the exact
+// same function src/components/AdminManagerRepOverview.tsx's Leadership
+// Dashboard rollup uses), so a given Manager's numbers here and on the
+// Leadership Dashboard's drill-down always agree — never two independent
+// calculations of the same thing.
 
 interface MyRepsProps {
   managerId: string
@@ -126,8 +132,10 @@ export default function MyReps({ managerId, onBack }: MyRepsProps) {
   const [rows, setRows] = useState<RepRow[]>([])
   const [selectedRepId, setSelectedRepId] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
+  const [weekOffset, setWeekOffset] = useState(0)
 
-  const week = getCurrentReportingWeek()
+  const week = getReportingWeekByOffset(weekOffset)
+  const isCurrentWeek = weekOffset === 0
 
   useEffect(() => {
     let active = true
@@ -178,6 +186,22 @@ export default function MyReps({ managerId, onBack }: MyRepsProps) {
 
   const handleRetry = () => setReloadToken((t) => t + 1)
 
+  // Summary counts for the selected week — reuses deriveRepReportBucket
+  // (see this file's header comment) rather than rowStatusLabel/
+  // rowStatusClass below: those two intentionally stay more granular
+  // (distinguishing "not started" from "draft, never submitted") for the
+  // per-row display, while the summary only needs the 4-bucket rollup that
+  // matches the Leadership Dashboard's own counts for this same Manager.
+  const summaryCounts = rows.reduce(
+    (acc, row) => {
+      const bucket = deriveRepReportBucket(row.report)
+      acc[bucket] += 1
+      return acc
+    },
+    { missing: 0, pending: 0, approved: 0, rejected: 0 } as Record<RepReportBucket, number>,
+  )
+  const submittedCount = summaryCounts.pending + summaryCounts.approved + summaryCounts.rejected
+
   const selectedRow = rows.find((r) => r.repId === selectedRepId) ?? null
 
   const handleReviewed = useCallback((updated: RepReport) => {
@@ -195,9 +219,60 @@ export default function MyReps({ managerId, onBack }: MyRepsProps) {
           <button type="button" className="btn btn-secondary" onClick={onBack}>
             &larr; Back
           </button>
-          <span className="myreps-week-label">Week of {week.label}</span>
+          <span className="week-selector-label">
+            <button
+              type="button"
+              className="week-nav-btn"
+              onClick={() => setWeekOffset((o) => o - 1)}
+              aria-label="Previous reporting week"
+            >
+              &lsaquo;
+            </button>
+            <span className="myreps-week-label">
+              Week of {week.label}
+              {isCurrentWeek && <span className="week-current-badge">Current</span>}
+            </span>
+            <button
+              type="button"
+              className="week-nav-btn"
+              onClick={() => setWeekOffset((o) => Math.min(0, o + 1))}
+              disabled={isCurrentWeek}
+              aria-label="Next reporting week"
+            >
+              &rsaquo;
+            </button>
+          </span>
         </div>
       </div>
+
+      {loadState === 'ready' && rows.length > 0 && (
+        <div className="myreps-summary-row">
+          <div className="myreps-summary-card">
+            <span className="myreps-summary-value">{rows.length}</span>
+            <span className="myreps-summary-label">Total Assigned</span>
+          </div>
+          <div className="myreps-summary-card">
+            <span className="myreps-summary-value">{submittedCount}</span>
+            <span className="myreps-summary-label">Submitted</span>
+          </div>
+          <div className="myreps-summary-card">
+            <span className="myreps-summary-value">{summaryCounts.pending}</span>
+            <span className="myreps-summary-label">Pending Review</span>
+          </div>
+          <div className="myreps-summary-card">
+            <span className="myreps-summary-value">{summaryCounts.approved}</span>
+            <span className="myreps-summary-label">Approved</span>
+          </div>
+          <div className="myreps-summary-card">
+            <span className="myreps-summary-value">{summaryCounts.rejected}</span>
+            <span className="myreps-summary-label">Needs Correction</span>
+          </div>
+          <div className="myreps-summary-card">
+            <span className="myreps-summary-value">{summaryCounts.missing}</span>
+            <span className="myreps-summary-label">Missing</span>
+          </div>
+        </div>
+      )}
 
       {loadState === 'loading' && <div className="myreps-loading">Loading your reps…</div>}
 
