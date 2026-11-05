@@ -141,6 +141,14 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
 
   const totalCount = reps.length
   const activeCount = reps.filter((r) => r.status === 'active').length
+  // Verified-real vs. demo/test split of the active roster, via the
+  // server's isVerifiedReal allowlist flag (see
+  // VERIFIED_REAL_SALES_REP_IDS in api/_lib/supabaseServiceClient.ts) —
+  // never an email/name pattern. Demo/test accounts (e.g. "Phase 1A Test
+  // Sales Rep") stay fully visible and manageable below; this only affects
+  // which number is shown as the headline "Active" figure.
+  const activeVerifiedCount = reps.filter((r) => r.status === 'active' && r.isVerifiedReal).length
+  const activeDemoCount = activeCount - activeVerifiedCount
   const awaitingFirstLoginCount = reps.filter((r) => r.status === 'awaiting_first_login').length
   const unassignedCount = reps.filter((r) => r.status === 'active' && !r.currentManagerId).length
 
@@ -287,8 +295,11 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
                 &#10003;
               </span>
               <div className="srm-kpi-text">
-                <span className="srm-kpi-value">{activeCount}</span>
+                <span className="srm-kpi-value">{activeVerifiedCount}</span>
                 <span className="srm-kpi-label">Active</span>
+                {activeDemoCount > 0 && (
+                  <span className="srm-kpi-sublabel">{activeCount} total active ({activeDemoCount} demo/test)</span>
+                )}
               </div>
             </div>
             <div className="srm-kpi-card srm-kpi-card-awaiting">
@@ -348,7 +359,13 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
                 <div className="srm-row" role="row" key={rep.id}>
                   <div className="srm-row-main">
                     <div className="srm-cell srm-cell-rep" role="cell">
-                      <span className="srm-rep-name">{rep.fullName}</span>
+                      <span className="srm-rep-name">
+                        {rep.fullName}
+                        {/* Only flag a rep once a profile exists to check against the allowlist —
+                            a real rep who hasn't onboarded yet (profileId still null) is unverified,
+                            not demo/test, and must never be mislabeled as one. */}
+                        {rep.profileId !== null && !rep.isVerifiedReal && <span className="srm-demo-badge">Demo/Test</span>}
+                      </span>
                       <span className="srm-rep-email">{rep.email}</span>
                     </div>
                     <div className="srm-cell" role="cell">

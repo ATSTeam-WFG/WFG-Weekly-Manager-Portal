@@ -6,6 +6,7 @@
 
 .sales-admin-shell-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 20px;
   border-bottom: 1px solid #e2e2e2;

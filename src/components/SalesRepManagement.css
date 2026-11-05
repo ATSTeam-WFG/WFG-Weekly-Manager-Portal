@@ -122,6 +122,26 @@
   color: var(--muted-gray);
 }
 
+.srm-kpi-sublabel {
+  font-size: 11px;
+  color: var(--muted-gray);
+  margin-top: 2px;
+}
+
+.srm-demo-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-gray);
+  background: var(--soft-sand);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
 /* Search + status filter. */
 .srm-controls {
   display: flex;

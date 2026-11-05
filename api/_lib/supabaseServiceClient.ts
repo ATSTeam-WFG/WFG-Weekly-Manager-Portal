@@ -1531,6 +1531,12 @@ export interface SalesRepSummary {
   profileId: string | null
   currentManagerId: string | null
   currentManagerName: string | null
+  // true iff profileId is in the VERIFIED_REAL_SALES_REP_IDS allowlist — a
+  // genuine, reconciled Phase 1A Sales Rep rather than a demo/test account
+  // (e.g. "Phase 1A Test Sales Rep"). Always false for a rep with no
+  // profileId yet. The UI uses this to compute an accurate "real" headline
+  // count without hiding demo/test rows from the management table.
+  isVerifiedReal: boolean
 }
 
 // Lists every approved_employees row with portal_role='sales_rep', joined
@@ -1614,10 +1620,80 @@ export async function listSalesReps(): Promise<SalesRepSummary[] | null> {
         profileId,
         currentManagerId: assignment?.managerId ?? null,
         currentManagerName: assignment?.managerName ?? null,
+        isVerifiedReal: profileId !== null && VERIFIED_REAL_SALES_REP_IDS.has(profileId),
       }
     })
     .sort((a, b) => a.fullName.localeCompare(b.fullName))
 }
+
+// Phase 1A real-employee onboarding (November 2026) — TEMPORARY, explicit
+// allowlist of the 33 real, verified Sales Rep profile ids (see that
+// engagement's own roster reconciliation; excludes "Phase 1A Test Sales
+// Rep" and "Phase 1A Test Sales Rep 2"). Mirrors VERIFIED_REAL_MANAGER_IDS
+// below exactly, and for the same reason: deliberately an allowlist, not a
+// name- or email-pattern exclusion. A demo Sales Rep's email need not match
+// any particular pattern, and no existing schema column marks an account
+// as test-only — adding one would be a schema migration for what is
+// otherwise a pure read-filter/reporting concern. An allowlist also fails
+// safe: a future test/demo Sales Rep would never appear here by accident,
+// where a blocklist would have to be remembered and updated for every new
+// one. Used only to compute a "verified real" count/label for the Sales
+// Admin dashboard — never to hide, restrict, or gate access to any rep's
+// row; every rep (real or demo) remains fully visible and manageable.
+// Safe to widen or remove once a real, data-level test-account marker
+// exists.
+//
+// MAINTENANCE LIMITATION — read before onboarding a new real Sales Rep:
+// this Set is a static snapshot (33 ids, reconciled 2026-11-05) and is
+// NEVER updated automatically. A newly onboarded real Sales Rep will NOT
+// be in it until someone adds their profile id here by hand. Until then,
+// that rep is silently treated as demo/test everywhere this flag is read:
+// they get the "Demo/Test" badge in Sales Rep Management, they're excluded
+// from the "Active" KPI's verified-real headline count, and the "33 real
+// reps" figure understates the true number of real, active reps. This
+// fails safe in the security sense (never over-counts, never grants
+// anything), but it DOES silently produce an incorrect operational total
+// if forgotten — there is no error, warning, or test that catches a
+// missing id on its own. To add a newly onboarded real Sales Rep: look up
+// their profiles.id (== auth.users id) in PREVIEW and append it below with
+// a name comment, the same way every existing entry was compiled (see this
+// engagement's roster reconciliation for the read-only query pattern used
+// to regenerate this list from approved_employees joined to profiles).
+const VERIFIED_REAL_SALES_REP_IDS = new Set([
+  '6c8dabe5-66dd-4043-bc2a-83746194ed64', // Aaron Mahana
+  '5e609f03-eebe-4feb-8a1a-5cc7ed0021f6', // Austin Rozier
+  'ba6c3b72-2e12-4394-a3bc-8ea18e431953', // Bradley Keene
+  '2d6ab6e9-6663-47a8-9db6-d94c4cba3288', // Danielle Johnson
+  'baa6ab00-2e04-4272-bf05-4b5eb812b038', // Danny Rodriguez
+  '9cddd3e5-1a49-45d4-8c91-9ce5092ec1aa', // David Hoffman
+  'deaabf9f-492c-4867-81cf-b4bdfc1b4db6', // Devon Sommer
+  'b39c698f-520a-47ce-beb8-56ec1fd75015', // Donna Slomins
+  '176603b0-3931-498d-b174-de1d8081466b', // Elissa Perez
+  '24993a66-a63d-4f76-b66e-996bd469db00', // Evan Rebadow
+  '2563a221-fb96-45c5-922d-39ee860accff', // Gary Szafranski
+  '351df340-f783-4a8c-a80e-f0d17fb82a1c', // Holly Helfrich
+  'cd7de58d-6573-4b07-b135-1f011def9bc2', // Honora Ferris
+  'a7c151dd-c9b3-456e-bed6-ba4b893b5687', // Ian Bartlett
+  '11cdf99d-86b9-440f-ada1-51e76b0ecfe0', // Jackie Medeiros
+  '0df204e3-f49d-4e81-9a4a-3cf035d9a7c4', // Jamie Barker
+  '7fa7b34c-e946-4985-9c48-93411b9b3501', // Jennifer Giles
+  '6edf07c5-f43f-48ca-9683-f2c6f00b786f', // John Pellecchia
+  '4308b2b2-5767-429f-a950-231cc59e19a7', // Julie Tomlinson
+  '52a1b605-fe03-4742-ae65-8a9060e3acac', // Kristy Campbell
+  'c37e635d-1777-4d5c-8766-d7f59c5376fa', // Liz Dunlap
+  'c0cdd9fb-7404-4584-b9b8-ce8c0d435b09', // Liz Fox
+  '3002b0ff-825a-4fc2-bb78-1288a8d62164', // Lois Donnelly
+  '7c02438f-d4dd-41cb-9635-db34eff6906c', // Lori Ciambriello
+  '04b486e5-d595-4f4e-99bb-0a51365c1a7c', // Natalie Diaz
+  'd0da283d-c563-4f28-bdfa-64b0e051ad03', // Patrick Malone
+  'cab45803-0df3-48bb-8565-ebc4cc9c0e41', // Sadie Thibodeaux
+  'b21dcec2-5d81-4ad3-b22b-579d083a49a7', // Stephanie Coppage
+  '2e03ab24-3023-457c-8d7c-41bcb3cb4ea2', // Stephanie Runnels
+  '63b56d74-27ea-464e-806b-fe7d686e8004', // Sundi March
+  '97db1667-f8f3-47e6-a3a6-d3054483bb02', // Theresa Kane-Mackenzie
+  '0dadc618-020d-44bf-add2-138280861192', // Tony Polito
+  '118eb8ec-be7e-43d4-a6ad-d05dafffc483', // Tori Holmes
+])
 
 // Phase 1A real-employee onboarding (November 2026) — TEMPORARY, explicit
 // allowlist of the 10 real, verified Manager profile ids (see that

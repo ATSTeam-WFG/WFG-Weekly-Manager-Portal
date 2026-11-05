@@ -24,6 +24,10 @@ export interface SalesRep {
   profileId: string | null
   currentManagerId: string | null
   currentManagerName: string | null
+  // true for a genuine, reconciled Phase 1A Sales Rep; false for a demo/test
+  // account or a rep who hasn't completed onboarding yet. See
+  // api/_lib/supabaseServiceClient.ts's VERIFIED_REAL_SALES_REP_IDS.
+  isVerifiedReal: boolean
 }
 
 export type FetchSalesRepsOutcome =

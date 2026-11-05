@@ -200,3 +200,66 @@ describe('Phase 1A real-employee onboarding — Manager dropdown shows name + em
     }
   })
 })
+
+describe('Phase 4 refinement — Sales Rep real-vs-demo/test classification, mirroring VERIFIED_REAL_MANAGER_IDS exactly', () => {
+  test('listSalesReps classifies each rep through an explicit allowlist, not a name or email pattern', () => {
+    const fnMatch = supabaseServiceClientSrc.match(/export async function listSalesReps\([\s\S]*?\n\}/)
+    assert.ok(fnMatch, 'could not locate listSalesReps')
+    assert.match(fnMatch[0], /isVerifiedReal: profileId !== null && VERIFIED_REAL_SALES_REP_IDS\.has\(profileId\)/)
+    assert.doesNotMatch(fnMatch[0], /isVerifiedReal[\s\S]{0,80}(\.includes\(|\.match\(|\.test\(|startsWith|endsWith)/)
+  })
+
+  test('the allowlist is a fixed Set of exactly 33 UUIDs — the verified real Sales Reps, one per entry, each labeled by name in a comment', () => {
+    const setMatch = supabaseServiceClientSrc.match(/const VERIFIED_REAL_SALES_REP_IDS = new Set\(\[[\s\S]*?\]\)/)
+    assert.ok(setMatch, 'could not locate VERIFIED_REAL_SALES_REP_IDS')
+    const uuidMatches = setMatch[0].match(/'[0-9a-f-]{36}'/g) ?? []
+    assert.equal(uuidMatches.length, 33)
+  })
+
+  test('the two known demo/test accounts are not in the allowlist', () => {
+    const setMatch = supabaseServiceClientSrc.match(/const VERIFIED_REAL_SALES_REP_IDS = new Set\(\[[\s\S]*?\]\)/)
+    assert.ok(setMatch)
+    assert.doesNotMatch(setMatch[0], /c249cccb-cd0f-4d43-9b78-5dcaff1d159a/)
+    assert.doesNotMatch(setMatch[0], /f5cd3572-cd87-41b0-ac4b-612d596c8aad/)
+  })
+
+  test('SalesRepSummary and the client-side SalesRep type both carry isVerifiedReal as a required boolean, never optional', () => {
+    const summaryIface = supabaseServiceClientSrc.match(/export interface SalesRepSummary \{[\s\S]*?\n\}/)
+    assert.ok(summaryIface)
+    assert.match(summaryIface[0], /isVerifiedReal: boolean/)
+    assert.doesNotMatch(summaryIface[0], /isVerifiedReal\?:/)
+
+    const clientIface = salesRepManagementServiceSrc.match(/export interface SalesRep \{[\s\S]*?\n\}/)
+    assert.ok(clientIface)
+    assert.match(clientIface[0], /isVerifiedReal: boolean/)
+    assert.doesNotMatch(clientIface[0], /isVerifiedReal\?:/)
+  })
+
+  test('SalesRepManagement.tsx computes the primary Active KPI as verified-real-and-active, never the bare count of 33 hardcoded', () => {
+    assert.match(salesRepManagementComponentSrc, /activeVerifiedCount = reps\.filter\(\(r\) => r\.status === 'active' && r\.isVerifiedReal\)\.length/)
+    assert.doesNotMatch(salesRepManagementComponentSrc, /=== 33\b/)
+    assert.doesNotMatch(salesRepManagementComponentSrc, /\b33\b/)
+  })
+
+  test('the Active KPI card shows a sublabel with the full active total (incl. demo/test) whenever any demo/test account is active — nothing is hidden', () => {
+    assert.match(salesRepManagementComponentSrc, /activeDemoCount > 0 && \(/)
+    assert.match(salesRepManagementComponentSrc, /\{activeCount\} total active \(\{activeDemoCount\} demo\/test\)/)
+  })
+
+  test('a demo/test row is only flagged once a profile exists — a real rep who has not onboarded yet (profileId null) is never mislabeled as demo/test', () => {
+    assert.match(salesRepManagementComponentSrc, /rep\.profileId !== null && !rep\.isVerifiedReal && <span className="srm-demo-badge">Demo\/Test<\/span>/)
+  })
+
+  test('demo/test rows are never filtered out of the roster table — filteredReps only filters by status/search, never by isVerifiedReal', () => {
+    const filteredRepsMatch = salesRepManagementComponentSrc.match(/const filteredReps = reps\.filter\(\(rep\) => \{[\s\S]*?\n  \}\)/)
+    assert.ok(filteredRepsMatch, 'could not locate filteredReps')
+    assert.doesNotMatch(filteredRepsMatch[0], /isVerifiedReal/)
+  })
+
+  test('this classification never touches assign_sales_rep, is_admin(), is_sales_admin(), or any RLS policy — it only labels existing, already-visible rows', () => {
+    for (const migrationFile of ['20261027140200_rep_manager_assignments.sql', '20261102090000_profiles_select_assigned_rep_for_manager.sql', '20261103090000_sales_admin_role.sql']) {
+      const migrationSrc = readFileSync(path.join(dir, '..', '..', 'supabase', 'migrations', migrationFile), 'utf8')
+      assert.equal(migrationSrc.includes('VERIFIED_REAL_SALES_REP_IDS'), false, `${migrationFile} must not reference the frontend allowlist`)
+    }
+  })
+})
