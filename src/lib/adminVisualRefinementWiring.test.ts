@@ -165,10 +165,10 @@ describe('AdminDashboard.tsx — all five KPI cards now share the same icon-circ
     assert.equal((dashboardSrc.match(/className="adp-kpi-icon" aria-hidden="true"/g) ?? []).length, 5)
   })
 
-  test('Not Started now uses a warm terracotta tint (changed from the prior neutral gray); Total Managers/Completion stay neutral; Submitted stays green; Draft stays amber — no KPI calculation changed', () => {
+  test('Not Started now uses a warm status-error tint (changed from the prior neutral gray; moved off --terracotta in the Phase 1 redesign since that token is now the brand-accent color, but keeps the exact same warm value via --status-error); Total Managers/Completion stay neutral; Submitted stays green; Draft stays amber — no KPI calculation changed', () => {
     assert.match(
       dashboardCss,
-      /\.adp-kpi-card-not-started \.adp-kpi-icon \{\s*\n\s*background: rgba\(183, 101, 74,[\s\S]*?\n\s*color: var\(--terracotta\);\s*\n\}/,
+      /\.adp-kpi-card-not-started \.adp-kpi-icon \{[\s\S]*?background: rgba\(183, 101, 74,[\s\S]*?color: var\(--status-error\);\s*\n\}/,
     )
     assert.match(dashboardCss, /\.adp-kpi-card-submitted \.adp-kpi-icon \{\s*\n\s*background: rgba\(22, 131, 75,/)
     assert.match(dashboardCss, /\.adp-kpi-card-draft \.adp-kpi-icon \{\s*\n\s*background: rgba\(217, 119, 6,/)

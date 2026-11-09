@@ -153,7 +153,7 @@ export default function Dashboard({
           <p className="hero-deadline">
             Due <strong>{week.deadlineLabel}</strong>
           </p>
-          <span className="hero-days-left">
+          <span className={`hero-days-left${isPastDeadline ? ' hero-days-left-passed' : ''}`}>
             {isPastDeadline ? 'Deadline passed' : isDueToday ? 'Due today' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining`}
           </span>
         </div>

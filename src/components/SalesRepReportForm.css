@@ -23,14 +23,14 @@
 }
 
 .submitted-badge.rejected-badge {
-  color: var(--terracotta);
+  color: var(--status-error);
   background: rgba(183, 101, 74, 0.12);
 }
 
 .rejection-banner {
   background: var(--warm-cream);
   border: 1px solid var(--soft-sand);
-  border-left: 4px solid var(--terracotta);
+  border-left: 4px solid var(--status-error);
   border-radius: 12px;
   padding: 16px 20px;
   margin-bottom: 20px;
@@ -58,9 +58,9 @@
 
 .deadline-passed-notice {
   font-size: 13px;
-  color: var(--terracotta);
+  color: var(--status-error);
   background: var(--warm-cream);
-  border: 1px dashed var(--terracotta);
+  border: 1px dashed var(--status-error);
   border-radius: 10px;
   padding: 12px 16px;
   margin-bottom: 20px;

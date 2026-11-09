@@ -9,7 +9,7 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 20px;
-  border-bottom: 1px solid #e2e2e2;
+  border-bottom: 1px solid var(--soft-sand);
 }
 
 .sales-admin-shell-nav-item {
@@ -18,16 +18,22 @@
   padding: 10px 16px;
   font-size: 0.95rem;
   font-weight: 500;
-  color: #555;
+  color: var(--muted-gray);
   cursor: pointer;
   border-bottom: 2px solid transparent;
 }
 
 .sales-admin-shell-nav-item:hover {
-  color: #111;
+  color: var(--espresso);
 }
 
-.sales-admin-shell-nav-item-active {
-  color: #111;
-  border-bottom-color: #2563eb;
+/* Repeats the class for specificity, not structure — without this, the
+   plain .sales-admin-shell-nav-item:hover rule above (class+pseudo-class,
+   higher specificity than a single class) would override the active tab's
+   color back to muted/espresso the instant it's hovered, visually
+   "deselecting" the current tab under the cursor. */
+.sales-admin-shell-nav-item-active,
+.sales-admin-shell-nav-item-active:hover {
+  color: var(--terracotta);
+  border-bottom-color: var(--terracotta);
 }

@@ -27,7 +27,7 @@
 }
 
 .mic-button.listening {
-  background: rgba(183, 101, 74, 0.1);
+  background: rgba(8, 102, 232, 0.1);
   border-color: var(--terracotta);
   color: var(--terracotta);
 }

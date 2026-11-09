@@ -102,7 +102,7 @@
   border-radius: 16px;
   padding: 28px 32px;
   margin-bottom: 20px;
-  box-shadow: 0 20px 40px -28px rgba(48, 42, 39, 0.35);
+  box-shadow: 0 20px 40px -28px rgba(11, 35, 69, 0.35);
 }
 
 .hero-card-top {
@@ -150,6 +150,14 @@
   background: var(--soft-sand);
   padding: 4px 12px;
   border-radius: 999px;
+}
+
+/* Overdue state: the one case where this badge isn't a routine countdown —
+   uses --status-error (not the brand-accent --terracotta) so a passed
+   deadline reads as a warning, not an active/selected highlight. */
+.hero-days-left-passed {
+  color: var(--status-error);
+  background: rgba(183, 101, 74, 0.14);
 }
 
 .hero-action {

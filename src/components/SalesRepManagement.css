@@ -67,7 +67,7 @@
   padding: 14px 16px;
   min-height: 64px;
   box-sizing: border-box;
-  box-shadow: 0 1px 3px rgba(48, 42, 39, 0.08);
+  box-shadow: 0 1px 3px rgba(11, 35, 69, 0.08);
 }
 
 .srm-kpi-icon {
@@ -256,7 +256,7 @@
 }
 
 .srm-status-badge.srm-status-inactive {
-  background: rgba(120, 113, 108, 0.14);
+  background: rgba(91, 107, 132, 0.14);
   color: var(--muted-gray);
 }
 
@@ -301,7 +301,7 @@
 .sales-rep-management-message-error {
   font-size: 13px;
   font-weight: 600;
-  color: var(--terracotta);
+  color: var(--status-error);
   margin: 0 0 12px;
 }
 
@@ -376,7 +376,7 @@
 .srm-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(41, 37, 34, 0.5);
+  background: rgba(11, 35, 69, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -392,7 +392,7 @@
   background: var(--white);
   border-radius: 16px;
   border: 1px solid var(--soft-sand);
-  box-shadow: 0 24px 60px -20px rgba(48, 42, 39, 0.45);
+  box-shadow: 0 24px 60px -20px rgba(11, 35, 69, 0.45);
 }
 
 .srm-modal-header {

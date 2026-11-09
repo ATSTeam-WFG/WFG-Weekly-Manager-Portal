@@ -75,7 +75,7 @@ export default function SalesAdminReports() {
         <p>Loading…</p>
       ) : (
         <div className="srm-table" role="table">
-          <div className="srm-row srm-row-header" role="row">
+          <div className="srm-table-header-row" role="row">
             <span role="columnheader">Sales Rep</span>
             <span role="columnheader">Email</span>
             <span role="columnheader">Current Manager</span>
@@ -83,10 +83,12 @@ export default function SalesAdminReports() {
           </div>
           {(rows ?? []).map(({ rep, reportSummary }) => (
             <div className="srm-row" role="row" key={rep.id}>
-              <span role="cell">{rep.fullName}</span>
-              <span role="cell">{rep.email}</span>
-              <span role="cell">{rep.currentManagerName ?? 'Unassigned'}</span>
-              <span role="cell">{reportSummary}</span>
+              <div className="srm-row-main">
+                <span role="cell">{rep.fullName}</span>
+                <span role="cell">{rep.email}</span>
+                <span role="cell">{rep.currentManagerName ?? 'Unassigned'}</span>
+                <span role="cell">{reportSummary}</span>
+              </div>
             </div>
           ))}
         </div>

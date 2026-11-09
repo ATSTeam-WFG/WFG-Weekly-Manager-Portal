@@ -8,8 +8,8 @@
   width: 220px;
   flex-shrink: 0;
   padding: 20px 12px;
-  background: var(--white);
-  border-right: 1px solid var(--soft-sand);
+  background: var(--espresso);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   /* Pins the sidebar to the actual viewport rather than letting it stretch
      to match .admin-shell's height (which follows the TALLEST flex
      sibling — i.e. the current Dashboard page's own content, which can be
@@ -43,7 +43,7 @@
 .admin-sidebar-divider {
   height: 1px;
   margin: 10px 6px;
-  background: var(--soft-sand);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .admin-sidebar-item {
@@ -60,22 +60,24 @@
   border: none;
   border-left: 3px solid transparent;
   background: none;
-  color: var(--espresso);
+  color: rgba(255, 255, 255, 0.82);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .admin-sidebar-item:hover {
-  background: var(--warm-cream);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--white);
 }
 
-/* Active destination: subtle warm/terracotta background, a terracotta
-   accent on the left edge, and stronger (bolder, terracotta-tinted) text. */
+/* Active destination: electric-blue-tinted background, an electric-blue
+   accent on the left edge, and bright white (bolder) text — the dark navy
+   sidebar's equivalent of the old light-sidebar warm/terracotta treatment. */
 .admin-sidebar-item-active,
 .admin-sidebar-item-active:hover {
-  background: rgba(183, 101, 74, 0.1);
+  background: rgba(8, 102, 232, 0.22);
   border-left-color: var(--terracotta);
-  color: var(--terracotta);
+  color: var(--white);
   font-weight: 700;
 }
 
@@ -126,7 +128,7 @@
 .admin-sidebar-landscape {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom, transparent 0%, var(--warm-cream) 62%);
+  background: linear-gradient(to bottom, transparent 0%, rgba(255, 255, 255, 0.06) 62%);
 }
 
 .admin-sidebar-hill {
@@ -139,19 +141,19 @@
 .admin-sidebar-hill-back {
   bottom: -80px;
   height: 150px;
-  background: var(--soft-sand);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .admin-sidebar-hill-mid {
   bottom: -90px;
   height: 130px;
-  background: rgba(22, 131, 75, 0.14);
+  background: rgba(8, 102, 232, 0.2);
 }
 
 .admin-sidebar-hill-front {
   bottom: -100px;
   height: 110px;
-  background: rgba(183, 101, 74, 0.12);
+  background: rgba(8, 102, 232, 0.32);
 }
 
 .admin-sidebar-decoration-words {
@@ -160,7 +162,7 @@
   font-size: 11px;
   font-weight: 600;
   line-height: 1.5;
-  color: var(--espresso);
+  color: rgba(255, 255, 255, 0.82);
   text-align: center;
   letter-spacing: 0.02em;
   margin: 0 0 6px;

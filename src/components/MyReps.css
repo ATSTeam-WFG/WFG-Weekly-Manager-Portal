@@ -213,7 +213,7 @@
 }
 
 .myreps-status-pending {
-  background: rgba(183, 101, 74, 0.14);
+  background: rgba(8, 102, 232, 0.14);
   color: var(--terracotta);
 }
 
@@ -224,7 +224,7 @@
 
 .myreps-status-rejected {
   background: rgba(183, 101, 74, 0.18);
-  color: var(--terracotta);
+  color: var(--status-error);
 }
 
 .myreps-dash {
@@ -243,7 +243,7 @@
 .myreps-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(48, 42, 39, 0.45);
+  background: rgba(11, 35, 69, 0.45);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -257,7 +257,7 @@
   border-radius: 12px;
   width: 100%;
   max-width: 640px;
-  box-shadow: 0 8px 32px rgba(48, 42, 39, 0.25);
+  box-shadow: 0 8px 32px rgba(11, 35, 69, 0.25);
 }
 
 .myreps-panel-header {
@@ -355,7 +355,7 @@
 }
 
 .myreps-history-rejected {
-  border-left-color: var(--terracotta);
+  border-left-color: var(--status-error);
 }
 
 .myreps-history-status {
@@ -409,7 +409,7 @@
 }
 
 .myreps-action-error {
-  color: var(--terracotta);
+  color: var(--status-error);
   font-size: 13px;
   margin: 8px 0 0;
 }

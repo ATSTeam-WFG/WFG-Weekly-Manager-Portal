@@ -18,7 +18,9 @@ export default function Header({ displayName, roleLabel, onSignOut, pendingConse
   return (
     <header className="header">
       <div className="header-brand">
-        <img src={wfgLogo} alt="WFG" className="header-logo" />
+        <span className="header-logo-plate">
+          <img src={wfgLogo} alt="WFG" className="header-logo" />
+        </span>
         <span className="header-divider" aria-hidden="true" />
         <span className="header-title">OneReport Pulse</span>
       </div>
