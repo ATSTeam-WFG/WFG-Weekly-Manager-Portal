@@ -1,13 +1,30 @@
 :root {
-  --espresso: #302a27;
-  --terracotta: #b7654a;
-  --soft-sand: #e9ddd2;
-  --warm-cream: #f8f5ef;
+  /* OneReport Pulse redesign, Phase 1 — approved 4-color brand system
+     (Deep Navy / Electric Blue / Cool Gray / White). These 9 token NAMES
+     predate the redesign and are used by ~40 component stylesheets across
+     the app; Phase 1 keeps every name as-is and only changes what each one
+     resolves to, so the cascade re-themes the whole app from here without
+     touching individual components' structure or layout.
+
+     --terracotta was previously overloaded: used both as the brand accent
+     (buttons, links, active tabs) AND as the color for "Rejected"/error
+     status badges throughout the app. Those are two different semantic
+     roles that must not both turn blue, so this redesign splits them:
+     --terracotta now carries ONLY the brand-accent role (→ Electric Blue);
+     the new --status-error token below preserves the exact old rust-red
+     value specifically for status/error/rejected use, repointed at each of
+     those call sites individually (see git diff for the component files
+     touched for that reason alone). */
+  --espresso: #0B2345;      /* was #302a27 (warm near-black) → Deep Navy */
+  --terracotta: #0866E8;    /* was #b7654a (rust) → Electric Blue, brand-accent role only */
+  --soft-sand: #F2F5FA;     /* was #e9ddd2 (warm sand) → Cool Gray */
+  --warm-cream: #F2F5FA;    /* was #f8f5ef (warm cream) → Cool Gray */
   --white: #ffffff;
-  --dark-charcoal: #292524;
-  --muted-gray: #78716c;
-  --green: #16834b;
-  --amber: #d97706;
+  --dark-charcoal: #0B2345; /* was #292524 (near-black), same role as --espresso → Deep Navy */
+  --muted-gray: #5B6B84;    /* was #78716c (warm gray) → navy-tinted slate for secondary text */
+  --green: #16834b;         /* unchanged — approved/submitted status */
+  --amber: #d97706;         /* unchanged — draft/pending status */
+  --status-error: #b7654a;  /* new — the old terracotta value, now dedicated to rejected/error/overdue status only */
 
   color-scheme: light;
   color: var(--espresso);

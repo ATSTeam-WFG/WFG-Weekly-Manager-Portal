@@ -231,7 +231,7 @@
 
 .samo-status-pending {
   color: var(--terracotta);
-  background: rgba(183, 101, 74, 0.12);
+  background: rgba(8, 102, 232, 0.12);
 }
 
 .samo-status-approved {
@@ -240,7 +240,7 @@
 }
 
 .samo-status-rejected {
-  color: var(--terracotta);
+  color: var(--status-error);
   background: rgba(183, 101, 74, 0.18);
 }
 

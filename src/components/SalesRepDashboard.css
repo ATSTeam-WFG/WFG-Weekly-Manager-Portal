@@ -90,9 +90,9 @@
   border: 1px solid var(--soft-sand);
   border-radius: 16px;
   padding: 18px 32px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
   flex-wrap: wrap;
 }
@@ -109,8 +109,10 @@
 .rep-manager-card-details {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   margin: 0;
+  min-width: 0;
 }
 
 .rep-manager-card-name {
@@ -122,6 +124,7 @@
 .rep-manager-card-email {
   font-size: 13px;
   color: var(--muted-gray);
+  overflow-wrap: anywhere;
 }
 
 .rep-manager-card-loading,
@@ -138,7 +141,7 @@
   border-radius: 16px;
   padding: 28px 32px;
   margin-bottom: 20px;
-  box-shadow: 0 20px 40px -28px rgba(48, 42, 39, 0.35);
+  box-shadow: 0 20px 40px -28px rgba(11, 35, 69, 0.35);
 }
 
 .rep-hero-top {
@@ -178,7 +181,7 @@
 
 .rep-status-pending {
   color: var(--terracotta);
-  background: rgba(183, 101, 74, 0.12);
+  background: rgba(8, 102, 232, 0.12);
 }
 
 .rep-status-approved {
@@ -187,7 +190,7 @@
 }
 
 .rep-status-rejected {
-  color: var(--terracotta);
+  color: var(--status-error);
   background: rgba(183, 101, 74, 0.18);
 }
 
@@ -217,7 +220,7 @@
   display: inline-block;
   font-size: 12px;
   font-weight: 700;
-  color: var(--terracotta);
+  color: var(--status-error);
   background: var(--soft-sand);
   padding: 4px 12px;
   border-radius: 999px;
@@ -225,9 +228,9 @@
 
 .rep-deadline-notice {
   font-size: 13px;
-  color: var(--terracotta);
+  color: var(--status-error);
   background: var(--warm-cream);
-  border: 1px dashed var(--terracotta);
+  border: 1px dashed var(--status-error);
   border-radius: 10px;
   padding: 12px 16px;
   margin: 0 0 16px;
@@ -236,7 +239,7 @@
 .rep-rejection-summary-banner {
   background: var(--warm-cream);
   border: 1px solid var(--soft-sand);
-  border-left: 4px solid var(--terracotta);
+  border-left: 4px solid var(--status-error);
   border-radius: 12px;
   padding: 14px 18px;
   margin-bottom: 16px;

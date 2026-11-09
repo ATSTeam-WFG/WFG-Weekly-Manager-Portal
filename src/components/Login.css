@@ -30,13 +30,13 @@
 .login-page::before {
   bottom: -260px;
   height: 300px;
-  background: rgba(233, 221, 210, 0.35);
+  background: rgba(242, 245, 250, 0.35);
 }
 
 .login-page::after {
   bottom: -230px;
   height: 220px;
-  background: rgba(233, 221, 210, 0.55);
+  background: rgba(242, 245, 250, 0.55);
 }
 
 .login-card {
@@ -49,7 +49,7 @@
   border-top: 4px solid var(--terracotta);
   border-radius: 16px;
   padding: 44px 40px;
-  box-shadow: 0 20px 40px -28px rgba(48, 42, 39, 0.35);
+  box-shadow: 0 20px 40px -28px rgba(11, 35, 69, 0.35);
   text-align: center;
 }
 
@@ -111,7 +111,7 @@
 .login-error {
   font-size: 13px;
   font-weight: 600;
-  color: var(--terracotta);
+  color: var(--status-error);
   background: rgba(183, 101, 74, 0.08);
   border: 1px solid rgba(183, 101, 74, 0.25);
   border-radius: 8px;

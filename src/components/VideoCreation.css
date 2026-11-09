@@ -37,7 +37,7 @@
   border-radius: 12px;
   padding: 16px 20px;
   margin-bottom: 28px;
-  box-shadow: 0 1px 3px rgba(48, 42, 39, 0.08);
+  box-shadow: 0 1px 3px rgba(11, 35, 69, 0.08);
 }
 
 .vc-workflow-step-wrap {
@@ -58,7 +58,7 @@
 }
 
 .vc-workflow-step-active {
-  background: rgba(183, 101, 74, 0.14);
+  background: rgba(8, 102, 232, 0.14);
   border-color: var(--terracotta);
   color: var(--terracotta);
 }
@@ -89,7 +89,7 @@
   border-top: 4px solid var(--terracotta);
   border-radius: 12px;
   padding: 20px;
-  box-shadow: 0 1px 3px rgba(48, 42, 39, 0.08);
+  box-shadow: 0 1px 3px rgba(11, 35, 69, 0.08);
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -100,7 +100,7 @@
 
 .vc-source-card-selected {
   border-color: var(--terracotta);
-  box-shadow: 0 0 0 2px rgba(183, 101, 74, 0.25);
+  box-shadow: 0 0 0 2px rgba(8, 102, 232, 0.25);
 }
 
 .vc-source-card-disabled {
@@ -289,7 +289,7 @@
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--terracotta);
-  background: rgba(183, 101, 74, 0.12);
+  background: rgba(8, 102, 232, 0.12);
   border-radius: 999px;
   padding: 3px 10px;
 }
@@ -382,7 +382,7 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--terracotta);
-  background: rgba(183, 101, 74, 0.12);
+  background: rgba(8, 102, 232, 0.12);
   border-radius: 999px;
   padding: 4px 12px;
 }
@@ -418,7 +418,7 @@
 .vc-template-error {
   margin: 0 0 16px;
   font-size: 14px;
-  color: var(--terracotta);
+  color: var(--status-error);
 }
 
 .vc-template-rendering-note {
@@ -613,7 +613,7 @@
 }
 
 .vc-cinematic-plan-duration-over {
-  color: var(--terracotta);
+  color: var(--status-error);
   font-weight: 600;
 }
 
@@ -673,7 +673,7 @@
 }
 
 .vc-cinematic-generation-status-failed {
-  color: var(--terracotta);
+  color: var(--status-error);
 }
 
 .btn-small {
@@ -1041,45 +1041,60 @@
   }
 }
 
-/* WFG original warm color theme — Final V3 Videos */
+/* Phase 1 redesign — Final V3 Videos, migrated off the old hardcoded warm
+   theme onto the shared Deep Navy / Electric Blue / Cool Gray / White
+   tokens (color only; layout, video playback, and generation logic
+   untouched).
+   - .vc-final-status ("Ready to Watch") uses --green, not the brand
+     accent: it's a completion/success indicator, matching the exact same
+     semantic already used for .vc-cinematic-generation-status-complete
+     elsewhere in this file — this is a status color, not a selection.
+   - .vc-final-option.is-selected (the With/Without Avatar toggle) uses
+     --terracotta (now Electric Blue): a selected-state toggle is the
+     brand-accent role, the same pattern already used for
+     .vc-workflow-step-active above.
+   - The :focus-visible color here was overriding an already-correct blue
+     outline set earlier in this file for the same selector (see
+     .vc-final-option:focus-visible above, outline: 3px solid #7db5e7) —
+     aligned to that exact value instead of leaving the override blue. */
 .vc-final-videos {
-  background: #fffdf9;
-  border-color: #e8d8ca;
-  box-shadow: 0 6px 24px rgba(65, 43, 33, 0.05);
+  background: var(--white);
+  border-color: var(--soft-sand);
+  box-shadow: 0 6px 24px rgba(11, 35, 69, 0.05);
 }
 
 .vc-final-eyebrow {
-  color: #b6674c;
+  color: var(--terracotta);
 }
 
 .vc-final-heading h2 {
-  color: #352b27;
+  color: var(--espresso);
 }
 
 .vc-final-heading p,
 .vc-final-footer p {
-  color: #756a63;
+  color: var(--muted-gray);
 }
 
 .vc-final-status {
-  background: #f6eae2;
-  color: #97523d;
+  background: rgba(22, 131, 75, 0.12);
+  color: var(--green);
 }
 
 .vc-final-selector {
-  background: #f6f0eb;
+  background: var(--soft-sand);
 }
 
 .vc-final-option {
-  color: #5b4c44;
+  color: var(--muted-gray);
 }
 
 .vc-final-option.is-selected {
-  background: #b6674c;
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(182, 103, 76, 0.18);
+  background: var(--terracotta);
+  color: var(--white);
+  box-shadow: 0 2px 8px rgba(8, 102, 232, 0.18);
 }
 
 .vc-final-option:focus-visible {
-  outline-color: #d69b80;
+  outline-color: #7db5e7;
 }

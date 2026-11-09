@@ -18,7 +18,7 @@
   border-top: 4px solid var(--terracotta);
   border-radius: 16px;
   padding: 40px 36px;
-  box-shadow: 0 20px 40px -28px rgba(48, 42, 39, 0.35);
+  box-shadow: 0 20px 40px -28px rgba(11, 35, 69, 0.35);
   text-align: center;
 }
 
@@ -79,7 +79,7 @@
 .lr-gate-error {
   font-size: 13px;
   font-weight: 600;
-  color: var(--terracotta);
+  color: var(--status-error);
   background: rgba(183, 101, 74, 0.08);
   border: 1px solid rgba(183, 101, 74, 0.25);
   border-radius: 8px;

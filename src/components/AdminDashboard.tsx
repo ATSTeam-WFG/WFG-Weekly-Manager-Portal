@@ -226,7 +226,7 @@ export default function AdminDashboard({
             <span className="adp-deadline-label">Friday Deadline</span>
             <span className="adp-deadline-divider" aria-hidden="true" />
             <span className="adp-deadline-value">Due {week.deadlineLabel}</span>
-            <span className="adp-deadline-status">
+            <span className={`adp-deadline-status${isPastDeadline ? ' adp-deadline-status-passed' : ''}`}>
               {isPastDeadline ? 'Deadline passed' : isDueToday ? 'Due today' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining`}
             </span>
           </div>

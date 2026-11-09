@@ -49,14 +49,16 @@
   white-space: nowrap;
 }
 
-/* SHARED — also used by Reports & Analytics. DO NOT MODIFY. */
+/* SHARED — also used by Reports & Analytics. DO NOT MODIFY (comment
+   predates the Phase 1 redesign; this IS the deliberate, single source-of-
+   truth update for that shared class, not a careless local override). */
 .week-current-badge {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--terracotta);
-  background: rgba(183, 101, 74, 0.1);
+  background: rgba(8, 102, 232, 0.1);
   padding: 3px 9px;
   border-radius: 999px;
 }
@@ -188,7 +190,7 @@
   padding: 14px 16px;
   min-height: 64px;
   box-sizing: border-box;
-  box-shadow: 0 1px 3px rgba(48, 42, 39, 0.08);
+  box-shadow: 0 1px 3px rgba(11, 35, 69, 0.08);
 }
 
 .adp-kpi-icon {
@@ -226,9 +228,15 @@
   color: var(--amber);
 }
 
+/* Deliberately a warm tint, not neutral gray (see
+   adminVisualRefinementWiring.test.ts — a prior, documented product
+   decision to make "Not Started" visually distinct from a flat neutral).
+   Preserved exactly here via --status-error, which holds that same warm
+   value — just moved off --terracotta now that --terracotta is the
+   brand-accent token, to avoid "Not Started" turning blue. */
 .adp-kpi-card-not-started .adp-kpi-icon {
   background: rgba(183, 101, 74, 0.14);
-  color: var(--terracotta);
+  color: var(--status-error);
 }
 
 .adp-kpi-text {
@@ -261,7 +269,7 @@
   align-items: center;
   gap: 12px;
   background: var(--white);
-  border: 1px solid rgba(183, 101, 74, 0.35);
+  border: 1px solid rgba(8, 102, 232, 0.35);
   border-radius: 12px;
   padding: 14px 20px;
   margin-bottom: 20px;
@@ -306,6 +314,13 @@
   padding: 6px 14px;
   border-radius: 999px;
   white-space: nowrap;
+}
+
+/* Overdue state: see Dashboard.css's .hero-days-left-passed for the same
+   reasoning — --status-error, not the brand-accent --terracotta. */
+.adp-deadline-status-passed {
+  color: var(--status-error);
+  background: rgba(183, 101, 74, 0.14);
 }
 
 .adp-loading {

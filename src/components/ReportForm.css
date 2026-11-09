@@ -140,7 +140,7 @@
 
 .report-lock-message {
   padding: 12px 16px;
-  border: 1px dashed var(--terracotta);
+  border: 1px dashed var(--status-error);
   border-radius: 10px;
   background: var(--warm-cream);
   text-align: center;
@@ -197,7 +197,7 @@
 .voice-error-message {
   font-size: 12px;
   font-weight: 600;
-  color: var(--terracotta);
+  color: var(--status-error);
   margin: 0 0 10px;
 }
 
@@ -261,7 +261,7 @@
 }
 
 .autosave-status-error {
-  color: var(--terracotta);
+  color: var(--status-error);
 }
 
 /* Scoped to .manager-report-form (this form only) rather than the shared

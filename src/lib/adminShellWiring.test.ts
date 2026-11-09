@@ -74,23 +74,27 @@ describe('AdminSidebar.tsx — exactly seven destinations, no more, no fewer', (
     assert.match(sidebarSrc, /<circle cx="9" cy="8" r="3" \/>/)
   })
 
-  test('active-state CSS matches the approved direction: subtle terracotta background, terracotta left accent, stronger (bold) text', () => {
+  test('active-state CSS matches the approved redesign direction (dark navy sidebar): electric-blue-tinted background, electric-blue left accent, bright white (bold) text', () => {
     const activeRuleMatch = sidebarCss.match(/\.admin-sidebar-item-active,\s*\n\.admin-sidebar-item-active:hover \{([\s\S]*?)\n\}/)
     assert.ok(activeRuleMatch, 'could not locate the active sidebar item rule')
-    assert.match(activeRuleMatch[1], /background: rgba\(183, 101, 74,/)
+    assert.match(activeRuleMatch[1], /background: rgba\(8, 102, 232,/)
     assert.match(activeRuleMatch[1], /border-left-color: var\(--terracotta\);/)
-    assert.match(activeRuleMatch[1], /color: var\(--terracotta\);/)
+    assert.match(activeRuleMatch[1], /color: var\(--white\);/)
     assert.match(activeRuleMatch[1], /font-weight: 700;/)
   })
 
-  test('inactive items are neutral (no background) with dark espresso text and a subtle hover', () => {
+  test('the sidebar surface itself is dark navy, with light/white inactive text and a subtle light hover (redesign: dark sidebar across all roles)', () => {
+    const surfaceRuleMatch = sidebarCss.match(/\.admin-sidebar \{([\s\S]*?)\n\}/)
+    assert.ok(surfaceRuleMatch, 'could not locate the .admin-sidebar surface rule')
+    assert.match(surfaceRuleMatch[1], /background: var\(--espresso\);/)
+
     const baseRuleMatch = sidebarCss.match(/\.admin-sidebar-item \{([\s\S]*?)\n\}/)
     assert.ok(baseRuleMatch)
-    assert.match(baseRuleMatch[1], /color: var\(--espresso\);/)
+    assert.match(baseRuleMatch[1], /color: rgba\(255, 255, 255,/)
     assert.equal(/background: (?!none)/.test(baseRuleMatch[1]), false)
     const hoverRuleMatch = sidebarCss.match(/\.admin-sidebar-item:hover \{([\s\S]*?)\n\}/)
     assert.ok(hoverRuleMatch)
-    assert.match(hoverRuleMatch[1], /background: var\(--warm-cream\);/)
+    assert.match(hoverRuleMatch[1], /background: rgba\(255, 255, 255,/)
   })
 })
 

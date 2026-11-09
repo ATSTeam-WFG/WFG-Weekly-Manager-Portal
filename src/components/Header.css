@@ -3,8 +3,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
-  background: var(--white);
-  border-bottom: 1px solid var(--soft-sand);
+  background: var(--espresso);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .header-brand {
@@ -13,25 +13,41 @@
   gap: 18px;
 }
 
+/* The logo asset itself has a solid white background baked in (not
+   transparent) — on the new dark navy header this reads as an unintentional
+   white rectangle unless it's deliberately framed as one. Wrapping it in a
+   small white "plate" with rounded corners and a touch of padding turns
+   that into the standard, expected treatment for this exact situation
+   (a light logo mark on a dark navbar), without touching the logo asset
+   itself — satisfies "preserve the existing WFG logo" literally. */
+.header-logo-plate {
+  display: flex;
+  align-items: center;
+  background: var(--white);
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+
 .header-logo {
-  height: 36px;
+  height: 32px;
   display: block;
 }
 
 .header-divider {
   width: 1px;
   height: 28px;
-  background: var(--soft-sand);
+  background: rgba(255, 255, 255, 0.18);
   flex-shrink: 0;
 }
 
 .header-title {
   /* Prominent but slightly secondary to the overall portal header — one
-     step lighter in weight/color than the bold dark-charcoal treatment it
-     had before, without shrinking or hiding it. */
+     step lighter in weight/color than the bold white treatment it had
+     before, without shrinking or hiding it. Light text on the dark navy
+     header bar. */
   font-size: 16px;
   font-weight: 500;
-  color: var(--espresso);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .header-right {
@@ -88,12 +104,12 @@
 .header-user-name {
   font-size: 14px;
   font-weight: 600;
-  color: var(--espresso);
+  color: var(--white);
 }
 
 .header-user-role {
   font-size: 12px;
-  color: var(--muted-gray);
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .sign-out-btn {

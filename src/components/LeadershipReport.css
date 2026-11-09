@@ -62,7 +62,7 @@
 .lr-view-tab-active {
   background: var(--white);
   color: var(--dark-charcoal);
-  box-shadow: 0 1px 3px rgba(48, 42, 39, 0.12);
+  box-shadow: 0 1px 3px rgba(11, 35, 69, 0.12);
 }
 
 /* Same visual language as AdminDashboard's own .adp-week-nav/.adp-week-nav-
@@ -226,7 +226,7 @@
 }
 
 .lr-save-status-error {
-  color: var(--terracotta);
+  color: var(--status-error);
 }
 
 .lr-pane-body {
