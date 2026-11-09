@@ -1,0 +1,302 @@
+/* Sales Admin "Reporting by Manager" — styled to match AdminManagerRepOverview.css
+   and MyReps.css's own conventions (colors, spacing, the shared
+   .week-nav-btn/.week-selector-label/.week-current-badge from
+   AdminDashboard.css, never redefined), under its own samo- prefix. A new,
+   dedicated file rather than extending SalesRepManagement.css — this
+   screen's layout (overview + drill-down) is a different shape from that
+   file's existing flat table. */
+
+.samo-page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.samo-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.samo-header-titles h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.samo-header-subtitle {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0;
+}
+
+.samo-week-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--espresso);
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 999px;
+  padding: 7px 14px;
+  white-space: nowrap;
+}
+
+.samo-loading,
+.samo-empty-state,
+.samo-error-state {
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+  padding: 40px 0;
+}
+
+.samo-error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.samo-summary-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.samo-summary-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.samo-summary-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.samo-summary-label {
+  font-size: 12px;
+  color: var(--muted-gray);
+}
+
+.samo-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.samo-card h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 2px;
+}
+
+.samo-subtitle {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0 0 16px;
+}
+
+.samo-table {
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.samo-table-header-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--warm-cream);
+  border-bottom: 1px solid var(--soft-sand);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-gray);
+}
+
+.samo-table-header-row-overview {
+  grid-template-columns: 1.8fr 0.9fr 0.9fr 0.9fr 0.9fr 1.1fr 0.9fr;
+}
+
+.samo-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.samo-row-overview {
+  grid-template-columns: 1.8fr 0.9fr 0.9fr 0.9fr 0.9fr 1.1fr 0.9fr;
+}
+
+.samo-row:last-child {
+  border-bottom: none;
+}
+
+.samo-row-clickable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.samo-row-clickable:hover,
+.samo-row-clickable:focus-visible {
+  background: var(--warm-cream);
+  outline: none;
+}
+
+.samo-cell-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.samo-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--soft-sand);
+  color: var(--espresso);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.samo-person-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.samo-person-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--espresso);
+}
+
+.samo-person-email {
+  font-size: 12px;
+  color: var(--muted-gray);
+}
+
+.samo-person-email-missing {
+  font-style: italic;
+}
+
+.samo-cell-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--espresso);
+  text-align: center;
+}
+
+.samo-status-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.samo-status-missing {
+  color: var(--muted-gray);
+  background: var(--soft-sand);
+}
+
+.samo-status-pending {
+  color: var(--terracotta);
+  background: rgba(183, 101, 74, 0.12);
+}
+
+.samo-status-approved {
+  color: var(--green);
+  background: rgba(22, 131, 75, 0.12);
+}
+
+.samo-status-rejected {
+  color: var(--terracotta);
+  background: rgba(183, 101, 74, 0.18);
+}
+
+/* Tablet */
+@media (max-width: 860px) {
+  .samo-summary-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .samo-top-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .week-selector-label {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 6px;
+  }
+
+  .samo-summary-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .samo-table-header-row-overview {
+    display: none;
+  }
+
+  .samo-row-overview {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 14px 16px;
+  }
+
+  .samo-cell-count {
+    text-align: left;
+  }
+
+  .samo-cell-count::before {
+    content: attr(data-label) ': ';
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--muted-gray);
+  }
+
+  .samo-table-header-row {
+    display: none;
+  }
+
+  .samo-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 14px 16px;
+  }
+}

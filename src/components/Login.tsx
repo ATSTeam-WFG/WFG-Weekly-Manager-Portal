@@ -43,7 +43,8 @@ export default function Login() {
     <div className="login-page">
       <div className="login-card">
         <img src={wfgLogo} alt="WFG" className="login-logo" />
-        <h1>Weekly Manager Report</h1>
+        <h1>OneReport Pulse</h1>
+        <p className="login-tagline">One Platform. Every Report. One Pulse.</p>
         <p className="login-subtitle">Sign in to your manager account</p>
 
         <form className="login-form" onSubmit={handleSubmit}>

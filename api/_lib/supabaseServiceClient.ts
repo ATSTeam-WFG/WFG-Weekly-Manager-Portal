@@ -55,7 +55,18 @@ export interface ApprovedEmployee {
   title: string | null
   email: string
   emailNormalized: string
-  portalRole: 'manager' | 'admin'
+  // Phase 1B: widened to include 'sales_rep', then (Sales Admin role)
+  // 'sales_admin' — this type/lookup is shared by the ONBOARDING flows
+  // (complete-profile.ts, sync-profile-status.ts, request-access.ts), which
+  // must resolve a sales_rep's or sales_admin's own roster row exactly like
+  // a manager's or admin's, not treat it as "no roster match at all" (see
+  // toApprovedEmployee below). This is a DIFFERENT, more general type than
+  // the Manager/Admin-only RosterEntrySnapshot used by the Add-Manager/
+  // Edit-Employee decision logic in adminUserManagement.ts — those
+  // intentionally stay scoped narrower where a sales_rep/sales_admin roster
+  // row must never be silently treated as eligible for a Manager/Admin
+  // action.
+  portalRole: 'manager' | 'admin' | 'sales_rep' | 'sales_admin'
   isActive: boolean
   accountCreated: boolean
   // Explicit, never inferred — see submits_weekly_report on both
@@ -86,9 +97,20 @@ interface ApprovedEmployeeRow {
 }
 
 function toApprovedEmployee(row: ApprovedEmployeeRow): ApprovedEmployee | null {
-  // A row with no portal_role assigned yet (or an unrecognized value) is not
-  // eligible for anything — treated identically to no roster match at all.
-  if (row.portal_role !== 'manager' && row.portal_role !== 'admin') return null
+  // A row with no portal_role assigned yet (or a genuinely unrecognized
+  // value) is not eligible for anything — treated identically to no roster
+  // match at all. 'sales_rep' and 'sales_admin' are both real, valid roles
+  // and must resolve here — onboarding must be able to find a sales rep's
+  // or sales admin's own roster row, not silently treat it as absent (the
+  // sales_admin omission here would otherwise break Joey Grampa's own
+  // first-login profile resolution in complete-profile.ts).
+  if (
+    row.portal_role !== 'manager' &&
+    row.portal_role !== 'admin' &&
+    row.portal_role !== 'sales_rep' &&
+    row.portal_role !== 'sales_admin'
+  )
+    return null
   return {
     id: row.id,
     fullName: row.full_name,
@@ -513,7 +535,10 @@ export async function createProfileFromApprovedEmployee(userId: string, employee
 }
 
 export type SyncOutcome =
-  | { status: 'synced'; role: 'manager' | 'admin'; isActive: boolean }
+  // Widened (Phase 1B) to include 'sales_rep', then (Sales Admin role)
+  // 'sales_admin' — this feeds App.tsx's finishSigningIn, which assigns it
+  // straight into profile.role (already the wider ProfileRole type).
+  | { status: 'synced'; role: 'manager' | 'admin' | 'sales_rep' | 'sales_admin'; isActive: boolean }
   | { status: 'unchanged' }
   | { status: 'denied' }
   | { status: 'no-profile' }
@@ -798,9 +823,14 @@ export async function createAccountForExistingEmployee(email: string): Promise<C
   return { status: 'created' }
 }
 
-export type SetManagedUserActiveOutcome = { status: 'ok' } | { status: 'not_found' } | { status: 'error' }
+export type SetManagedUserActiveOutcome =
+  | { status: 'ok' }
+  | { status: 'not_found' }
+  | { status: 'forbidden' }
+  | { status: 'error' }
 
-// Deactivate/reactivate — Admin-only, from api/admin/users/set-active.ts.
+// Deactivate/reactivate — from api/admin/users/set-active.ts, callable by
+// Admin (unrestricted) or Sales Admin (restricted, via restrictToPortalRole).
 // Updates approved_employees.is_active immediately (the roster is the
 // source of truth Admin User Management manages directly) and, if a
 // profile already exists, profiles.is_active too, in the same call — this
@@ -808,13 +838,25 @@ export type SetManagedUserActiveOutcome = { status: 'ok' } | { status: 'not_foun
 // which gates a completely separate mechanism (automatic login-time
 // reconciliation), not direct Admin action. Never touches role/portal_role
 // — role is always preserved across a deactivate/reactivate cycle.
-export async function setManagedUserActive(email: string, isActive: boolean): Promise<SetManagedUserActiveOutcome> {
+//
+// restrictToPortalRole: when set (Sales Admin's only allowed use of this
+// function), the target roster row's portal_role must match exactly or the
+// call is refused with 'forbidden' BEFORE any write — a Sales Admin must
+// never be able to deactivate/reactivate a Manager, Admin, or another Sales
+// Admin account through this endpoint. Full Admin always calls this with
+// the restriction omitted, preserving its existing unrestricted behavior
+// exactly.
+export async function setManagedUserActive(
+  email: string,
+  isActive: boolean,
+  restrictToPortalRole?: 'sales_rep',
+): Promise<SetManagedUserActiveOutcome> {
   const emailNormalized = normalizeEmail(email)
   const client = getServiceClient()
 
   const { data: rosterRow, error: rosterSelectError } = await client
     .from('approved_employees')
-    .select('id')
+    .select('id, portal_role')
     .eq('email_normalized', emailNormalized)
     .maybeSingle()
 
@@ -823,6 +865,9 @@ export async function setManagedUserActive(email: string, isActive: boolean): Pr
     return { status: 'error' }
   }
   if (!rosterRow) return { status: 'not_found' }
+  if (restrictToPortalRole && rosterRow.portal_role !== restrictToPortalRole) {
+    return { status: 'forbidden' }
+  }
 
   const { error: rosterUpdateError } = await client
     .from('approved_employees')
@@ -1356,4 +1401,349 @@ export async function createPresenterMediaSignedUrl(storagePath: string, expires
     throw new Error('Could not create a signed URL for the requested presenter media file.')
   }
   return data.signedUrl
+}
+
+// -----------------------------------------------------------------------
+// Sales Rep provisioning — Phase 1B admin surface (api/admin/users/invite-sales-rep.ts,
+// list-sales-reps.ts, list-managers.ts). Entirely additive: nothing above
+// this comment is modified. This deliberately does NOT reuse
+// lookupApprovedEmployeeByNormalizedEmail/ApprovedEmployee/fetchRosterAndProfileSnapshots —
+// toApprovedEmployee() above returns null for any portal_role other than
+// 'manager'/'admin', which would silently hide a sales_rep roster row (and
+// therefore break the role_conflict check, which must still be able to see
+// a sales_rep row's own prior state, as well as detect a conflicting
+// manager/admin row). A small parallel snapshot fetch is used instead,
+// exactly as directed: keep the existing Manager/Admin path untouched and
+// risk-free, rather than widening a helper it depends on.
+//
+// The WHAT-should-happen decision lives in api/_lib/salesRepProvisioning.ts
+// (pure, directly unit-tested); this is the thin I/O layer.
+// -----------------------------------------------------------------------
+import { decideCreateSalesRepAccountAction, type SalesRepRosterSnapshot } from './salesRepProvisioning.js'
+
+async function fetchSalesRepRosterAndProfileSnapshots(
+  emailNormalized: string,
+): Promise<{ roster: SalesRepRosterSnapshot | null; profile: ProfileSnapshot | null } | { error: true }> {
+  const { data: rosterRow, error: rosterError } = await getServiceClient()
+    .from('approved_employees')
+    .select('portal_role, is_active, account_created_at')
+    .eq('email_normalized', emailNormalized)
+    .maybeSingle()
+
+  if (rosterError) {
+    console.error('supabaseServiceClient: sales rep roster lookup failed:', rosterError.message)
+    return { error: true }
+  }
+
+  const profileLookup = await findProfileByEmail(emailNormalized)
+  if (profileLookup.status === 'error') return { error: true }
+
+  const roster: SalesRepRosterSnapshot | null =
+    rosterRow &&
+    (rosterRow.portal_role === 'manager' ||
+      rosterRow.portal_role === 'admin' ||
+      rosterRow.portal_role === 'sales_rep' ||
+      rosterRow.portal_role === 'sales_admin')
+      ? { portalRole: rosterRow.portal_role, isActive: rosterRow.is_active, accountCreated: rosterRow.account_created_at !== null }
+      : null
+
+  return {
+    roster,
+    profile: profileLookup.status === 'found' ? { isActive: profileLookup.profile.isActive } : null,
+  }
+}
+
+export type CreateSalesRepAccountOutcome =
+  | { status: 'created' }
+  | { status: 'already_registered' }
+  | { status: 'already_created' }
+  | { status: 'invalid_domain' }
+  | { status: 'role_conflict' }
+  | { status: 'inactive' }
+  | { status: 'error' }
+
+// "Add Sales Rep" — Admin-only, from api/admin/users/invite-sales-rep.ts.
+// fullName is only ever used the FIRST time a roster row is created for
+// this email; if one already exists, its stored name is left untouched. No
+// email is sent — this creates the Auth account directly with the shared
+// temporary password (see createEmployeeAccount/createAccountAndMarkRoster
+// above, reused verbatim — both are already role-agnostic, keyed only by
+// email/emailNormalized, so nothing about them needed to change for this).
+export async function addOrCreateSalesRepAccount(fullName: string, email: string): Promise<CreateSalesRepAccountOutcome> {
+  const emailNormalized = normalizeEmail(email)
+  const snapshots = await fetchSalesRepRosterAndProfileSnapshots(emailNormalized)
+  if ('error' in snapshots) return { status: 'error' }
+
+  const decision = decideCreateSalesRepAccountAction(emailNormalized, snapshots.roster, snapshots.profile)
+
+  if (decision.action === 'invalid_domain') return { status: 'invalid_domain' }
+  if (decision.action === 'role_conflict') return { status: 'role_conflict' }
+  if (decision.action === 'inactive') return { status: 'inactive' }
+  if (decision.action === 'already_registered') return { status: 'already_registered' }
+  if (decision.action === 'already_created') return { status: 'already_created' }
+
+  if (decision.action === 'create_roster_and_account') {
+    const { error: upsertError } = await getServiceClient()
+      .from('approved_employees')
+      .upsert(
+        {
+          full_name: fullName.trim(),
+          email,
+          email_normalized: emailNormalized,
+          portal_role: 'sales_rep',
+          is_active: true,
+          // Specific to the OLD reports-table weekly-report flow, never
+          // Phase 1B's rep_reports — a sales rep never submits through that
+          // legacy path. See the Phase 1B task brief's own note on this
+          // column.
+          submits_weekly_report: false,
+        },
+        { onConflict: 'email_normalized' },
+      )
+    if (upsertError) {
+      console.error('supabaseServiceClient: addOrCreateSalesRepAccount roster upsert failed:', upsertError.message)
+      return { status: 'error' }
+    }
+  }
+
+  const result = await createAccountAndMarkRoster(emailNormalized, email)
+  if (result.status === 'error') return { status: 'error' }
+  if (result.status === 'already_created') return { status: 'already_created' }
+  return { status: 'created' }
+}
+
+export interface SalesRepSummary {
+  // approved_employees' own stable primary key — used as the row list key,
+  // mirroring ManagedUserSummary.id. Never used to call assign_sales_rep/
+  // unassign_sales_rep/grant_rep_report_late_submission_exception — those
+  // RPCs live in the profiles/auth.users id space (see profileId below).
+  id: string
+  fullName: string
+  email: string
+  isActive: boolean
+  status: 'pending' | 'awaiting_first_login' | 'active' | 'inactive'
+  // profiles.id for this rep (== their auth.users id — the exact id space
+  // assign_sales_rep/unassign_sales_rep/grant_rep_report_late_submission_exception
+  // all expect as p_rep_id), or null if this rep has never completed
+  // onboarding yet (no profiles row exists). The admin UI must disable
+  // assignment/exception controls whenever this is null — there is no valid
+  // id to call those RPCs with yet.
+  profileId: string | null
+  currentManagerId: string | null
+  currentManagerName: string | null
+  // true iff profileId is in the VERIFIED_REAL_SALES_REP_IDS allowlist — a
+  // genuine, reconciled Phase 1A Sales Rep rather than a demo/test account
+  // (e.g. "Phase 1A Test Sales Rep"). Always false for a rep with no
+  // profileId yet. The UI uses this to compute an accurate "real" headline
+  // count without hiding demo/test rows from the management table.
+  isVerifiedReal: boolean
+}
+
+// Lists every approved_employees row with portal_role='sales_rep', joined
+// against profiles by normalized email (the only link between the two
+// tables prior to sign-up — same join approach as listManagedUsers), plus
+// each matched rep's current (unassigned_at IS NULL) manager assignment,
+// resolved via rep_manager_assignments and a profiles lookup for the
+// manager's display name. A rep with no profiles row yet (hasn't completed
+// onboarding) simply gets profileId/currentManagerId/currentManagerName
+// all null — never an error, and never a guess at an assignment that
+// cannot exist yet (assign_sales_rep itself requires an active sales_rep
+// profile to exist).
+export async function listSalesReps(): Promise<SalesRepSummary[] | null> {
+  const client = getServiceClient()
+  const [rosterResult, profileResult] = await Promise.all([
+    client
+      .from('approved_employees')
+      .select('id, full_name, email, email_normalized, is_active, account_created_at')
+      .eq('portal_role', 'sales_rep'),
+    client.from('profiles').select('id, email, is_active'),
+  ])
+
+  if (rosterResult.error || profileResult.error) {
+    console.error('supabaseServiceClient: listSalesReps failed:', rosterResult.error?.message ?? profileResult.error?.message)
+    return null
+  }
+
+  const profileByEmail = new Map((profileResult.data ?? []).map((p) => [p.email as string, p]))
+  const repRows = rosterResult.data ?? []
+
+  const repProfileIds = repRows
+    .map((row) => profileByEmail.get(row.email_normalized)?.id as string | undefined)
+    .filter((id): id is string => typeof id === 'string')
+
+  const assignmentByRepId = new Map<string, { managerId: string; managerName: string | null }>()
+  if (repProfileIds.length > 0) {
+    const { data: assignmentRows, error: assignmentError } = await client
+      .from('rep_manager_assignments')
+      .select('rep_id, manager_id')
+      .in('rep_id', repProfileIds)
+      .is('unassigned_at', null)
+
+    if (assignmentError) {
+      console.error('supabaseServiceClient: listSalesReps assignment lookup failed:', assignmentError.message)
+      return null
+    }
+
+    const managerIds = Array.from(new Set((assignmentRows ?? []).map((a) => a.manager_id as string)))
+    const managerNameById = new Map<string, string | null>()
+    if (managerIds.length > 0) {
+      const { data: managerProfiles, error: managerError } = await client.from('profiles').select('id, full_name').in('id', managerIds)
+      if (managerError) {
+        console.error('supabaseServiceClient: listSalesReps manager name lookup failed:', managerError.message)
+        return null
+      }
+      for (const m of managerProfiles ?? []) {
+        managerNameById.set(m.id as string, (m.full_name as string | null) ?? null)
+      }
+    }
+
+    for (const a of assignmentRows ?? []) {
+      assignmentByRepId.set(a.rep_id as string, {
+        managerId: a.manager_id as string,
+        managerName: managerNameById.get(a.manager_id as string) ?? null,
+      })
+    }
+  }
+
+  return repRows
+    .map((row) => {
+      const profile = profileByEmail.get(row.email_normalized)
+      const profileSnapshot: ProfileSnapshot | null = profile ? { isActive: profile.is_active as boolean } : null
+      const profileId = (profile?.id as string | undefined) ?? null
+      const assignment = profileId ? assignmentByRepId.get(profileId) : undefined
+      return {
+        id: row.id as string,
+        fullName: row.full_name as string,
+        email: row.email as string,
+        isActive: row.is_active as boolean,
+        status: deriveManagedUserStatus(row.is_active as boolean, row.account_created_at !== null, profileSnapshot),
+        profileId,
+        currentManagerId: assignment?.managerId ?? null,
+        currentManagerName: assignment?.managerName ?? null,
+        isVerifiedReal: profileId !== null && VERIFIED_REAL_SALES_REP_IDS.has(profileId),
+      }
+    })
+    .sort((a, b) => a.fullName.localeCompare(b.fullName))
+}
+
+// Phase 1A real-employee onboarding (November 2026) — TEMPORARY, explicit
+// allowlist of the 33 real, verified Sales Rep profile ids (see that
+// engagement's own roster reconciliation; excludes "Phase 1A Test Sales
+// Rep" and "Phase 1A Test Sales Rep 2"). Mirrors VERIFIED_REAL_MANAGER_IDS
+// below exactly, and for the same reason: deliberately an allowlist, not a
+// name- or email-pattern exclusion. A demo Sales Rep's email need not match
+// any particular pattern, and no existing schema column marks an account
+// as test-only — adding one would be a schema migration for what is
+// otherwise a pure read-filter/reporting concern. An allowlist also fails
+// safe: a future test/demo Sales Rep would never appear here by accident,
+// where a blocklist would have to be remembered and updated for every new
+// one. Used only to compute a "verified real" count/label for the Sales
+// Admin dashboard — never to hide, restrict, or gate access to any rep's
+// row; every rep (real or demo) remains fully visible and manageable.
+// Safe to widen or remove once a real, data-level test-account marker
+// exists.
+//
+// MAINTENANCE LIMITATION — read before onboarding a new real Sales Rep:
+// this Set is a static snapshot (33 ids, reconciled 2026-11-05) and is
+// NEVER updated automatically. A newly onboarded real Sales Rep will NOT
+// be in it until someone adds their profile id here by hand. Until then,
+// that rep is silently treated as demo/test everywhere this flag is read:
+// they get the "Demo/Test" badge in Sales Rep Management, they're excluded
+// from the "Active" KPI's verified-real headline count, and the "33 real
+// reps" figure understates the true number of real, active reps. This
+// fails safe in the security sense (never over-counts, never grants
+// anything), but it DOES silently produce an incorrect operational total
+// if forgotten — there is no error, warning, or test that catches a
+// missing id on its own. To add a newly onboarded real Sales Rep: look up
+// their profiles.id (== auth.users id) in PREVIEW and append it below with
+// a name comment, the same way every existing entry was compiled (see this
+// engagement's roster reconciliation for the read-only query pattern used
+// to regenerate this list from approved_employees joined to profiles).
+const VERIFIED_REAL_SALES_REP_IDS = new Set([
+  '6c8dabe5-66dd-4043-bc2a-83746194ed64', // Aaron Mahana
+  '5e609f03-eebe-4feb-8a1a-5cc7ed0021f6', // Austin Rozier
+  'ba6c3b72-2e12-4394-a3bc-8ea18e431953', // Bradley Keene
+  '2d6ab6e9-6663-47a8-9db6-d94c4cba3288', // Danielle Johnson
+  'baa6ab00-2e04-4272-bf05-4b5eb812b038', // Danny Rodriguez
+  '9cddd3e5-1a49-45d4-8c91-9ce5092ec1aa', // David Hoffman
+  'deaabf9f-492c-4867-81cf-b4bdfc1b4db6', // Devon Sommer
+  'b39c698f-520a-47ce-beb8-56ec1fd75015', // Donna Slomins
+  '176603b0-3931-498d-b174-de1d8081466b', // Elissa Perez
+  '24993a66-a63d-4f76-b66e-996bd469db00', // Evan Rebadow
+  '2563a221-fb96-45c5-922d-39ee860accff', // Gary Szafranski
+  '351df340-f783-4a8c-a80e-f0d17fb82a1c', // Holly Helfrich
+  'cd7de58d-6573-4b07-b135-1f011def9bc2', // Honora Ferris
+  'a7c151dd-c9b3-456e-bed6-ba4b893b5687', // Ian Bartlett
+  '11cdf99d-86b9-440f-ada1-51e76b0ecfe0', // Jackie Medeiros
+  '0df204e3-f49d-4e81-9a4a-3cf035d9a7c4', // Jamie Barker
+  '7fa7b34c-e946-4985-9c48-93411b9b3501', // Jennifer Giles
+  '6edf07c5-f43f-48ca-9683-f2c6f00b786f', // John Pellecchia
+  '4308b2b2-5767-429f-a950-231cc59e19a7', // Julie Tomlinson
+  '52a1b605-fe03-4742-ae65-8a9060e3acac', // Kristy Campbell
+  'c37e635d-1777-4d5c-8766-d7f59c5376fa', // Liz Dunlap
+  'c0cdd9fb-7404-4584-b9b8-ce8c0d435b09', // Liz Fox
+  '3002b0ff-825a-4fc2-bb78-1288a8d62164', // Lois Donnelly
+  '7c02438f-d4dd-41cb-9635-db34eff6906c', // Lori Ciambriello
+  '04b486e5-d595-4f4e-99bb-0a51365c1a7c', // Natalie Diaz
+  'd0da283d-c563-4f28-bdfa-64b0e051ad03', // Patrick Malone
+  'cab45803-0df3-48bb-8565-ebc4cc9c0e41', // Sadie Thibodeaux
+  'b21dcec2-5d81-4ad3-b22b-579d083a49a7', // Stephanie Coppage
+  '2e03ab24-3023-457c-8d7c-41bcb3cb4ea2', // Stephanie Runnels
+  '63b56d74-27ea-464e-806b-fe7d686e8004', // Sundi March
+  '97db1667-f8f3-47e6-a3a6-d3054483bb02', // Theresa Kane-Mackenzie
+  '0dadc618-020d-44bf-add2-138280861192', // Tony Polito
+  '118eb8ec-be7e-43d4-a6ad-d05dafffc483', // Tori Holmes
+])
+
+// Phase 1A real-employee onboarding (November 2026) — TEMPORARY, explicit
+// allowlist of the 10 real, verified Manager profile ids (see that
+// engagement's own roster reconciliation). Deliberately an allowlist, not a
+// name- or email-pattern exclusion: "Demo Manager"'s own email is a real
+// @wfgtitle.com address, indistinguishable by pattern from a genuine
+// Manager's, and no existing schema column marks an account as test-only —
+// adding one would be a schema migration for what is otherwise a pure
+// read-filter concern. An allowlist also fails safe: a future test/demo
+// Manager account would never appear here by accident, where a blocklist
+// would have to be remembered and updated for every new one. Safe to widen
+// or remove once a real, data-level test-account marker exists, or once
+// this specific onboarding effort is complete and no longer needs to
+// exclude "Demo Manager"/"Dry Run Manager" from the real assignment flow.
+const VERIFIED_REAL_MANAGER_IDS = new Set([
+  '58b6d0e7-24f7-4f21-b6bb-8aa941cf9fe0', // Chad Hansen
+  'b8c7c5ef-049a-4fd4-ba56-0955f44820b4', // Rhonda Utecht
+  'ff7334b7-9837-47a5-b32b-e5b1742dbc43', // Cary Williams
+  '09ee9917-519e-4426-a34f-91ed3e2f6e86', // Tina Arcarese
+  '4388e6c2-1a63-439c-baef-36faad8d758d', // David Rebadow
+  '2fe50f76-bef4-4377-b4ba-615c654df0f8', // Gene Rebadow
+  '280af92c-b6a7-4868-a783-b0fc5646e5fe', // David Silverstein
+  '166feed6-c66f-4c46-93a4-42ef0e80f55d', // Lauren McCaskill
+  'aed29211-56dc-485e-bf2b-0e3c4ea9397c', // Robert Bauchle
+  '62dce027-e514-4831-ad35-09697eee01b6', // Clint Yarborough
+])
+
+// Candidate list for the "Assign Manager" dropdown — active, verified-real
+// Managers only (profiles.role = 'manager', is_active = true, AND in the
+// explicit allowlist above). This is NOT a security boundary:
+// assign_sales_rep itself independently re-validates server-side that the
+// target is really an active manager, so a stale/tampered id reaching that
+// RPC is rejected there regardless of what this list ever returned — the
+// allowlist filter here only narrows which existing, already-authorized
+// Managers populate the dropdown, it never grants anything. This endpoint
+// exists purely to populate the dropdown with a clean, pre-filtered list
+// rather than making the browser re-filter listManagedUsers()'s broader
+// (manager+admin, every status) result. email is included so the UI can
+// disambiguate similarly-named Managers (e.g. two different people
+// surnamed Rebadow in this exact roster).
+export async function listActiveManagers(): Promise<{ id: string; fullName: string | null; email: string }[]> {
+  const { data, error } = await getServiceClient().from('profiles').select('id, full_name, email').eq('role', 'manager').eq('is_active', true)
+
+  if (error) {
+    console.error('supabaseServiceClient: listActiveManagers failed:', error.message)
+    return []
+  }
+
+  return (data ?? [])
+    .filter((row) => VERIFIED_REAL_MANAGER_IDS.has(row.id as string))
+    .map((row) => ({ id: row.id as string, fullName: (row.full_name as string | null) ?? null, email: row.email as string }))
+    .sort((a, b) => (a.fullName ?? '').localeCompare(b.fullName ?? ''))
 }

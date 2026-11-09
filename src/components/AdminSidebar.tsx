@@ -12,6 +12,7 @@ export type AdminDestination =
   | 'weekly-summary'
   | 'leadership-report'
   | 'video-creation'
+  | 'sales-reps'
 
 interface AdminSidebarProps {
   current: AdminDestination
@@ -21,6 +22,7 @@ interface AdminSidebarProps {
   onNavigateWeeklySummary: () => void
   onNavigateLeadershipReport: () => void
   onNavigateVideoCreation: () => void
+  onNavigateSalesReps: () => void
 }
 
 function DashboardIcon() {
@@ -134,6 +136,7 @@ export default function AdminSidebar({
   onNavigateWeeklySummary,
   onNavigateLeadershipReport,
   onNavigateVideoCreation,
+  onNavigateSalesReps,
 }: AdminSidebarProps) {
   // Approved grouping/order: Admin Dashboard — divider — Weekly Summary,
   // Leadership Report, Video Creation — divider — User Management,
@@ -150,6 +153,7 @@ export default function AdminSidebar({
     [
       { key: 'user-management', label: 'User Management', onClick: onNavigateUserManagement, icon: <UsersIcon /> },
       { key: 'reports-analytics', label: 'Reports & Analytics', onClick: onNavigateReportsAnalytics, icon: <ChartIcon /> },
+      { key: 'sales-reps', label: 'Sales Reps', onClick: onNavigateSalesReps, icon: <UsersIcon /> },
     ],
   ]
 

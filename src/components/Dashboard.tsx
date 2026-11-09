@@ -109,8 +109,8 @@ export default function Dashboard({
           <div className="reminder-banner-text">
             <p className="reminder-banner-title">
               {status === 'draft'
-                ? 'Weekly Manager Report not yet submitted'
-                : 'Weekly Manager Report not started'}
+                ? 'Your weekly report not yet submitted'
+                : 'Your weekly report not started'}
             </p>
             <p className="reminder-banner-subtitle">
               {status === 'draft'

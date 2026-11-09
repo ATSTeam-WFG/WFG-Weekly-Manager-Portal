@@ -31,7 +31,11 @@ describe('App.tsx — isSubmitter / myReportOpen wiring', () => {
   })
 
   test('the top-level admin/manager split now also checks !myReportOpen, so an Admin+submitter viewing their own report falls into the Manager branch', () => {
-    assert.match(appSrc, /\{isAdmin && !myReportOpen \? \(/)
+    // Phase 1B wrapped this split as the second arm of a new top-level
+    // isSalesRep ternary (see salesRepRoutingWiring.test.ts for that
+    // phase's own dedicated coverage) — the isAdmin && !myReportOpen check
+    // itself, and everything downstream of it, is otherwise unchanged.
+    assert.match(appSrc, /: isAdmin && !myReportOpen \? \(/)
   })
 
   test('onOpenMyReport is only ever passed to AdminDashboard when isSubmitter is true — never unconditionally', () => {

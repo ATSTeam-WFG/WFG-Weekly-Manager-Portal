@@ -1,0 +1,33 @@
+.sales-admin-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.sales-admin-shell-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e2e2e2;
+}
+
+.sales-admin-shell-nav-item {
+  background: none;
+  border: none;
+  padding: 10px 16px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #555;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.sales-admin-shell-nav-item:hover {
+  color: #111;
+}
+
+.sales-admin-shell-nav-item-active {
+  color: #111;
+  border-bottom-color: #2563eb;
+}

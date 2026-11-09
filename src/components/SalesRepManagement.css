@@ -1,0 +1,533 @@
+/* Sales Rep Management — a completely separate screen from
+   UserManagement.css, under its own "srm-" prefix so nothing here can ever
+   collide with or affect that unrelated, untouched feature. Structurally
+   mirrors UserManagement.css/AdminDashboard.css's KPI-card / filter-row /
+   table layout conventions, and AddEmployeeModal.css's centered-modal
+   convention, using only the shared design tokens from src/index.css. */
+
+.sales-rep-management {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 24px 100px;
+}
+
+.srm-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.srm-header-titles h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.srm-header-subtitle {
+  font-size: 14px;
+  color: var(--muted-gray);
+  margin: 0;
+}
+
+.srm-loading {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+}
+
+.srm-empty-state {
+  background: var(--white);
+  border: 1px dashed var(--soft-sand);
+  border-radius: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+}
+
+/* KPI cards. */
+.srm-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.srm-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 14px 16px;
+  min-height: 64px;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(48, 42, 39, 0.08);
+}
+
+.srm-kpi-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  font-size: 15px;
+  flex-shrink: 0;
+  background: var(--soft-sand);
+  color: var(--espresso);
+}
+
+.srm-kpi-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.srm-kpi-card-active .srm-kpi-icon {
+  background: rgba(22, 131, 75, 0.16);
+  color: var(--green);
+}
+
+.srm-kpi-card-awaiting .srm-kpi-icon {
+  background: rgba(59, 130, 246, 0.14);
+  color: var(--terracotta);
+}
+
+.srm-kpi-card-unassigned .srm-kpi-icon {
+  background: rgba(217, 119, 6, 0.14);
+  color: var(--amber);
+}
+
+.srm-kpi-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.srm-kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  line-height: 1.1;
+}
+
+.srm-kpi-label {
+  font-size: 12px;
+  color: var(--muted-gray);
+}
+
+.srm-kpi-sublabel {
+  font-size: 11px;
+  color: var(--muted-gray);
+  margin-top: 2px;
+}
+
+.srm-demo-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-gray);
+  background: var(--soft-sand);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+/* Search + status filter. */
+.srm-controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.srm-search {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 14px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--dark-charcoal);
+}
+
+.srm-search:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+.srm-status-filter {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dark-charcoal);
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  padding: 9px 14px;
+  cursor: pointer;
+}
+
+/* Sales rep table. */
+.srm-table {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.srm-table-header-row {
+  display: grid;
+  grid-template-columns: 2fr 1.1fr 1.6fr 1.4fr;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--warm-cream);
+  border-bottom: 1px solid var(--soft-sand);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-gray);
+}
+
+.srm-row {
+  border-bottom: 1px solid var(--soft-sand);
+  padding: 14px 16px;
+}
+
+.srm-row:last-child {
+  border-bottom: none;
+}
+
+.srm-row-main {
+  display: grid;
+  grid-template-columns: 2fr 1.1fr 1.6fr 1.4fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.srm-cell-rep {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.srm-rep-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.srm-rep-email {
+  font-size: 12px;
+  color: var(--muted-gray);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.srm-status-badge {
+  white-space: nowrap;
+}
+
+.srm-status-badge.srm-status-pending {
+  background: rgba(217, 119, 6, 0.14);
+  color: var(--amber);
+}
+
+.srm-status-badge.srm-status-awaiting_first_login {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--terracotta);
+}
+
+.srm-status-badge.srm-status-active {
+  background: rgba(22, 131, 75, 0.12);
+  color: var(--green);
+}
+
+.srm-status-badge.srm-status-inactive {
+  background: rgba(120, 113, 108, 0.14);
+  color: var(--muted-gray);
+}
+
+.srm-cell-manager {
+  min-width: 0;
+}
+
+.srm-manager-select {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--dark-charcoal);
+  cursor: pointer;
+}
+
+.srm-manager-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.srm-manager-disabled {
+  font-size: 13px;
+  color: var(--muted-gray);
+  font-style: italic;
+  cursor: help;
+}
+
+.srm-cell-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.srm-row-message {
+  margin: 8px 0 0;
+}
+
+.sales-rep-management-message-error {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--terracotta);
+  margin: 0 0 12px;
+}
+
+.sales-rep-management-message-success {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  margin: 0 0 12px;
+}
+
+/* Grant Late Submission Exception — inline expandable form under the row,
+   same pattern as UserManagement.css's own inline Edit Employee form. */
+.srm-exception-form {
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+  border-radius: 10px;
+}
+
+.srm-exception-fields {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.srm-exception-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.srm-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--espresso);
+}
+
+.srm-field-input,
+.srm-field-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--dark-charcoal);
+}
+
+.srm-field-textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.srm-field-input:focus,
+.srm-field-textarea:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+.srm-exception-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Add Sales Rep modal — mirrors AddEmployeeModal.css's centered-modal
+   convention under its own class names. */
+.srm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(41, 37, 34, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+}
+
+.srm-modal-panel {
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--white);
+  border-radius: 16px;
+  border: 1px solid var(--soft-sand);
+  box-shadow: 0 24px 60px -20px rgba(48, 42, 39, 0.45);
+}
+
+.srm-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.srm-modal-header h2 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0;
+}
+
+.srm-modal-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  line-height: 1;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted-gray);
+  cursor: pointer;
+}
+
+.srm-modal-close-btn:hover {
+  background: var(--warm-cream);
+  color: var(--terracotta);
+}
+
+.srm-modal-close-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.srm-modal-form {
+  padding: 20px 24px 24px;
+}
+
+.srm-modal-helper {
+  font-size: 13px;
+  color: var(--muted-gray);
+  margin: 0 0 16px;
+}
+
+.srm-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.srm-modal-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--espresso);
+}
+
+.srm-modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--dark-charcoal);
+}
+
+.srm-modal-input:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+.srm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+@media (max-width: 860px) {
+  .srm-kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .srm-kpi-row {
+    grid-template-columns: 1fr;
+  }
+
+  .srm-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .srm-controls {
+    flex-direction: column;
+  }
+
+  .srm-exception-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .srm-table-header-row {
+    display: none;
+  }
+
+  .srm-row-main {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .srm-cell-actions {
+    width: 100%;
+  }
+
+  .srm-cell-actions .btn {
+    flex: 1;
+  }
+
+  .srm-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .srm-modal-actions .btn {
+    width: 100%;
+  }
+}

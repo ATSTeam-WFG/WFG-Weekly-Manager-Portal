@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import MicButton from './MicButton'
 import BulletListInput from './BulletListInput'
+import ImportRepReportsPanel from './ImportRepReportsPanel'
 import { useSpeechToText } from '../hooks/useSpeechToText'
 import { useAutoGrowTextarea } from '../hooks/useAutoGrowTextarea'
 import { useAutosave } from '../hooks/useAutosave'
@@ -82,6 +83,12 @@ export default function ReportForm({
   const [data, setData] = useState<ManagerReportSectionsV2>(initialData)
   const [savedMessage, setSavedMessage] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  // Phase 1C — consolidation of approved Sales Rep reports into this
+  // manager's own report. Scoped to the not-yet-submitted draft flow only
+  // (never isEditingSubmitted): a submitted report is a separate, later
+  // workflow concern out of scope for this integration. Local UI state
+  // only; the panel itself fetches and applies via managerConsolidationService.
+  const [importPanelOpen, setImportPanelOpen] = useState(false)
   // Auto-grow the two free-text textareas as their own content changes —
   // same dependency-free technique used per bullet row in BulletListInput.
   const otherNotableItemsRef = useAutoGrowTextarea(data.otherNotableItems)
@@ -155,6 +162,18 @@ export default function ReportForm({
 
   const handleTextChange = (key: 'otherNotableItems' | 'okrNotes', value: string) => {
     setData((prev) => ({ ...prev, [key]: value }))
+    clearFeedback()
+  }
+
+  // Appends (never replaces) imported Sales Rep content into Other Notable
+  // Items — the exact same "append to whatever's already there" convention
+  // already used for voice-dictation results in handleVoiceResult below,
+  // so the manager's own existing content is never overwritten.
+  const handleApplyImportedContent = (text: string) => {
+    setData((prev) => {
+      const current = prev.otherNotableItems.trim()
+      return { ...prev, otherNotableItems: current ? `${current}\n\n${text}` : text }
+    })
     clearFeedback()
   }
 
@@ -401,13 +420,20 @@ export default function ReportForm({
           <label className="report-section-label" htmlFor="other-notable-items">
             Other Notable Items
           </label>
-          <MicButton
-            isListening={activeField === 'otherNotableItems'}
-            isSupported={isSupported}
-            fieldLabel="Other Notable Items"
-            onStart={() => start('otherNotableItems', (transcript) => handleVoiceResult('otherNotableItems', transcript))}
-            onStop={stop}
-          />
+          <div className="report-section-header-right">
+            {!isEditingSubmitted && (
+              <button type="button" className="link-btn" onClick={() => setImportPanelOpen(true)}>
+                Import from Sales Reps
+              </button>
+            )}
+            <MicButton
+              isListening={activeField === 'otherNotableItems'}
+              isSupported={isSupported}
+              fieldLabel="Other Notable Items"
+              onStart={() => start('otherNotableItems', (transcript) => handleVoiceResult('otherNotableItems', transcript))}
+              onStop={stop}
+            />
+          </div>
         </div>
         <p className="report-section-helper">Anything important that does not fit above but warrants attention.</p>
         {errorField === 'otherNotableItems' && errorMessage && <p className="voice-error-message">{errorMessage}</p>}
@@ -476,6 +502,16 @@ export default function ReportForm({
           </>
         )}
       </div>
+
+      {!isEditingSubmitted && (
+        <ImportRepReportsPanel
+          isOpen={importPanelOpen}
+          weekStartDate={week.weekStartDate}
+          currentOtherNotableItems={data.otherNotableItems}
+          onClose={() => setImportPanelOpen(false)}
+          onApply={handleApplyImportedContent}
+        />
+      )}
     </div>
   )
 }

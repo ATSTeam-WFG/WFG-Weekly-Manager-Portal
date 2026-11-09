@@ -12,6 +12,7 @@ interface AdminShellProps {
   onNavigateWeeklySummary: () => void
   onNavigateLeadershipReport: () => void
   onNavigateVideoCreation: () => void
+  onNavigateSalesReps: () => void
   children: ReactNode
 }
 
@@ -30,6 +31,7 @@ export default function AdminShell({
   onNavigateWeeklySummary,
   onNavigateLeadershipReport,
   onNavigateVideoCreation,
+  onNavigateSalesReps,
   children,
 }: AdminShellProps) {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
@@ -64,6 +66,7 @@ export default function AdminShell({
           onNavigateWeeklySummary={() => handleNavigate(onNavigateWeeklySummary)}
           onNavigateLeadershipReport={() => handleNavigate(onNavigateLeadershipReport)}
           onNavigateVideoCreation={() => handleNavigate(onNavigateVideoCreation)}
+          onNavigateSalesReps={() => handleNavigate(onNavigateSalesReps)}
         />
       </div>
 

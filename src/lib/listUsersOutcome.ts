@@ -1,5 +1,3 @@
-import type { ProfileRole } from '../types'
-
 // Kept in its own import-light module (no sessionService/supabaseClient
 // dependency) specifically so this logic is directly, exhaustively
 // unit-testable with plain `node --test` — importing adminUserManagementService.ts
@@ -15,7 +13,15 @@ export interface ManagedUser {
   id: string
   fullName: string
   email: string
-  role: ProfileRole
+  // Deliberately narrower than ProfileRole (src/types.ts), which also
+  // includes 'sales_rep' as of Phase 1B: this table is the Manager/Admin
+  // roster only — the server's own listManagedUsers() explicitly filters
+  // to portal_role IN ('manager', 'admin') (see
+  // api/_lib/supabaseServiceClient.ts), so a 'sales_rep' row can never
+  // reach this type. Sales Rep provisioning has its own separate surface
+  // (SalesRepManagement.tsx) rather than being folded into this existing
+  // Manager/Admin edit flow.
+  role: 'manager' | 'admin'
   status: 'pending' | 'awaiting_first_login' | 'active' | 'inactive'
   // Read-only display flag — see submits_weekly_report on approved_employees.
   // Never a toggle in User Management; changing it is not part of this surface.

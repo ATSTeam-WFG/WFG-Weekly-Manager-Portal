@@ -23,11 +23,16 @@ const setActiveSrc = readFileSync(path.join(dir, '..', 'admin', 'users', 'set-ac
 const updateSrc = readFileSync(path.join(dir, '..', 'admin', 'users', 'update.ts'), 'utf8')
 
 describe('Admin authorization — every Admin User Management endpoint authenticates before any privileged action', () => {
+  // set-active.ts is deliberately NOT in this list — it now uses
+  // authenticateAdminOrSalesAdmin (shared with the Sales Admin role), not
+  // the plain admin-only authenticateAdmin every endpoint below still uses
+  // exclusively. Its own authorization wiring (including the
+  // sales_rep-only restriction a sales_admin caller is held to) is verified
+  // in src/lib/salesAdminWiring.test.ts instead.
   for (const [name, src] of [
     ['list.ts', listSrc],
     ['invite.ts', inviteSrc],
     ['create-account.ts', createAccountSrc],
-    ['set-active.ts', setActiveSrc],
     ['update.ts', updateSrc],
   ] as const) {
     test(`${name} calls authenticateAdmin (never authenticateRequest/scheduler path) and checks auth.ok before proceeding`, () => {
@@ -792,10 +797,12 @@ describe('complete-profile.ts creates a profile with the approved roster role, i
     assert.match(fnMatch[0], /role:\s*employee\.portalRole/)
   })
 
-  test('toApprovedEmployee accepts both manager and admin portal_role values — an admin roster row is never filtered out before reaching complete-profile', () => {
+  test('toApprovedEmployee accepts manager, admin, sales_rep, and sales_admin portal_role values — none is filtered out before reaching complete-profile (the condition may now span multiple lines, so this checks each exclusion is present, not that they are adjacent on one line)', () => {
     const fnMatch = serviceClientSrc.match(/function toApprovedEmployee\([\s\S]*?\n\}/)
     assert.ok(fnMatch, 'could not locate toApprovedEmployee')
-    assert.match(fnMatch[0], /row\.portal_role !== 'manager' && row\.portal_role !== 'admin'/)
+    for (const role of ['manager', 'admin', 'sales_rep', 'sales_admin']) {
+      assert.match(fnMatch[0], new RegExp(`row\\.portal_role !== '${role}'`))
+    }
   })
 
   test('createProfileFromApprovedEmployee copies submits_weekly_report verbatim from the roster employee — never hardcoded, never inferred from role', () => {

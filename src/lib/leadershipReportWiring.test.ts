@@ -35,12 +35,20 @@ describe('AdminSidebar — exact approved order/grouping with real dividers', ()
     assert.match(sidebarSrc, /\| 'leadership-report'/)
   })
 
-  test('groups render in the exact approved order: [Admin Dashboard], [Weekly Summary, Leadership Report, Video Creation], [User Management, Reports & Analytics]', () => {
+  test('groups render in the exact approved order: [Admin Dashboard], [Weekly Summary, Leadership Report, Video Creation], [User Management, Reports & Analytics, Sales Reps]', () => {
     const groupsMatch = sidebarSrc.match(/const groups: [\s\S]*?\] = \[([\s\S]*?)\]\s*\n\n\s*return/)
     assert.ok(groupsMatch, 'could not locate the groups array')
     const groupsBody = groupsMatch[1]
     const order = [...groupsBody.matchAll(/key: '([a-z-]+)'/g)].map((m) => m[1])
-    assert.deepEqual(order, ['dashboard', 'weekly-summary', 'leadership-report', 'video-creation', 'user-management', 'reports-analytics'])
+    assert.deepEqual(order, [
+      'dashboard',
+      'weekly-summary',
+      'leadership-report',
+      'video-creation',
+      'user-management',
+      'reports-analytics',
+      'sales-reps',
+    ])
   })
 
   test('a real divider (not a spacer/margin hack) renders between each group, never before the first', () => {

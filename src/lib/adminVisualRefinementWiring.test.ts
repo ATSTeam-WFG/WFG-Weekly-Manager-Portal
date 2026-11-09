@@ -68,9 +68,9 @@ describe('Header.tsx — presentation-only refinement; Sign Out and the props in
     assert.match(headerSrc, /<img src=\{wfgLogo\} alt="WFG" className="header-logo" \/>/)
   })
 
-  test('the divider and title still both exist alongside the logo, unchanged text', () => {
+  test('the divider and title still both exist alongside the logo', () => {
     assert.match(headerSrc, /<span className="header-divider" aria-hidden="true" \/>/)
-    assert.match(headerSrc, /<span className="header-title">Weekly Manager Report<\/span>/)
+    assert.match(headerSrc, /<span className="header-title">OneReport Pulse<\/span>/)
   })
 
   test('the mobile breakpoint still hides the identity block (and now also the divider) exactly as it hid the title — no new behavior at that breakpoint beyond presentation', () => {
@@ -102,10 +102,10 @@ describe('AdminSidebar.tsx — decorative lower-sidebar treatment is aria-hidden
   // sibling, after every nav destination, and the destination count itself
   // is unaffected by the decoration) still holds, just against the new
   // `groups` structure.
-  test('the decoration is still the last sibling after every nav destination — now 6, two added by later phases (Leadership Report, Video Creation), unrelated to this decoration', () => {
+  test('the decoration is still the last sibling after every nav destination — now 7, three added by later phases (Leadership Report, Video Creation, Sales Reps), unrelated to this decoration', () => {
     const groupsMatch = sidebarSrc.match(/const groups: [\s\S]*?\] = \[[\s\S]*?\n  \]\s*\n/)
     assert.ok(groupsMatch)
-    assert.equal((groupsMatch[0].match(/key: '/g) ?? []).length, 6)
+    assert.equal((groupsMatch[0].match(/key: '/g) ?? []).length, 7)
     assert.match(sidebarSrc, /\{groups\.map\(\(group, groupIndex\) => \([\s\S]*?\)\)\}\s*\n\s*<SidebarDecoration \/>/)
   })
 

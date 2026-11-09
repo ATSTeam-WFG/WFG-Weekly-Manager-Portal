@@ -19,6 +19,10 @@ import LeadershipReportGate from './components/LeadershipReportGate'
 import VideoCreation from './components/VideoCreation'
 import VideoConsentInbox from './components/VideoConsentInbox'
 import ConfirmDialog from './components/ConfirmDialog'
+import SalesRepManagement from './components/SalesRepManagement'
+import SalesAdminShell from './components/SalesAdminShell'
+import SalesRepDashboard from './components/SalesRepDashboard'
+import MyReps from './components/MyReps'
 import { supabase } from './lib/supabaseClient'
 import { listMyPendingConsentRequests, getCurrentConsentPolicy } from './lib/videoConsentService'
 import type { MediaConsent, ConsentPolicy } from './lib/videoPresenterConsent'
@@ -97,6 +101,15 @@ function App() {
   const [reportsAnalyticsOpen, setReportsAnalyticsOpen] = useState(false)
   const [userManagementOpen, setUserManagementOpen] = useState(false)
   const [leadershipReportOpen, setLeadershipReportOpen] = useState(false)
+  // Phase 1B: a seventh admin destination, same shape as the five it joins
+  // (weeklySummaryOpen/reportsAnalyticsOpen/userManagementOpen/
+  // leadershipReportOpen/videoCreationOpen) — App.tsx remains the sole owner
+  // of which destination is showing.
+  const [salesRepManagementOpen, setSalesRepManagementOpen] = useState(false)
+  // Phase 1B: a Manager's own small "My Reps" review screen, toggled
+  // alongside their Dashboard exactly the way myReportOpen toggles a
+  // dual-role Admin between AdminDashboard and their own Manager report.
+  const [myRepsOpen, setMyRepsOpen] = useState(false)
   // Phase 1A: navigation + page shell only — no data, no sub-state of its
   // own yet. Declared here (before every authStatus-gated early return),
   // alongside every other top-level destination flag, for the same reason
@@ -417,6 +430,8 @@ function App() {
         setWeeklySummaryOpen(false)
         setReportsAnalyticsOpen(false)
         setUserManagementOpen(false)
+        setSalesRepManagementOpen(false)
+        setMyRepsOpen(false)
         resetReportState()
         signedInUserIdRef.current = null
         return
@@ -690,12 +705,28 @@ function App() {
   }
 
   const isAdmin = profile?.role === 'admin'
+  // Phase 1B: a sales_rep has an entirely separate, self-contained
+  // experience (SalesRepDashboard) — checked before the isAdmin/Manager
+  // split below so a sales_rep profile is never routed into either of
+  // those two existing branches (neither fetches/expects rep_reports
+  // data). A sales_rep is never also an Admin or Manager (mutually
+  // exclusive roles — see profiles_role_check), so this never conflicts
+  // with isAdmin/isSubmitter below.
+  const isSalesRep = profile?.role === 'sales_rep'
+  // A distinct, restricted admin role — never isAdmin, never any of the
+  // existing Admin-only branches below. Checked alongside isSalesRep,
+  // before the isAdmin/Manager split, for the same reason: sales_admin is
+  // mutually exclusive with every other role (profiles_role_check), so a
+  // sales_admin profile must never fall through into the plain Manager
+  // <Dashboard> branch (which is exactly what would happen without this
+  // explicit check, since isAdmin alone would be false for it).
+  const isSalesAdmin = profile?.role === 'sales_admin'
   // Explicit, additive flag — never inferred from role. True for every
   // Manager and for a dual-role admin submitter — an Admin explicitly
   // designated as also submitting their own weekly report. See src/types.ts.
   const isSubmitter = profile?.submitsWeeklyReport === true
   const displayName = profile?.fullName || userEmail || 'Manager'
-  const roleLabel = isAdmin ? 'Admin' : 'Manager'
+  const roleLabel = isAdmin ? 'Admin' : isSalesAdmin ? 'Sales Admin' : isSalesRep ? 'Sales Rep' : 'Manager'
   const adminWeek = getReportingWeekByOffset(adminWeekOffset)
   const weeklySummaryWeek = getReportingWeekByOffset(weeklySummaryWeekOffset)
   const leadershipReportWeek = getReportingWeekByOffset(leadershipReportWeekOffset)
@@ -714,7 +745,9 @@ function App() {
           ? 'video-creation'
           : weeklySummaryOpen
             ? 'weekly-summary'
-            : 'dashboard'
+            : salesRepManagementOpen
+              ? 'sales-reps'
+              : 'dashboard'
 
   // leadershipReportDirty/pendingLeaveAction are declared near the top of
   // this component, with the other useState calls (see above authStatus's
@@ -757,6 +790,7 @@ function App() {
       setUserManagementOpen(false)
       setLeadershipReportOpen(false)
       setVideoCreationOpen(false)
+      setSalesRepManagementOpen(false)
     })
   }
   const handleNavigateToUserManagement = () => {
@@ -766,6 +800,7 @@ function App() {
       setUserManagementOpen(true)
       setLeadershipReportOpen(false)
       setVideoCreationOpen(false)
+      setSalesRepManagementOpen(false)
     })
   }
   const handleNavigateToReportsAnalytics = () => {
@@ -775,6 +810,7 @@ function App() {
       setUserManagementOpen(false)
       setLeadershipReportOpen(false)
       setVideoCreationOpen(false)
+      setSalesRepManagementOpen(false)
     })
   }
   const handleNavigateToWeeklySummary = () => {
@@ -784,6 +820,7 @@ function App() {
       setUserManagementOpen(false)
       setLeadershipReportOpen(false)
       setVideoCreationOpen(false)
+      setSalesRepManagementOpen(false)
     })
   }
   const handleNavigateToLeadershipReport = () => {
@@ -791,6 +828,7 @@ function App() {
     setReportsAnalyticsOpen(false)
     setUserManagementOpen(false)
     setVideoCreationOpen(false)
+    setSalesRepManagementOpen(false)
     setLeadershipReportOpen(true)
     // Defensive reset only — a freshly (re-)mounted Gate/Current reports its
     // own real value within its first effect anyway.
@@ -803,6 +841,17 @@ function App() {
       setUserManagementOpen(false)
       setLeadershipReportOpen(false)
       setVideoCreationOpen(true)
+      setSalesRepManagementOpen(false)
+    })
+  }
+  const handleNavigateToSalesRepManagement = () => {
+    requestLeaveLeadershipReportIfDirty(() => {
+      setWeeklySummaryOpen(false)
+      setReportsAnalyticsOpen(false)
+      setUserManagementOpen(false)
+      setLeadershipReportOpen(false)
+      setVideoCreationOpen(false)
+      setSalesRepManagementOpen(true)
     })
   }
 
@@ -841,7 +890,11 @@ function App() {
         />
       )}
 
-      {isAdmin && !myReportOpen ? (
+      {isSalesRep ? (
+        <SalesRepDashboard repId={managerId ?? ''} />
+      ) : isSalesAdmin ? (
+        <SalesAdminShell />
+      ) : isAdmin && !myReportOpen ? (
         selectedManager ? (
           <ManagerReportView
             manager={selectedManager}
@@ -858,6 +911,7 @@ function App() {
             onNavigateWeeklySummary={handleNavigateToWeeklySummary}
             onNavigateLeadershipReport={handleNavigateToLeadershipReport}
             onNavigateVideoCreation={handleNavigateToVideoCreation}
+            onNavigateSalesReps={handleNavigateToSalesRepManagement}
           >
             {weeklySummaryOpen ? (
               <WeeklySummary
@@ -891,6 +945,8 @@ function App() {
               <ReportsAnalytics onBack={() => setReportsAnalyticsOpen(false)} />
             ) : userManagementOpen ? (
               <UserManagement onBack={() => setUserManagementOpen(false)} currentUserEmail={userEmail} />
+            ) : salesRepManagementOpen ? (
+              <SalesRepManagement onBack={() => setSalesRepManagementOpen(false)} />
             ) : (
               <AdminDashboard
                 week={adminWeek}
@@ -910,6 +966,26 @@ function App() {
               ← Back to Admin Dashboard
             </button>
           )}
+          {/* Phase 1B: a plain Manager's own small "My Reps" review toggle.
+              Deliberately gated on the real 'manager' role, not isSubmitter —
+              a dual-role Admin viewing their own report here never has any
+              assigned sales reps (assign_sales_rep only ever targets a
+              profile with role='manager'), so the link would be meaningless
+              noise for that case and is simply omitted. */}
+          {profile?.role === 'manager' &&
+            (myRepsOpen ? (
+              <button type="button" className="link-btn back-link" onClick={() => setMyRepsOpen(false)}>
+                ← Back to Dashboard
+              </button>
+            ) : (
+              <button type="button" className="link-btn back-link" onClick={() => setMyRepsOpen(true)}>
+                My Reps →
+              </button>
+            ))}
+          {myRepsOpen ? (
+            <MyReps managerId={managerId ?? ''} onBack={() => setMyRepsOpen(false)} />
+          ) : (
+            <>
           {view === 'dashboard' && (
             <Dashboard
               status={status}
@@ -968,6 +1044,8 @@ function App() {
               submittedAt={historyEntry.submittedAt}
               onBack={() => setView('dashboard')}
             />
+          )}
+            </>
           )}
         </>
       )}

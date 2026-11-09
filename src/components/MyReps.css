@@ -1,0 +1,480 @@
+/* My Reps — a small, additive Manager-facing screen, deliberately styled to
+   match AdminDashboard.css's own conventions (page width, card/table
+   treatment, color tokens) for visual consistency with the rest of the
+   Portal. This file is new and self-contained; nothing here is shared with
+   or overrides AdminDashboard.css. */
+
+.myreps-page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 24px 100px;
+}
+
+.myreps-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.myreps-header-titles h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.myreps-header-subtitle {
+  font-size: 14px;
+  color: var(--muted-gray);
+  margin: 0;
+}
+
+.myreps-top-row-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.myreps-week-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--espresso);
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 999px;
+  padding: 7px 14px;
+  white-space: nowrap;
+}
+
+/* Phase 3 — weekly Sales Rep submission summary. Mirrors AdminDashboard's
+   own .adp-kpi-row/.adp-kpi-card cards (equal white cards, same border/
+   radius/spacing) under its own myreps- prefix, per this file's own header
+   comment (styled to match, never sharing a class with, AdminDashboard.css). */
+.myreps-summary-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.myreps-summary-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.myreps-summary-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.myreps-summary-label {
+  font-size: 12px;
+  color: var(--muted-gray);
+}
+
+.myreps-loading,
+.myreps-empty-state {
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+  padding: 40px 0;
+}
+
+.myreps-error-state {
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+  padding: 40px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.myreps-table {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.myreps-table-header-row {
+  display: grid;
+  grid-template-columns: 2fr 1.3fr 1fr 0.8fr;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--warm-cream);
+  border-bottom: 1px solid var(--soft-sand);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-gray);
+}
+
+.myreps-row {
+  display: grid;
+  grid-template-columns: 2fr 1.3fr 1fr 0.8fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--soft-sand);
+  transition: background 0.15s ease;
+}
+
+.myreps-row:last-child {
+  border-bottom: none;
+}
+
+.myreps-row-reviewable {
+  cursor: pointer;
+}
+
+.myreps-row-reviewable:hover,
+.myreps-row-reviewable:focus-visible {
+  background: var(--warm-cream);
+  outline: none;
+}
+
+.myreps-cell-rep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.myreps-rep-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--soft-sand);
+  color: var(--espresso);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.myreps-rep-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.myreps-rep-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--espresso);
+}
+
+.myreps-rep-email {
+  font-size: 12px;
+  color: var(--muted-gray);
+}
+
+.myreps-rep-email-missing {
+  font-style: italic;
+}
+
+.myreps-status-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.myreps-status-not-started {
+  background: var(--soft-sand);
+  color: var(--muted-gray);
+}
+
+.myreps-status-draft {
+  background: rgba(217, 119, 6, 0.16);
+  color: var(--amber);
+}
+
+.myreps-status-pending {
+  background: rgba(183, 101, 74, 0.14);
+  color: var(--terracotta);
+}
+
+.myreps-status-approved {
+  background: rgba(22, 131, 75, 0.16);
+  color: var(--green);
+}
+
+.myreps-status-rejected {
+  background: rgba(183, 101, 74, 0.18);
+  color: var(--terracotta);
+}
+
+.myreps-dash {
+  color: var(--muted-gray);
+}
+
+.myreps-view-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--terracotta);
+  white-space: nowrap;
+}
+
+/* Detail panel — a simple centered overlay rather than a full routed page,
+   kept intentionally lightweight per the "minimum integration" scope. */
+.myreps-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(48, 42, 39, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.myreps-panel {
+  background: var(--white);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 640px;
+  box-shadow: 0 8px 32px rgba(48, 42, 39, 0.25);
+}
+
+.myreps-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.myreps-panel-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0;
+}
+
+.myreps-panel-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--muted-gray);
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.myreps-panel-close:hover {
+  color: var(--terracotta);
+}
+
+.myreps-panel-body {
+  padding: 20px 24px 24px;
+}
+
+.myreps-section {
+  margin-bottom: 20px;
+}
+
+.myreps-section h3 {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-gray);
+  margin: 0 0 8px;
+}
+
+.myreps-section ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--espresso);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.myreps-section-empty {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--muted-gray);
+  margin: 0;
+}
+
+.myreps-support-text {
+  font-size: 14px;
+  color: var(--espresso);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.myreps-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.myreps-history-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--warm-cream);
+  border-left: 3px solid var(--soft-sand);
+}
+
+.myreps-history-approved {
+  border-left-color: var(--green);
+}
+
+.myreps-history-rejected {
+  border-left-color: var(--terracotta);
+}
+
+.myreps-history-status {
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.myreps-history-reason {
+  color: var(--espresso);
+  flex: 1;
+  min-width: 140px;
+}
+
+.myreps-history-date {
+  color: var(--muted-gray);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.myreps-inline-retry {
+  background: none;
+  border: none;
+  color: var(--terracotta);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.myreps-review-action {
+  margin-bottom: 0;
+}
+
+.myreps-reason-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--espresso);
+  background: var(--warm-cream);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.myreps-reason-input:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+.myreps-action-error {
+  color: var(--terracotta);
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
+.myreps-review-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+@media (max-width: 640px) {
+  .myreps-top-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .myreps-top-row-right {
+    justify-content: space-between;
+  }
+
+  /* The shared .week-selector-label (AdminDashboard.css, never redefined —
+     see this file's own header comment) has no internal flex-wrap of its
+     own, so at narrow widths its three children (prev/label/next) can
+     overflow rather than wrap. This is a scoped, additive override for
+     MyReps' own usage context only — it does not touch the base
+     .week-selector-label/.week-nav-btn/.week-current-badge declarations, so
+     AdminDashboard/ReportsAnalytics are completely unaffected. */
+  .myreps-top-row-right .week-selector-label {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 6px;
+  }
+
+  .myreps-summary-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .myreps-table-header-row {
+    display: none;
+  }
+
+  .myreps-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 14px 16px;
+  }
+
+  .myreps-overlay {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .myreps-page {
+    padding: 24px 16px 80px;
+  }
+
+  .myreps-header-titles h1 {
+    font-size: 22px;
+  }
+
+  .myreps-panel-header,
+  .myreps-panel-body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

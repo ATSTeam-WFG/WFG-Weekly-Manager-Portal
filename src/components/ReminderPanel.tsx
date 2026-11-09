@@ -22,7 +22,7 @@ function buildReminderMessage(manager: ReminderTarget, week: ReportingWeek, isPa
       ? `I can see you've started your report, but it hasn't been submitted yet — ${closingPhrase}.`
       : `It looks like your report hasn't been started yet — ${closingPhrase}.`
 
-  return `Hi ${firstName},\n\nThis is a friendly reminder that your Weekly Manager Report for the week of ${week.label} ${deadlinePhrase}. ${statusPhrase}\n\nThank you!`
+  return `Hi ${firstName},\n\nThis is a friendly reminder that your weekly report for the week of ${week.label} ${deadlinePhrase}. ${statusPhrase}\n\nThank you!`
 }
 
 // Per-card, per-field transient copy feedback. Keyed as `${managerId}:${field}`

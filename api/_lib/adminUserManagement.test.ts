@@ -58,6 +58,25 @@ describe('decideCreateManagerAccountAction — approved-employee / role validati
       action: 'role_conflict',
     })
   })
+
+  // Phase 1B: a sales_rep roster row is just as much a "different privileged
+  // entry already exists" case as an admin one — Add Manager must never
+  // silently upsert portal_role='manager' over an existing sales rep (that
+  // upsert is keyed only by email_normalized, so without this check it
+  // would overwrite, not merely conflict with, the existing row).
+  test('an existing sales_rep roster row is role_conflict, never silently converted to manager', () => {
+    const SALES_REP_ROW: RosterEntrySnapshot = { portalRole: 'sales_rep', isActive: true, accountCreated: false }
+    assert.deepEqual(decideCreateManagerAccountAction('rep@wfgtitle.com', SALES_REP_ROW, null), {
+      action: 'role_conflict',
+    })
+  })
+
+  test('role_conflict for an existing sales_rep is still checked before inactive, same as admin', () => {
+    const INACTIVE_SALES_REP: RosterEntrySnapshot = { portalRole: 'sales_rep', isActive: false, accountCreated: false }
+    assert.deepEqual(decideCreateManagerAccountAction('inactive-rep@wfgtitle.com', INACTIVE_SALES_REP, null), {
+      action: 'role_conflict',
+    })
+  })
 })
 
 describe('decideCreateManagerAccountAction — new account flow', () => {

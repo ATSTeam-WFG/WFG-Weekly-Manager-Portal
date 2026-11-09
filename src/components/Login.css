@@ -65,6 +65,13 @@
   margin: 0 0 6px;
 }
 
+.login-tagline {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--muted-gray);
+  margin: 0 0 4px;
+}
+
 .login-subtitle {
   font-size: 14px;
   color: var(--muted-gray);

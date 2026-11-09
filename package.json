@@ -8,7 +8,8 @@
     "dev:vercel": "npx vercel dev",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --import ./scripts/register-test-hooks.mjs --test 'src/**/*.test.ts' 'api/**/*.test.ts'"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

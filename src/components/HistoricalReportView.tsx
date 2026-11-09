@@ -61,7 +61,7 @@ export default function HistoricalReportView({
 
       <div className="report-form-heading">
         <div className="report-title-row">
-          <h1>Weekly Manager Report</h1>
+          <h1>OneReport Pulse</h1>
           <StatusBadge status={status} />
         </div>
         <p className="report-form-week">
