@@ -2175,6 +2175,7 @@ const VERIFIED_REAL_MANAGER_IDS = new Set([
   'a7b283a9-f133-4f22-b309-f41d280ee8ff', // Chad Hansen
   '2598058b-f131-41a2-8282-6aca5ebf1746', // David Rebadow
   '88033394-69c9-4f37-8988-083dfb363d0c', // Austin Rozier
+  '2fc51956-8751-496f-b1c4-8fb7446c8d9a', // Robert Bauchle
 ])
 
 // Candidate list for the "Assign Manager" dropdown — active, verified-real
