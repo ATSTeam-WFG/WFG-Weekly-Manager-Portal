@@ -788,9 +788,9 @@ describe('Data source for .ra-print-report-content — only managers with actual
     assert.match(adminServiceSrc, /\.filter\(\(profile\) => reportsByManager\.has\(profile\.id\)\)/)
   })
 
-  test('period mode (fetchPeriodReportStats): a week is only recorded for a manager if its row status is submitted, and a manager is only included in `entries` if they have at least one such week — never an entry with an empty `weeks` array', () => {
+  test('period mode (fetchPeriodReportStats): a week is only recorded for a manager if its row status is submitted, and `entries` is built only from weeksByManager\'s own keys — never an entry with an empty `weeks` array, and never limited to current submitters only (see the historical-visibility fix: a manager who is no longer a current submitter must still show their own already-submitted historical weeks here)', () => {
     assert.match(reportsAnalyticsServiceSrc, /if \(row\.status !== 'submitted'\) continue/)
-    assert.match(reportsAnalyticsServiceSrc, /\.filter\(\(p\) => weeksByManager\.has\(p\.id\)\)/)
+    assert.match(reportsAnalyticsServiceSrc, /const entries: PeriodManagerEntry\[\] = Array\.from\(weeksByManager\.keys\(\)\)/)
   })
 
   test('ReportsAnalytics.tsx renders exactly one block per entry in these arrays, never a placeholder for a manager missing from them — Not Started/draft-only managers are excluded upstream, not filtered out here', () => {

@@ -173,11 +173,11 @@ describe('Phase 1A real-employee onboarding — Manager dropdown shows name + em
     assert.doesNotMatch(fnMatch[0], /\.includes\(|\.match\(|\.test\(|startsWith|endsWith/)
   })
 
-  test('the allowlist is a fixed Set of exactly 10 UUIDs — the verified real Managers, one per entry, each labeled by name in a comment', () => {
+  test('the allowlist is a fixed Set of exactly 15 UUIDs — the current real, active production Managers (corrected 2026-11-10 from a stale 10-entry PREVIEW-id snapshot), one per entry, each labeled by name in a comment', () => {
     const setMatch = supabaseServiceClientSrc.match(/const VERIFIED_REAL_MANAGER_IDS = new Set\(\[[\s\S]*?\]\)/)
     assert.ok(setMatch, 'could not locate VERIFIED_REAL_MANAGER_IDS')
     const uuidMatches = setMatch[0].match(/'[0-9a-f-]{36}'/g) ?? []
-    assert.equal(uuidMatches.length, 10)
+    assert.equal(uuidMatches.length, 15)
   })
 
   test('the dropdown option renders the Manager\'s name AND email together, so similarly named Managers are distinguishable', () => {
@@ -209,11 +209,11 @@ describe('Phase 4 refinement — Sales Rep real-vs-demo/test classification, mir
     assert.doesNotMatch(fnMatch[0], /isVerifiedReal[\s\S]{0,80}(\.includes\(|\.match\(|\.test\(|startsWith|endsWith)/)
   })
 
-  test('the allowlist is a fixed Set of exactly 33 UUIDs — the verified real Sales Reps, one per entry, each labeled by name in a comment', () => {
+  test('the allowlist is a fixed Set of exactly 29 UUIDs — the real production Sales Reps pre-provisioned via the launch rollout (corrected 2026-11-10 from a stale 33-entry PREVIEW-id snapshot), one per entry, each labeled by name in a comment', () => {
     const setMatch = supabaseServiceClientSrc.match(/const VERIFIED_REAL_SALES_REP_IDS = new Set\(\[[\s\S]*?\]\)/)
     assert.ok(setMatch, 'could not locate VERIFIED_REAL_SALES_REP_IDS')
     const uuidMatches = setMatch[0].match(/'[0-9a-f-]{36}'/g) ?? []
-    assert.equal(uuidMatches.length, 33)
+    assert.equal(uuidMatches.length, 29)
   })
 
   test('the two known demo/test accounts are not in the allowlist', () => {
