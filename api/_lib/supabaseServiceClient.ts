@@ -2091,6 +2091,7 @@ export async function findActiveAssignmentForRep(repProfileId: string): Promise<
 // and append it below with a name comment.
 const VERIFIED_REAL_SALES_REP_IDS = new Set([
   '32fe9648-82c0-46f2-a12b-135b39fa8715', // Aaron Mahana
+  '88033394-69c9-4f37-8988-083dfb363d0c', // Austin Rozier
   '28533f93-8ff8-4615-aef1-4b8fc439c1a3', // Bradley Keene
   '158d39ab-1973-470c-8daf-ea04493476d0', // Danielle Johnson
   '6ac5fa59-d7cb-4e1c-8ce4-466d6d72e7aa', // Danny Rodriguez
