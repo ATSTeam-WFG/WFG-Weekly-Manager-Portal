@@ -407,33 +407,169 @@ export async function clearPasswordChangeRequired(userId: string): Promise<boole
 }
 
 // -----------------------------------------------------------------------
-// rotateSalesRepTempPassword — gives one already-created Sales Rep account
-// a fresh, unique, cryptographically random temporary password, from
-// api/admin/users/rotate-sales-rep-password.ts. Deliberately separate from
-// createEmployeeAccount above: that function (and every other account-
-// creation path — Manager, Sales Admin, future Sales Rep creation) is
-// UNCHANGED by this — still the shared EMPLOYEE_TEMP_PASSWORD at creation
-// time. This only ever ROTATES an account that ALREADY exists, replacing
-// whatever password it currently has (shared or otherwise) with a value no
-// one else was ever given.
+// Sales Rep temp-password rotation — gives one already-created Sales Rep
+// account a fresh, unique, cryptographically random temporary password,
+// from api/admin/users/rotate-sales-rep-password.ts. Deliberately separate
+// from createEmployeeAccount above: that function (and every other
+// account-creation path — Manager, Sales Admin, future Sales Rep creation)
+// is UNCHANGED by this — still the shared EMPLOYEE_TEMP_PASSWORD at
+// creation time. This only ever ROTATES an account that ALREADY exists.
 //
-// Refuses to rotate an account that has already completed first login
-// (a profiles row already exists) — that employee has their own, real,
-// self-chosen password by now, and this must never silently overwrite it.
-// This is the one authoritative safety rail, not a role/roster allowlist:
-// it protects any already-onboarded Sales Rep, not just the ones named in
-// today's invitation batch.
+// SECURITY-CRITICAL CORRECTION (caught in review before this ever reached
+// PREVIEW or production): the original version of this code used "does a
+// profiles row already exist?" as its already-onboarded safety rail. That
+// is WRONG for this app — every pre-provisioned Sales Rep (see
+// pre-provision-sales-reps.ts) already has a profiles row LONG before
+// first login, by design. That check would have refused to rotate every
+// single eligible account and, far worse, would have been backwards for
+// any account where the profile existence signal ever pointed the other
+// way. The authoritative signal for "has this employee already set their
+// own password" is the Auth user's own state — password_change_required
+// in app_metadata, cross-checked against last_sign_in_at — never profiles
+// table existence.
 //
+// decideSalesRepRotation below is a PURE function over a pre-fetched
+// snapshot (same discipline as decidePreProvisioningAction /
+// decideRoleConversionAction elsewhere in this file) — directly,
+// exhaustively unit-testable with plain inputs, no mocking required.
+// buildRotationSnapshot is the only I/O, and it is the SAME function used
+// by both the read-only eligibility check (dry-run) and the real rotation
+// (execute) — checkSalesRepRotationEligibility never calls
+// auth.admin.updateUserById anywhere in its own body, by construction, not
+// merely by convention; only rotateSalesRepTempPassword does, and only
+// after decideSalesRepRotation has independently returned 'rotate'.
+export interface RotationSnapshot {
+  rosterFound: boolean
+  rosterPortalRole: string | null
+  rosterIsActive: boolean | null
+  authUserId: string | null
+  authLookupFailed: boolean
+  // true/false only when the claim is a genuine boolean; null covers
+  // missing, non-boolean, or otherwise ambiguous — decideSalesRepRotation
+  // must never treat null as either true or false by assumption.
+  passwordChangeRequired: boolean | null
+  lastSignInAt: string | null
+  currentAppMetadata: Record<string, unknown>
+}
+
+export type RotationDecision =
+  | { action: 'rotate' }
+  | { action: 'not_found'; reason: string }
+  | { action: 'already_onboarded'; reason: string }
+  | { action: 'cannot_verify_state'; reason: string }
+
+export function decideSalesRepRotation(snapshot: RotationSnapshot): RotationDecision {
+  if (!snapshot.rosterFound || snapshot.rosterPortalRole !== 'sales_rep' || !snapshot.authUserId) {
+    return { action: 'not_found', reason: 'No active Sales Rep roster entry with an Auth account found for this email.' }
+  }
+  if (snapshot.rosterIsActive !== true) {
+    return { action: 'not_found', reason: 'Roster entry is not active.' }
+  }
+  if (snapshot.authLookupFailed) {
+    return { action: 'cannot_verify_state', reason: 'Could not read the current Auth user record — refusing to assume it is safe to rotate.' }
+  }
+  // last_sign_in_at is checked independently of the app_metadata flag — an
+  // account that has ever actually signed in has had the opportunity to
+  // set its own password, regardless of what the flag claims.
+  if (snapshot.lastSignInAt !== null) {
+    return { action: 'already_onboarded', reason: 'This account has already signed in at least once.' }
+  }
+  if (snapshot.passwordChangeRequired === false) {
+    return { action: 'already_onboarded', reason: "password_change_required is explicitly false — this employee has already set their own password." }
+  }
+  if (snapshot.passwordChangeRequired !== true) {
+    // Covers a missing claim or any non-boolean value. Every Sales Rep
+    // account is created with this claim explicitly set to true (see
+    // createEmployeeAccount) — the sales_rep role did not exist before
+    // this claim did, so there is no legitimate "legacy account predating
+    // the feature" case here the way there is for Managers. A missing or
+    // malformed claim on a Sales Rep account is always anomalous and must
+    // never be read as "safe to rotate".
+    return {
+      action: 'cannot_verify_state',
+      reason: `password_change_required is not explicitly true (got ${JSON.stringify(snapshot.passwordChangeRequired)}) — refusing to assume this account is still pre-first-login.`,
+    }
+  }
+  return { action: 'rotate' }
+}
+
+async function buildRotationSnapshot(email: string): Promise<RotationSnapshot> {
+  const emailNormalized = normalizeEmail(email)
+  const employee = await lookupApprovedEmployeeByNormalizedEmail(emailNormalized)
+  if (!employee) {
+    return {
+      rosterFound: false,
+      rosterPortalRole: null,
+      rosterIsActive: null,
+      authUserId: null,
+      authLookupFailed: false,
+      passwordChangeRequired: null,
+      lastSignInAt: null,
+      currentAppMetadata: {},
+    }
+  }
+  if (!employee.authUserId) {
+    return {
+      rosterFound: true,
+      rosterPortalRole: employee.portalRole,
+      rosterIsActive: employee.isActive,
+      authUserId: null,
+      authLookupFailed: false,
+      passwordChangeRequired: null,
+      lastSignInAt: null,
+      currentAppMetadata: {},
+    }
+  }
+
+  const { data: userData, error: userError } = await getServiceClient().auth.admin.getUserById(employee.authUserId)
+  if (userError || !userData?.user) {
+    console.error('supabaseServiceClient: buildRotationSnapshot auth lookup failed:', userError?.message)
+    return {
+      rosterFound: true,
+      rosterPortalRole: employee.portalRole,
+      rosterIsActive: employee.isActive,
+      authUserId: employee.authUserId,
+      authLookupFailed: true,
+      passwordChangeRequired: null,
+      lastSignInAt: null,
+      currentAppMetadata: {},
+    }
+  }
+
+  const currentAppMetadata = (userData.user.app_metadata ?? {}) as Record<string, unknown>
+  const rawFlag = currentAppMetadata.password_change_required
+  return {
+    rosterFound: true,
+    rosterPortalRole: employee.portalRole,
+    rosterIsActive: employee.isActive,
+    authUserId: employee.authUserId,
+    authLookupFailed: false,
+    passwordChangeRequired: typeof rawFlag === 'boolean' ? rawFlag : null,
+    lastSignInAt: userData.user.last_sign_in_at ?? null,
+    currentAppMetadata,
+  }
+}
+
+// Read-only — used by the dry-run branch of the endpoint. Shares
+// buildRotationSnapshot and decideSalesRepRotation with the real rotation
+// below so the two can never disagree about eligibility, but this
+// function's own body never references auth.admin.updateUserById at all.
+export async function checkSalesRepRotationEligibility(email: string): Promise<RotationDecision> {
+  const snapshot = await buildRotationSnapshot(email)
+  return decideSalesRepRotation(snapshot)
+}
+
 // The generated password is returned to the caller exactly once, in the
 // return value only — never logged (not even on failure, where only
-// error.message is logged, same convention as every other function in this
-// file), never persisted anywhere by this function. The caller (the
+// error.message is logged, same convention as every other function in
+// this file), never persisted anywhere by this function. The caller (the
 // endpoint) must pass it directly back to the authenticated admin's own
 // HTTP response and nowhere else.
 export type RotateSalesRepPasswordOutcome =
   | { status: 'ok'; password: string }
-  | { status: 'not_found' }
-  | { status: 'already_onboarded' }
+  | { status: 'not_found'; reason: string }
+  | { status: 'already_onboarded'; reason: string }
+  | { status: 'cannot_verify_state'; reason: string }
   | { status: 'error' }
 
 function generateTempPassword(): string {
@@ -444,26 +580,20 @@ function generateTempPassword(): string {
 }
 
 export async function rotateSalesRepTempPassword(email: string): Promise<RotateSalesRepPasswordOutcome> {
-  const emailNormalized = normalizeEmail(email)
-  const employee = await lookupApprovedEmployeeByNormalizedEmail(emailNormalized)
-  if (!employee || employee.portalRole !== 'sales_rep' || !employee.authUserId) {
-    return { status: 'not_found' }
-  }
-
-  const profileLookup = await findProfileByUserId(employee.authUserId)
-  if (profileLookup.status === 'error') {
-    // Never rotate on an unknown state — treat a failed lookup the same as
-    // "could be already onboarded, refuse" rather than assuming it's safe.
-    return { status: 'error' }
-  }
-  if (profileLookup.status === 'found') {
-    return { status: 'already_onboarded' }
+  const snapshot = await buildRotationSnapshot(email)
+  const decision = decideSalesRepRotation(snapshot)
+  if (decision.action !== 'rotate') {
+    return { status: decision.action, reason: decision.reason }
   }
 
   const password = generateTempPassword()
-  const { error } = await getServiceClient().auth.admin.updateUserById(employee.authUserId, {
+  // Spread the account's EXISTING app_metadata first — Supabase's own
+  // provider/providers bookkeeping lives in this same object, and a bare
+  // `{ password_change_required: true }` here would silently wipe it out
+  // rather than merge. Only password_change_required is ever overridden.
+  const { error } = await getServiceClient().auth.admin.updateUserById(snapshot.authUserId as string, {
     password,
-    app_metadata: { password_change_required: true },
+    app_metadata: { ...snapshot.currentAppMetadata, password_change_required: true },
   })
   if (error) {
     console.error('supabaseServiceClient: rotateSalesRepTempPassword failed:', error.message)

@@ -1,5 +1,5 @@
 import { authenticateAdmin } from '../../_lib/adminAuth.js'
-import { rotateSalesRepTempPassword } from '../../_lib/supabaseServiceClient.js'
+import { checkSalesRepRotationEligibility, rotateSalesRepTempPassword } from '../../_lib/supabaseServiceClient.js'
 
 interface VercelRequest {
   method?: string
@@ -10,6 +10,7 @@ interface VercelRequest {
 interface VercelResponse {
   status(code: number): VercelResponse
   json(body: unknown): void
+  setHeader(name: string, value: string): VercelResponse
 }
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -28,16 +29,24 @@ function sendError(res: VercelResponse, status: number, code: string, message: s
 // moving to the next person — never batched, never logged, never written
 // to any table.
 //
-// Refuses (ALREADY_ONBOARDED) if that employee has already completed first
-// login — rotateSalesRepTempPassword itself enforces this by checking for
-// an existing profiles row, so this can never overwrite a real employee's
-// own chosen password, regardless of what the caller passes.
+// Eligibility is decided from the Auth user's own authoritative state
+// (password_change_required + last_sign_in_at), never from whether a
+// profiles row exists — pre-provisioned Sales Reps already have a profiles
+// row long before first login, so that would have been exactly backwards.
+// See decideSalesRepRotation in supabaseServiceClient.ts for the full,
+// independently unit-tested decision logic.
 //
-// dry-run (execute: false, the default) performs the exact same eligibility
-// checks with zero write and zero password generated — lets an admin
-// confirm a specific email is rotatable before actually doing it.
+// dry-run (execute: false, the default) calls checkSalesRepRotationEligibility
+// — a read-only function that never references auth.admin.updateUserById
+// anywhere in its own body, not merely "the same function with a flag".
+// execute calls the separate rotateSalesRepTempPassword, which performs
+// its own identical eligibility check before ever writing.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
+    // This response can carry a live, single-use credential — never cached
+    // by any intermediary (CDN, browser back-forward cache, proxy).
+    res.setHeader('Cache-Control', 'no-store')
+
     if (req.method !== 'POST') {
       return sendError(res, 405, 'METHOD_NOT_ALLOWED', 'Only POST requests are supported.')
     }
@@ -60,23 +69,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!execute) {
-      // Dry-run reuses the exact same function and its exact same checks —
-      // the only difference is that a genuinely eligible result is
-      // discarded here rather than ever being generated for real. There is
-      // no separate "preview-only" code path to drift out of sync.
-      const preview = await rotateSalesRepTempPassword(email)
+      const decision = await checkSalesRepRotationEligibility(email)
       return res.status(200).json({
         execute: false,
         email,
-        decision: preview.status === 'ok' ? 'eligible' : preview.status,
-        message:
-          preview.status === 'ok'
-            ? 'Eligible for rotation — no password was generated or changed (dry run).'
-            : preview.status === 'not_found'
-              ? 'No active Sales Rep roster entry with an Auth account found for this email.'
-              : preview.status === 'already_onboarded'
-                ? 'This employee already has their own password from completing first login — rotation is refused.'
-                : 'Could not determine eligibility — see server logs.',
+        decision: decision.action,
+        message: decision.action === 'rotate' ? 'Eligible for rotation — no password was generated or changed (dry run).' : decision.reason,
       })
     }
 
@@ -85,9 +83,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'ok':
         return res.status(200).json({ execute: true, email, status: 'ok', password: outcome.password })
       case 'not_found':
-        return sendError(res, 404, 'NOT_FOUND', 'No active Sales Rep roster entry with an Auth account found for this email.')
+        return sendError(res, 404, 'NOT_FOUND', outcome.reason)
       case 'already_onboarded':
-        return sendError(res, 409, 'ALREADY_ONBOARDED', 'This employee already has their own password from completing first login — rotation is refused.')
+        return sendError(res, 409, 'ALREADY_ONBOARDED', outcome.reason)
+      case 'cannot_verify_state':
+        return sendError(res, 409, 'CANNOT_VERIFY_STATE', outcome.reason)
       default:
         return sendError(res, 500, 'ROTATE_FAILED', 'Could not rotate this account\'s password — see server logs.')
     }
