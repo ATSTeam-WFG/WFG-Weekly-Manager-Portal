@@ -1512,6 +1512,98 @@ export async function addOrCreateSalesRepAccount(fullName: string, email: string
   return { status: 'created' }
 }
 
+// -----------------------------------------------------------------------
+// Sales Admin provisioning — Admin-only (api/admin/users/invite-sales-admin.ts).
+// Mirrors the Sales Rep provisioning block directly above line for line,
+// with the inverse role_conflict set (see salesAdminProvisioning.ts's own
+// header). Entirely additive: nothing above this comment is modified.
+// -----------------------------------------------------------------------
+import { decideCreateSalesAdminAccountAction, type SalesAdminRosterSnapshot } from './salesAdminProvisioning.js'
+
+async function fetchSalesAdminRosterAndProfileSnapshots(
+  emailNormalized: string,
+): Promise<{ roster: SalesAdminRosterSnapshot | null; profile: ProfileSnapshot | null } | { error: true }> {
+  const { data: rosterRow, error: rosterError } = await getServiceClient()
+    .from('approved_employees')
+    .select('portal_role, is_active, account_created_at')
+    .eq('email_normalized', emailNormalized)
+    .maybeSingle()
+
+  if (rosterError) {
+    console.error('supabaseServiceClient: sales admin roster lookup failed:', rosterError.message)
+    return { error: true }
+  }
+
+  const profileLookup = await findProfileByEmail(emailNormalized)
+  if (profileLookup.status === 'error') return { error: true }
+
+  const roster: SalesAdminRosterSnapshot | null =
+    rosterRow &&
+    (rosterRow.portal_role === 'manager' ||
+      rosterRow.portal_role === 'admin' ||
+      rosterRow.portal_role === 'sales_rep' ||
+      rosterRow.portal_role === 'sales_admin')
+      ? { portalRole: rosterRow.portal_role, isActive: rosterRow.is_active, accountCreated: rosterRow.account_created_at !== null }
+      : null
+
+  return {
+    roster,
+    profile: profileLookup.status === 'found' ? { isActive: profileLookup.profile.isActive } : null,
+  }
+}
+
+export type CreateSalesAdminAccountOutcome =
+  | { status: 'created' }
+  | { status: 'already_registered' }
+  | { status: 'already_created' }
+  | { status: 'invalid_domain' }
+  | { status: 'role_conflict' }
+  | { status: 'inactive' }
+  | { status: 'error' }
+
+// "Add Sales Admin" — Admin-only, from api/admin/users/invite-sales-admin.ts.
+// No email is sent — creates the Auth account directly with the shared
+// temporary password (createAccountAndMarkRoster, reused verbatim,
+// role-agnostic).
+export async function addOrCreateSalesAdminAccount(fullName: string, email: string): Promise<CreateSalesAdminAccountOutcome> {
+  const emailNormalized = normalizeEmail(email)
+  const snapshots = await fetchSalesAdminRosterAndProfileSnapshots(emailNormalized)
+  if ('error' in snapshots) return { status: 'error' }
+
+  const decision = decideCreateSalesAdminAccountAction(emailNormalized, snapshots.roster, snapshots.profile)
+
+  if (decision.action === 'invalid_domain') return { status: 'invalid_domain' }
+  if (decision.action === 'role_conflict') return { status: 'role_conflict' }
+  if (decision.action === 'inactive') return { status: 'inactive' }
+  if (decision.action === 'already_registered') return { status: 'already_registered' }
+  if (decision.action === 'already_created') return { status: 'already_created' }
+
+  if (decision.action === 'create_roster_and_account') {
+    const { error: upsertError } = await getServiceClient()
+      .from('approved_employees')
+      .upsert(
+        {
+          full_name: fullName.trim(),
+          email,
+          email_normalized: emailNormalized,
+          portal_role: 'sales_admin',
+          is_active: true,
+          submits_weekly_report: false,
+        },
+        { onConflict: 'email_normalized' },
+      )
+    if (upsertError) {
+      console.error('supabaseServiceClient: addOrCreateSalesAdminAccount roster upsert failed:', upsertError.message)
+      return { status: 'error' }
+    }
+  }
+
+  const result = await createAccountAndMarkRoster(emailNormalized, email)
+  if (result.status === 'error') return { status: 'error' }
+  if (result.status === 'already_created') return { status: 'already_created' }
+  return { status: 'created' }
+}
+
 export interface SalesRepSummary {
   // approved_employees' own stable primary key — used as the row list key,
   // mirroring ManagedUserSummary.id. Never used to call assign_sales_rep/

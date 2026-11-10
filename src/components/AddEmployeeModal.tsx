@@ -3,6 +3,11 @@ import './AddEmployeeModal.css'
 
 interface AddEmployeeModalProps {
   isOpen: boolean
+  // Defaults to "Add Employee" (the original, only caller before Sales
+  // Admin provisioning) — passed explicitly by any other caller so the
+  // modal's own heading never misleadingly says "Add Employee" for a
+  // different role's flow.
+  title?: string
   fullName: string
   email: string
   onFullNameChange: (value: string) => void
@@ -24,6 +29,7 @@ interface AddEmployeeModalProps {
 // account-creation flow.
 export default function AddEmployeeModal({
   isOpen,
+  title = 'Add Employee',
   fullName,
   email,
   onFullNameChange,
@@ -67,7 +73,7 @@ export default function AddEmployeeModal({
         aria-labelledby="add-employee-modal-title"
       >
         <div className="um-modal-header">
-          <h2 id="add-employee-modal-title">Add Employee</h2>
+          <h2 id="add-employee-modal-title">{title}</h2>
           <button
             type="button"
             className="um-modal-close-btn"

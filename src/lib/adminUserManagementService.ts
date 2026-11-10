@@ -82,6 +82,57 @@ export async function createManagerAccount(fullName: string, email: string): Pro
   return { status: 'error' }
 }
 
+export type CreateSalesAdminAccountOutcome =
+  | { status: 'created' }
+  | { status: 'already_created' }
+  | { status: 'already_registered' }
+  | { status: 'invalid_domain' }
+  | { status: 'role_conflict' }
+  | { status: 'inactive' }
+  | { status: 'error' }
+
+const CREATE_SALES_ADMIN_ACCOUNT_ERROR_CODES: Record<string, CreateSalesAdminAccountOutcome['status']> = {
+  ALREADY_CREATED: 'already_created',
+  ALREADY_REGISTERED: 'already_registered',
+  INVALID_DOMAIN: 'invalid_domain',
+  ROLE_CONFLICT: 'role_conflict',
+  INACTIVE: 'inactive',
+}
+
+// "Add Sales Admin" — Admin-only (api/admin/users/invite-sales-admin.ts
+// independently re-verifies this server-side via authenticateAdmin, never
+// authenticateAdminOrSalesAdmin). Creates the roster row (if needed, role:
+// sales_admin) and the account directly with the shared temporary
+// password. No email is sent by this call, and this never sends a role in
+// the request body — the server always hardcodes sales_admin.
+export async function inviteSalesAdmin(fullName: string, email: string): Promise<CreateSalesAdminAccountOutcome> {
+  let accessToken: string
+  try {
+    accessToken = await getValidAccessToken()
+  } catch {
+    return { status: 'error' }
+  }
+
+  let response: Response
+  try {
+    response = await fetch('/api/admin/users/invite-sales-admin', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fullName, email }),
+    })
+  } catch {
+    return { status: 'error' }
+  }
+
+  const body = await response.json().catch(() => null)
+
+  if (response.ok && body?.status === 'created') return { status: 'created' }
+  if (body?.error && CREATE_SALES_ADMIN_ACCOUNT_ERROR_CODES[body.error]) {
+    return { status: CREATE_SALES_ADMIN_ACCOUNT_ERROR_CODES[body.error] }
+  }
+  return { status: 'error' }
+}
+
 export type CreateAccountForExistingOutcome =
   | { status: 'created' }
   | { status: 'not_found' }
