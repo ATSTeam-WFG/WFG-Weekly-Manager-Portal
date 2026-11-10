@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { randomBytes } from 'node:crypto'
 import {
   decideCreateManagerAccountAction,
   decideCreateAccountForExistingAction,
@@ -403,6 +404,73 @@ export async function clearPasswordChangeRequired(userId: string): Promise<boole
     return false
   }
   return true
+}
+
+// -----------------------------------------------------------------------
+// rotateSalesRepTempPassword — gives one already-created Sales Rep account
+// a fresh, unique, cryptographically random temporary password, from
+// api/admin/users/rotate-sales-rep-password.ts. Deliberately separate from
+// createEmployeeAccount above: that function (and every other account-
+// creation path — Manager, Sales Admin, future Sales Rep creation) is
+// UNCHANGED by this — still the shared EMPLOYEE_TEMP_PASSWORD at creation
+// time. This only ever ROTATES an account that ALREADY exists, replacing
+// whatever password it currently has (shared or otherwise) with a value no
+// one else was ever given.
+//
+// Refuses to rotate an account that has already completed first login
+// (a profiles row already exists) — that employee has their own, real,
+// self-chosen password by now, and this must never silently overwrite it.
+// This is the one authoritative safety rail, not a role/roster allowlist:
+// it protects any already-onboarded Sales Rep, not just the ones named in
+// today's invitation batch.
+//
+// The generated password is returned to the caller exactly once, in the
+// return value only — never logged (not even on failure, where only
+// error.message is logged, same convention as every other function in this
+// file), never persisted anywhere by this function. The caller (the
+// endpoint) must pass it directly back to the authenticated admin's own
+// HTTP response and nowhere else.
+export type RotateSalesRepPasswordOutcome =
+  | { status: 'ok'; password: string }
+  | { status: 'not_found' }
+  | { status: 'already_onboarded' }
+  | { status: 'error' }
+
+function generateTempPassword(): string {
+  // 24 random bytes -> 32 base64url characters (no padding, no ambiguous
+  // '+'/'/'). Exceeds Supabase Auth's minimum length by a wide margin and
+  // is never derived from anything guessable (email, name, timestamp).
+  return randomBytes(24).toString('base64url')
+}
+
+export async function rotateSalesRepTempPassword(email: string): Promise<RotateSalesRepPasswordOutcome> {
+  const emailNormalized = normalizeEmail(email)
+  const employee = await lookupApprovedEmployeeByNormalizedEmail(emailNormalized)
+  if (!employee || employee.portalRole !== 'sales_rep' || !employee.authUserId) {
+    return { status: 'not_found' }
+  }
+
+  const profileLookup = await findProfileByUserId(employee.authUserId)
+  if (profileLookup.status === 'error') {
+    // Never rotate on an unknown state — treat a failed lookup the same as
+    // "could be already onboarded, refuse" rather than assuming it's safe.
+    return { status: 'error' }
+  }
+  if (profileLookup.status === 'found') {
+    return { status: 'already_onboarded' }
+  }
+
+  const password = generateTempPassword()
+  const { error } = await getServiceClient().auth.admin.updateUserById(employee.authUserId, {
+    password,
+    app_metadata: { password_change_required: true },
+  })
+  if (error) {
+    console.error('supabaseServiceClient: rotateSalesRepTempPassword failed:', error.message)
+    return { status: 'error' }
+  }
+
+  return { status: 'ok', password }
 }
 
 export interface ProfileRow {
