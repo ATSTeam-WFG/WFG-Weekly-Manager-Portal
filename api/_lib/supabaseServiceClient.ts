@@ -1718,6 +1718,26 @@ export async function listSalesReps(): Promise<SalesRepSummary[] | null> {
     .sort((a, b) => a.fullName.localeCompare(b.fullName))
 }
 
+// Narrow, purpose-built check for one exact (rep, manager) pair — used by
+// pre-provisioning to decide idempotently whether assign_sales_rep still
+// needs to run. null on error (distinct from false) so a lookup failure is
+// never mistaken for "no assignment exists".
+export async function hasActiveAssignmentToManager(repProfileId: string, managerProfileId: string): Promise<boolean | null> {
+  const { data, error } = await getServiceClient()
+    .from('rep_manager_assignments')
+    .select('id')
+    .eq('rep_id', repProfileId)
+    .eq('manager_id', managerProfileId)
+    .is('unassigned_at', null)
+    .limit(1)
+
+  if (error) {
+    console.error('supabaseServiceClient: hasActiveAssignmentToManager lookup failed:', error.message)
+    return null
+  }
+  return (data?.length ?? 0) > 0
+}
+
 // Phase 1A real-employee onboarding (November 2026) — TEMPORARY, explicit
 // allowlist of the 33 real, verified Sales Rep profile ids (see that
 // engagement's own roster reconciliation; excludes "Phase 1A Test Sales
