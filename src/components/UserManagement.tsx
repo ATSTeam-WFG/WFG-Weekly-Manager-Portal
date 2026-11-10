@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import {
   fetchManagedUsers,
   createManagerAccount,
+  inviteSalesAdmin,
   createAccountForExistingEmployee,
   setUserActive,
   updateManagedEmployee,
@@ -57,6 +58,25 @@ function createAccountPlaceholderMessage(status: string): string | null {
   }
 }
 
+function createSalesAdminAccountPlaceholderMessage(status: string): string | null {
+  switch (status) {
+    case 'created':
+      return 'Account created. Send them their WFG email, the portal URL, and the temporary password through your usual internal channel.'
+    case 'already_created':
+      return 'An account has already been created for this person and is awaiting their first login.'
+    case 'already_registered':
+      return 'This person already has a portal account.'
+    case 'invalid_domain':
+      return 'Only approved @wfgtitle.com email addresses can be added.'
+    case 'role_conflict':
+      return 'This email is already assigned a Manager, Admin, or Sales Rep role.'
+    case 'inactive':
+      return 'This employee is deactivated. Reactivate them before creating an account.'
+    default:
+      return 'Something went wrong creating the account. Please try again.'
+  }
+}
+
 export default function UserManagement({ onBack, currentUserEmail }: UserManagementProps) {
   const [users, setUsers] = useState<ManagedUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,6 +92,17 @@ export default function UserManagement({ onBack, currentUserEmail }: UserManagem
   const [creatingAccount, setCreatingAccount] = useState(false)
   const [createAccountMessage, setCreateAccountMessage] = useState<string | null>(null)
   const [createAccountMessageIsError, setCreateAccountMessageIsError] = useState(false)
+
+  // "+ Add Sales Admin" — a completely separate modal/state pair from
+  // "+ Add Employee" above, since they hit different endpoints with
+  // different hardcoded roles (manager vs. sales_admin) and must never
+  // share submit state.
+  const [isAddSalesAdminModalOpen, setIsAddSalesAdminModalOpen] = useState(false)
+  const [salesAdminFullName, setSalesAdminFullName] = useState('')
+  const [salesAdminEmail, setSalesAdminEmail] = useState('')
+  const [creatingSalesAdminAccount, setCreatingSalesAdminAccount] = useState(false)
+  const [createSalesAdminAccountMessage, setCreateSalesAdminAccountMessage] = useState<string | null>(null)
+  const [createSalesAdminAccountMessageIsError, setCreateSalesAdminAccountMessageIsError] = useState(false)
 
   const [rowActionEmail, setRowActionEmail] = useState<string | null>(null)
   const [rowMessage, setRowMessage] = useState<{ email: string; text: string; isError: boolean } | null>(null)
@@ -165,6 +196,43 @@ export default function UserManagement({ onBack, currentUserEmail }: UserManagem
     if (isSuccess) {
       setFullName('')
       setEmail('')
+      loadUsers()
+    }
+  }
+
+  const handleOpenAddSalesAdminModal = () => {
+    setCreateSalesAdminAccountMessage(null)
+    setIsAddSalesAdminModalOpen(true)
+  }
+
+  const handleCloseAddSalesAdminModal = () => {
+    if (creatingSalesAdminAccount) return
+    setIsAddSalesAdminModalOpen(false)
+  }
+
+  const handleCreateSalesAdminAccountSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setCreateSalesAdminAccountMessage(null)
+
+    const trimmedName = salesAdminFullName.trim()
+    const trimmedEmail = salesAdminEmail.trim()
+    if (!trimmedName || !trimmedEmail) {
+      setCreateSalesAdminAccountMessageIsError(true)
+      setCreateSalesAdminAccountMessage('A name and email are required.')
+      return
+    }
+
+    setCreatingSalesAdminAccount(true)
+    const outcome = await inviteSalesAdmin(trimmedName, trimmedEmail)
+    setCreatingSalesAdminAccount(false)
+
+    const isSuccess = outcome.status === 'created'
+    setCreateSalesAdminAccountMessageIsError(!isSuccess)
+    setCreateSalesAdminAccountMessage(createSalesAdminAccountPlaceholderMessage(outcome.status))
+
+    if (isSuccess) {
+      setSalesAdminFullName('')
+      setSalesAdminEmail('')
       loadUsers()
     }
   }
@@ -280,6 +348,9 @@ export default function UserManagement({ onBack, currentUserEmail }: UserManagem
         </div>
         <button type="button" className="btn btn-primary" onClick={handleOpenAddModal}>
           + Add Employee
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={handleOpenAddSalesAdminModal}>
+          + Add Sales Admin
         </button>
       </div>
 
@@ -526,6 +597,20 @@ export default function UserManagement({ onBack, currentUserEmail }: UserManagem
         creating={creatingAccount}
         message={createAccountMessage}
         messageIsError={createAccountMessageIsError}
+      />
+
+      <AddEmployeeModal
+        isOpen={isAddSalesAdminModalOpen}
+        title="Add Sales Admin"
+        fullName={salesAdminFullName}
+        email={salesAdminEmail}
+        onFullNameChange={setSalesAdminFullName}
+        onEmailChange={setSalesAdminEmail}
+        onSubmit={handleCreateSalesAdminAccountSubmit}
+        onClose={handleCloseAddSalesAdminModal}
+        creating={creatingSalesAdminAccount}
+        message={createSalesAdminAccountMessage}
+        messageIsError={createSalesAdminAccountMessageIsError}
       />
     </div>
   )
