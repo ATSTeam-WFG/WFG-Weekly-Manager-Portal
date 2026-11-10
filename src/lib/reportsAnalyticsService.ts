@@ -91,7 +91,11 @@ export async function fetchPeriodReportStats(
   // that isn't (or no longer is) a submitter, and that must not be counted
   // as a submitter's expected/submitted/draft report, exactly as
   // fetchWeeklySummary already avoids this by iterating profiles rather
-  // than raw report rows.
+  // than raw report rows. This set drives the KPI math below ONLY —
+  // uniqueManagers/expectedReports/submittedReports/draftReports/
+  // completionPct must stay internally consistent (a manager excluded from
+  // the denominator must also be excluded from the numerator), so this
+  // stays scoped to current submitters exactly as before.
   const reportRows = (reports ?? []).filter((r) => nameById.has(r.manager_id))
 
   const uniqueManagers = profileList.length
@@ -101,8 +105,31 @@ export async function fetchPeriodReportStats(
   const missingReports = Math.max(0, expectedReports - submittedReports - draftReports)
   const completionPct = expectedReports > 0 ? Math.round((submittedReports / expectedReports) * 100) : 0
 
+  // Historical visibility (separate from the KPI math above): a manager's
+  // own already-submitted report content must remain viewable in the
+  // drill-down below even after a later role change makes them no longer a
+  // current submitter (e.g. Manager -> Sales Admin) — their report rows
+  // are never deleted, only excluded from reportRows above, which would
+  // otherwise silently hide their content here too. Resolve names for any
+  // report-row manager_id not already covered by the current submitter
+  // list via one additional query, bounded to exactly those ids.
+  const reportManagerIds = Array.from(new Set((reports ?? []).map((r) => r.manager_id)))
+  const historicalOnlyIds = reportManagerIds.filter((id) => !nameById.has(id))
+  const historicalNameById = new Map(nameById)
+  if (historicalOnlyIds.length > 0) {
+    const { data: historicalProfiles, error: historicalProfilesError } = await supabaseClient
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', historicalOnlyIds)
+    if (historicalProfilesError) {
+      console.error('Failed to fetch historical manager profiles from Supabase:', historicalProfilesError.message)
+    }
+    for (const p of historicalProfiles ?? []) historicalNameById.set(p.id, p.full_name ?? 'Unnamed Manager')
+  }
+  const historicalReportRows = (reports ?? []).filter((r) => historicalNameById.has(r.manager_id))
+
   const weeksByManager = new Map<string, PeriodManagerWeekEntry[]>()
-  for (const row of reportRows) {
+  for (const row of historicalReportRows) {
     if (row.status !== 'submitted') continue
     const list = weeksByManager.get(row.manager_id) ?? []
     list.push({
@@ -113,13 +140,13 @@ export async function fetchPeriodReportStats(
     weeksByManager.set(row.manager_id, list)
   }
 
-  const entries: PeriodManagerEntry[] = profileList
-    .filter((p) => weeksByManager.has(p.id))
-    .map((p) => ({
-      managerId: p.id,
-      managerName: nameById.get(p.id) ?? 'Unnamed Manager',
-      weeks: (weeksByManager.get(p.id) ?? []).sort((a, b) => a.weekStartDate.localeCompare(b.weekStartDate)),
+  const entries: PeriodManagerEntry[] = Array.from(weeksByManager.keys())
+    .map((managerId) => ({
+      managerId,
+      managerName: historicalNameById.get(managerId) ?? 'Unnamed Manager',
+      weeks: (weeksByManager.get(managerId) ?? []).sort((a, b) => a.weekStartDate.localeCompare(b.weekStartDate)),
     }))
+    .sort((a, b) => a.managerName.localeCompare(b.managerName))
 
   // Derived from the same reportRows already fetched above — no new query.
   // A manager is "pending" unless every week in the period is submitted.

@@ -897,6 +897,111 @@ export async function setManagedUserActive(
 }
 
 // -----------------------------------------------------------------------
+// convertManagedEmployeeRole — launch-completion role conversions
+// (Manager -> Sales Admin / Manager -> Sales Rep), from
+// api/admin/users/convert-role.ts. Deliberately separate from
+// updateManagedEmployee below: that function's own role field is typed
+// 'manager' | 'admin' only and can never target sales_rep/sales_admin, so
+// it cannot be reused or safely widened for this without touching its
+// email-conflict/self-edit/rollback logic for an unrelated purpose. This
+// is narrower by design: no email or name change, no self-edit concern
+// (never called against the acting admin's own account), and only ever
+// acts on a roster row already confirmed (by the caller, via
+// decideRoleConversionAction) to be in the exact expected current role.
+export interface RoleConversionInput {
+  email: string
+  expectedCurrentPortalRole: 'manager' | 'admin'
+  newPortalRole: 'sales_rep' | 'sales_admin'
+  newSubmitsWeeklyReport: boolean
+}
+
+export type RoleConversionOutcome =
+  | { status: 'ok'; profileId: string }
+  | { status: 'not_found' }
+  | { status: 'already_converted' }
+  | { status: 'unexpected_current_role'; actualRosterRole: string | null; actualProfileRole: string | null }
+  | { status: 'no_profile_yet' }
+  // The roster write succeeded but the profile write then failed, AND
+  // reverting the roster write back to its original role also failed — a
+  // genuine split-brain state needing manual reconciliation in Supabase
+  // Studio. See the console.error immediately before this is returned for
+  // which store ended up in which state.
+  | { status: 'partial_failure' }
+  | { status: 'error' }
+
+export async function convertManagedEmployeeRole(input: RoleConversionInput): Promise<RoleConversionOutcome> {
+  const client = getServiceClient()
+  const emailNormalized = normalizeEmail(input.email)
+
+  const { data: rosterRow, error: rosterError } = await client
+    .from('approved_employees')
+    .select('id, portal_role, submits_weekly_report')
+    .eq('email_normalized', emailNormalized)
+    .maybeSingle()
+  if (rosterError) {
+    console.error('supabaseServiceClient: convertManagedEmployeeRole roster lookup failed:', rosterError.message)
+    return { status: 'error' }
+  }
+  if (!rosterRow) return { status: 'not_found' }
+
+  const profileLookup = await findProfileByEmail(emailNormalized)
+  if (profileLookup.status === 'error') return { status: 'error' }
+
+  // ProfileRow.role is typed 'manager' | 'admin' only — a pre-existing type
+  // that predates sales_rep/sales_admin profiles (which genuinely exist at
+  // the database level, created via createProfileFromApprovedEmployee).
+  // Compared here as a plain string, matching this file's established
+  // convention for loosely-typed Supabase reads elsewhere, rather than
+  // widening a shared type without auditing every other caller.
+  if (
+    rosterRow.portal_role === input.newPortalRole &&
+    profileLookup.status === 'found' &&
+    (profileLookup.profile.role as string) === input.newPortalRole
+  ) {
+    return { status: 'ok', profileId: profileLookup.profile.id }
+  }
+
+  if (rosterRow.portal_role !== input.expectedCurrentPortalRole) {
+    return { status: 'unexpected_current_role', actualRosterRole: rosterRow.portal_role, actualProfileRole: null }
+  }
+  if (profileLookup.status === 'not-found') return { status: 'no_profile_yet' }
+  if ((profileLookup.profile.role as string) !== input.expectedCurrentPortalRole) {
+    return { status: 'unexpected_current_role', actualRosterRole: rosterRow.portal_role, actualProfileRole: profileLookup.profile.role }
+  }
+
+  const originalRosterPortalRole = rosterRow.portal_role
+  const originalRosterSubmitsWeeklyReport = rosterRow.submits_weekly_report
+
+  const { error: rosterUpdateError } = await client
+    .from('approved_employees')
+    .update({ portal_role: input.newPortalRole, submits_weekly_report: input.newSubmitsWeeklyReport })
+    .eq('id', rosterRow.id)
+  if (rosterUpdateError) {
+    console.error('supabaseServiceClient: convertManagedEmployeeRole roster update failed:', rosterUpdateError.message)
+    return { status: 'error' }
+  }
+
+  const { error: profileUpdateError } = await client
+    .from('profiles')
+    .update({ role: input.newPortalRole, submits_weekly_report: input.newSubmitsWeeklyReport })
+    .eq('id', profileLookup.profile.id)
+  if (profileUpdateError) {
+    console.error('supabaseServiceClient: convertManagedEmployeeRole profile update failed, reverting roster:', profileUpdateError.message)
+    const { error: revertError } = await client
+      .from('approved_employees')
+      .update({ portal_role: originalRosterPortalRole, submits_weekly_report: originalRosterSubmitsWeeklyReport })
+      .eq('id', rosterRow.id)
+    if (revertError) {
+      console.error('supabaseServiceClient: convertManagedEmployeeRole revert ALSO failed — split-brain, needs manual reconciliation:', revertError.message)
+      return { status: 'partial_failure' }
+    }
+    return { status: 'error' }
+  }
+
+  return { status: 'ok', profileId: profileLookup.profile.id }
+}
+
+// -----------------------------------------------------------------------
 // Edit Employee — Admin-only, from api/admin/users/update.ts. Corrects an
 // existing approved_employees row's full name, email, portal role, and/or
 // submits_weekly_report after the fact (e.g. a typo caught before or after
@@ -1748,98 +1853,130 @@ export async function findActiveAssignmentForRep(repProfileId: string): Promise<
 }
 
 // Phase 1A real-employee onboarding (November 2026) — TEMPORARY, explicit
-// allowlist of the 33 real, verified Sales Rep profile ids (see that
-// engagement's own roster reconciliation; excludes "Phase 1A Test Sales
-// Rep" and "Phase 1A Test Sales Rep 2"). Mirrors VERIFIED_REAL_MANAGER_IDS
-// below exactly, and for the same reason: deliberately an allowlist, not a
-// name- or email-pattern exclusion. A demo Sales Rep's email need not match
-// any particular pattern, and no existing schema column marks an account
-// as test-only — adding one would be a schema migration for what is
-// otherwise a pure read-filter/reporting concern. An allowlist also fails
-// safe: a future test/demo Sales Rep would never appear here by accident,
-// where a blocklist would have to be remembered and updated for every new
-// one. Used only to compute a "verified real" count/label for the Sales
-// Admin dashboard — never to hide, restrict, or gate access to any rep's
-// row; every rep (real or demo) remains fully visible and manageable.
-// Safe to widen or remove once a real, data-level test-account marker
-// exists.
+// allowlist of real, verified Sales Rep profile ids. Mirrors
+// VERIFIED_REAL_MANAGER_IDS below exactly, and for the same reason:
+// deliberately an allowlist, not a name- or email-pattern exclusion. A demo
+// Sales Rep's email need not match any particular pattern, and no existing
+// schema column marks an account as test-only — adding one would be a
+// schema migration for what is otherwise a pure read-filter/reporting
+// concern. An allowlist also fails safe: a future test/demo Sales Rep would
+// never appear here by accident, where a blocklist would have to be
+// remembered and updated for every new one. Used only to compute a
+// "verified real" count/label for the Sales Admin dashboard — never to
+// hide, restrict, or gate access to any rep's row; every rep (real or demo)
+// remains fully visible and manageable. Safe to widen or remove once a
+// real, data-level test-account marker exists.
+//
+// CORRECTED 2026-11-10: the previous 33-id list (reconciled 2026-11-05) was
+// populated from PREVIEW's own profile ids, not production's — profile ids
+// are Postgres-generated per project and can never be portable across
+// separate Supabase projects, so every one of those entries was already
+// silently wrong against this (production) database from the day it was
+// added, independent of tonight's pre-provisioning work. Replaced below
+// with the 29 real PRODUCTION profile ids confirmed via the pre-provisioning
+// reconciliation. Austin Rozier (currently a Manager in production, pending
+// a separate Sales Rep conversion) and Gene Rebadow's 3 reps (Holly
+// Helfrich, Honora Ferris, Jackie Medeiros — no profile yet, pending a
+// separate assignment decision) are correctly absent for now.
 //
 // MAINTENANCE LIMITATION — read before onboarding a new real Sales Rep:
-// this Set is a static snapshot (33 ids, reconciled 2026-11-05) and is
-// NEVER updated automatically. A newly onboarded real Sales Rep will NOT
-// be in it until someone adds their profile id here by hand. Until then,
-// that rep is silently treated as demo/test everywhere this flag is read:
-// they get the "Demo/Test" badge in Sales Rep Management, they're excluded
-// from the "Active" KPI's verified-real headline count, and the "33 real
-// reps" figure understates the true number of real, active reps. This
-// fails safe in the security sense (never over-counts, never grants
-// anything), but it DOES silently produce an incorrect operational total
-// if forgotten — there is no error, warning, or test that catches a
-// missing id on its own. To add a newly onboarded real Sales Rep: look up
-// their profiles.id (== auth.users id) in PREVIEW and append it below with
-// a name comment, the same way every existing entry was compiled (see this
-// engagement's roster reconciliation for the read-only query pattern used
-// to regenerate this list from approved_employees joined to profiles).
+// this Set is a static snapshot and is NEVER updated automatically. A newly
+// onboarded or converted real Sales Rep will NOT be in it until someone
+// adds their profile id here by hand. Until then, that rep is silently
+// treated as demo/test everywhere this flag is read: they get the
+// "Demo/Test" badge in Sales Rep Management, and they're excluded from the
+// "Active" KPI's verified-real headline count. This fails safe in the
+// security sense (never over-counts, never grants anything), but it DOES
+// silently produce an incorrect operational total if forgotten — there is
+// no error, warning, or test that catches a missing id on its own. To add
+// one: look up their profiles.id (== auth.users id) directly in production
+// and append it below with a name comment.
 const VERIFIED_REAL_SALES_REP_IDS = new Set([
-  '6c8dabe5-66dd-4043-bc2a-83746194ed64', // Aaron Mahana
-  '5e609f03-eebe-4feb-8a1a-5cc7ed0021f6', // Austin Rozier
-  'ba6c3b72-2e12-4394-a3bc-8ea18e431953', // Bradley Keene
-  '2d6ab6e9-6663-47a8-9db6-d94c4cba3288', // Danielle Johnson
-  'baa6ab00-2e04-4272-bf05-4b5eb812b038', // Danny Rodriguez
-  '9cddd3e5-1a49-45d4-8c91-9ce5092ec1aa', // David Hoffman
-  'deaabf9f-492c-4867-81cf-b4bdfc1b4db6', // Devon Sommer
-  'b39c698f-520a-47ce-beb8-56ec1fd75015', // Donna Slomins
-  '176603b0-3931-498d-b174-de1d8081466b', // Elissa Perez
-  '24993a66-a63d-4f76-b66e-996bd469db00', // Evan Rebadow
-  '2563a221-fb96-45c5-922d-39ee860accff', // Gary Szafranski
-  '351df340-f783-4a8c-a80e-f0d17fb82a1c', // Holly Helfrich
-  'cd7de58d-6573-4b07-b135-1f011def9bc2', // Honora Ferris
-  'a7c151dd-c9b3-456e-bed6-ba4b893b5687', // Ian Bartlett
-  '11cdf99d-86b9-440f-ada1-51e76b0ecfe0', // Jackie Medeiros
-  '0df204e3-f49d-4e81-9a4a-3cf035d9a7c4', // Jamie Barker
-  '7fa7b34c-e946-4985-9c48-93411b9b3501', // Jennifer Giles
-  '6edf07c5-f43f-48ca-9683-f2c6f00b786f', // John Pellecchia
-  '4308b2b2-5767-429f-a950-231cc59e19a7', // Julie Tomlinson
-  '52a1b605-fe03-4742-ae65-8a9060e3acac', // Kristy Campbell
-  'c37e635d-1777-4d5c-8766-d7f59c5376fa', // Liz Dunlap
-  'c0cdd9fb-7404-4584-b9b8-ce8c0d435b09', // Liz Fox
-  '3002b0ff-825a-4fc2-bb78-1288a8d62164', // Lois Donnelly
-  '7c02438f-d4dd-41cb-9635-db34eff6906c', // Lori Ciambriello
-  '04b486e5-d595-4f4e-99bb-0a51365c1a7c', // Natalie Diaz
-  'd0da283d-c563-4f28-bdfa-64b0e051ad03', // Patrick Malone
-  'cab45803-0df3-48bb-8565-ebc4cc9c0e41', // Sadie Thibodeaux
-  'b21dcec2-5d81-4ad3-b22b-579d083a49a7', // Stephanie Coppage
-  '2e03ab24-3023-457c-8d7c-41bcb3cb4ea2', // Stephanie Runnels
-  '63b56d74-27ea-464e-806b-fe7d686e8004', // Sundi March
-  '97db1667-f8f3-47e6-a3a6-d3054483bb02', // Theresa Kane-Mackenzie
-  '0dadc618-020d-44bf-add2-138280861192', // Tony Polito
-  '118eb8ec-be7e-43d4-a6ad-d05dafffc483', // Tori Holmes
+  '32fe9648-82c0-46f2-a12b-135b39fa8715', // Aaron Mahana
+  '28533f93-8ff8-4615-aef1-4b8fc439c1a3', // Bradley Keene
+  '158d39ab-1973-470c-8daf-ea04493476d0', // Danielle Johnson
+  '6ac5fa59-d7cb-4e1c-8ce4-466d6d72e7aa', // Danny Rodriguez
+  'f5803737-d6d1-43a9-a442-989c6bf7a146', // David Hoffman
+  'fc353c2b-c66f-4c48-875e-a4565bfd246e', // Devon Sommer
+  '323af7ef-e2f5-48f0-b7a1-8834ea3bdc45', // Donna Slomins
+  'a56e70a2-50ac-45f9-9791-72c616804403', // Elissa Perez
+  '57c3931f-a9e8-42ff-9329-9cf0a32ab1c8', // Evan Rebadow
+  '1aba2d6a-10ef-40fe-ab71-c29a520af689', // Gary Szafranski
+  '307aef8f-b63b-4498-97a9-139d0aa3b916', // Ian Bartlett
+  'bc7e9f61-b4e2-4262-96e0-2e11f5398a40', // Jamie Barker
+  'ff8d6b9e-a646-47d8-930a-353b86ac5e4c', // Jennifer Giles
+  'd484ed2e-daf0-4973-93fd-f46915006def', // John Pellecchia
+  '1aca430a-7650-4089-b353-b0eefefdff36', // Julie Tomlinson
+  '8ae6a8f2-b590-4261-bee7-adbbf8858659', // Kristy Campbell
+  '47a1b2bd-3741-4814-b1ab-4b5f5ac7cfb3', // Liz Dunlap
+  'ce46bf11-b923-4416-9759-040cc867f9da', // Liz Fox
+  'e066594a-dfc2-41bf-9af8-7e93f5d12d53', // Lois Donnelly
+  'ca7634b6-31c0-4c17-adf7-9402a7527220', // Lori Ciambriello
+  '97556e43-5daf-4ac4-84a4-1df5bae26fcf', // Natalie Diaz
+  '215d7458-0f47-40b1-a78f-cc351371d04b', // Patrick Malone
+  '7bfcfd01-4ad2-4dca-a668-26c07858f550', // Sadie Thibodeaux
+  '366c5dce-75c7-4874-8299-f61b296f5baa', // Stephanie Coppage
+  '1692dc79-55c1-44e9-aa71-839eb9a03af0', // Stephanie Runnels
+  'cefc19a3-483d-4047-8de9-828ac8bfdb22', // Sundi March
+  '8b8d589f-b68e-4f9b-a489-20d942f2563e', // Theresa Kane-Mackenzie
+  '89e8ddc7-c3ad-4444-be9b-64869009bc1e', // Tony Polito
+  '8082d6f7-25f5-4e89-aa56-28abd05474b1', // Tori Holmes
 ])
 
 // Phase 1A real-employee onboarding (November 2026) — TEMPORARY, explicit
-// allowlist of the 10 real, verified Manager profile ids (see that
-// engagement's own roster reconciliation). Deliberately an allowlist, not a
-// name- or email-pattern exclusion: "Demo Manager"'s own email is a real
-// @wfgtitle.com address, indistinguishable by pattern from a genuine
-// Manager's, and no existing schema column marks an account as test-only —
-// adding one would be a schema migration for what is otherwise a pure
-// read-filter concern. An allowlist also fails safe: a future test/demo
-// Manager account would never appear here by accident, where a blocklist
-// would have to be remembered and updated for every new one. Safe to widen
-// or remove once a real, data-level test-account marker exists, or once
-// this specific onboarding effort is complete and no longer needs to
-// exclude "Demo Manager"/"Dry Run Manager" from the real assignment flow.
+// allowlist of real, verified Manager profile ids, excluding genuine
+// demo/test accounts ("Demo Manager", "Test Manager1", "Test Manager2").
+// Deliberately an allowlist, not a name- or email-pattern exclusion: a demo
+// Manager's own email can be a real-looking @wfgtitle.com address,
+// indistinguishable by pattern from a genuine Manager's, and no existing
+// schema column marks an account as test-only — adding one would be a
+// schema migration for what is otherwise a pure read-filter concern.
+//
+// CORRECTED 2026-11-10 — TWO separate problems found and fixed together:
+// (1) the previous 10-id list was populated from PREVIEW's own profile ids,
+// not production's (profile ids are Postgres-generated per project and
+// never portable across separate Supabase projects) — EVERY entry matched
+// zero real production managers, so listActiveManagers() (the "Assign
+// Manager" dropdown's data source) was returning a completely EMPTY array
+// in production, for every Admin, independent of tonight's pre-provisioning
+// work. (2) even with correct ids, the previous list was scoped to only the
+// 10 managers relevant to this engagement's own Sales Rep roster
+// reconciliation — it silently excluded 5 genuinely real, pre-existing
+// managers who predate this engagement entirely (Janelle Rosenbaum, Jaime
+// Dyer, John Williams, Despina Manoloudas, Stephanie Argoe) from the
+// dropdown. Replaced below with the complete, current set of real active
+// Manager profiles in production (confirmed via a direct read-only query),
+// explicitly excluding only the 3 confirmed demo/test accounts.
+//
+// MAINTENANCE LIMITATION — same as VERIFIED_REAL_SALES_REP_IDS above: this
+// Set is a static snapshot, never updated automatically. It WILL go stale
+// again the moment Joey Grampa's or Austin Rozier's pending role
+// conversions execute (both currently role='manager', both in this list) —
+// each would need to be removed from here once no longer a Manager, and
+// anyone newly promoted to Manager would need adding. This is NOT a
+// security boundary (listActiveManagers' own comment already establishes
+// assign_sales_rep independently re-validates server-side), only a
+// dropdown-population concern, but it fails CLOSED (an unlisted real
+// Manager silently can't be picked from this dropdown) rather than open —
+// worth considering removing this allowlist filter entirely in a future
+// pass once a real, data-level test-account marker exists, rather than
+// maintaining an ever-drifting snapshot.
 const VERIFIED_REAL_MANAGER_IDS = new Set([
-  '58b6d0e7-24f7-4f21-b6bb-8aa941cf9fe0', // Chad Hansen
-  'b8c7c5ef-049a-4fd4-ba56-0955f44820b4', // Rhonda Utecht
-  'ff7334b7-9837-47a5-b32b-e5b1742dbc43', // Cary Williams
-  '09ee9917-519e-4426-a34f-91ed3e2f6e86', // Tina Arcarese
-  '4388e6c2-1a63-439c-baef-36faad8d758d', // David Rebadow
-  '2fe50f76-bef4-4377-b4ba-615c654df0f8', // Gene Rebadow
-  '280af92c-b6a7-4868-a783-b0fc5646e5fe', // David Silverstein
-  '166feed6-c66f-4c46-93a4-42ef0e80f55d', // Lauren McCaskill
-  'aed29211-56dc-485e-bf2b-0e3c4ea9397c', // Robert Bauchle
-  '62dce027-e514-4831-ad35-09697eee01b6', // Clint Yarborough
+  'bbf1b6d4-8024-45b8-bcf5-b0fa6de9e8d9', // Lauren McCaskill
+  '0faaf138-a79a-4fb5-b6f2-15ac440f9973', // Tina Arcarese
+  '51a74ef1-7b01-47d2-8e88-398a229ec530', // Janelle Rosenbaum
+  '9022ca4f-24c0-432f-ae53-09e6a7821c57', // Joey Grampa
+  '5ef7985e-c1ce-4b44-81d8-7a7001edf3ea', // Jaime Dyer
+  'c1eee5a7-ae62-4692-b5b5-cd3af69c9f2c', // David Silverstein
+  '5c821425-9216-42a0-98cd-5de7577dc6a8', // Clint Yarborough
+  '726d287a-6b97-4ee4-85fc-f5623334500d', // Rhonda Utecht
+  '776c5053-8794-4049-ae45-acef10a70094', // John Williams
+  '0ea4964a-3a8e-426f-8f02-5477f9afee79', // Cary Williams
+  'a18c71ac-bb5d-40d1-a518-333e87af9919', // Despina Manoloudas
+  '16810378-a547-49bc-9964-f082dc21ab63', // Stephanie Argoe
+  'a7b283a9-f133-4f22-b309-f41d280ee8ff', // Chad Hansen
+  '2598058b-f131-41a2-8282-6aca5ebf1746', // David Rebadow
+  '88033394-69c9-4f37-8988-083dfb363d0c', // Austin Rozier
 ])
 
 // Candidate list for the "Assign Manager" dropdown — active, verified-real
