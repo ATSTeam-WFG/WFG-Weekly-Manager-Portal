@@ -6,9 +6,11 @@
 // completeProfileWiring.test.ts/adminUserManagementWiring.test.ts. This
 // verifies the pre-provisioning endpoint's authorization boundary, its
 // dry-run safety, and which Supabase client it uses for assign_sales_rep,
-// via source inspection. The pure decision logic
-// (decidePreProvisioningAction) is independently, directly unit-tested in
-// salesRepPreProvisioning.test.ts instead.
+// via source inspection. The genuinely behavioral logic — conflict
+// detection, lookup-failure handling, and post-assignment verification —
+// is independently, directly unit-tested in salesRepPreProvisioning.test.ts
+// instead (decidePreProvisioningAction / isAssignmentVerified), not just
+// asserted here via regex.
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -83,6 +85,55 @@ describe('partial failure handling: profile-created-but-assignment-failed is nev
   })
 })
 
+describe('scenario 1 (conflict): an existing assignment to a different manager is wired through to a skip, never through to the rpc call', () => {
+  test('skip_assignment_conflict_different_manager is handled in the same skip branch as the other no-write decisions, before any write code', () => {
+    const skipBlockMatch = endpointSrc.match(/if \(\s*\n\s*decision\.action === 'skip_rep_not_found_or_ineligible' \|\|\s*\n\s*decision\.action === 'skip_manager_not_found_or_ineligible' \|\|\s*\n\s*decision\.action === 'skip_assignment_conflict_different_manager'\s*\n\s*\) \{([\s\S]*?continue\n\s*\})/)
+    assert.ok(skipBlockMatch, 'could not locate the combined skip branch covering skip_assignment_conflict_different_manager')
+    assert.doesNotMatch(skipBlockMatch[1], /createProfileFromApprovedEmployee|\.rpc\(/)
+  })
+
+  test('the existing-assignment lookup is never pre-filtered to the requested manager — findActiveAssignmentForRep takes only a rep id, so the endpoint cannot silently assume "no conflict"', () => {
+    assert.match(endpointSrc, /findActiveAssignmentForRep\(rep\.authUserId\)/)
+    assert.match(serviceClientSrc, /export async function findActiveAssignmentForRep\(repProfileId: string\)/)
+    assert.doesNotMatch(serviceClientSrc, /function findActiveAssignmentForRep\([^)]*managerProfileId/)
+  })
+})
+
+describe('scenario 2 (lookup failures): every lookup result is passed through as found/not_found/lookup_failed, never collapsed to null before reaching the decision function', () => {
+  test('the rep profile lookup maps the \'error\' status to lookup_failed, not to not_found', () => {
+    const block = endpointSrc.match(/const repProfileResult = await findProfileByUserId\(rep\.authUserId\)([\s\S]*?)\n\s*\}\n\s*\}/)
+    assert.ok(block, 'could not locate the rep profile lookup mapping')
+    assert.match(block[1], /repProfileResult\.status === 'error'[\s\S]*?status: 'lookup_failed'/)
+  })
+
+  test('the manager profile lookup maps the \'error\' status to lookup_failed, not to not_found', () => {
+    const declIndex = endpointSrc.indexOf('const managerProfileResult = await findProfileByEmail(managerEmailNormalized)')
+    assert.ok(declIndex >= 0, 'could not locate the manager profile lookup')
+    const block = endpointSrc.slice(declIndex, declIndex + 600)
+    assert.match(block, /: managerProfileResult\.status === 'error'\s*\n\s*\? \{ status: 'lookup_failed' \}/)
+  })
+
+  test('skip_lookup_failed is reported with status \'error\' (not \'skipped\') so it is never mistaken for an ordinary, expected skip', () => {
+    assert.match(endpointSrc, /if \(decision\.action === 'skip_lookup_failed'\) \{[\s\S]*?status: 'error'/)
+  })
+})
+
+describe('scenario 3 (post-assignment verification): full_success is never reported from the rpc call\'s absence-of-error alone', () => {
+  test('after a successful rpc call, findActiveAssignmentForRep is called again (a fresh, independent read) before isAssignmentVerified is checked', () => {
+    const rpcIndex = endpointSrc.lastIndexOf(".rpc('assign_sales_rep'")
+    const verifyCallIndex = endpointSrc.indexOf('findActiveAssignmentForRep(rep?.authUserId as string)')
+    const isVerifiedIndex = endpointSrc.indexOf('isAssignmentVerified(verification, expectedManagerProfileId)')
+    assert.ok(rpcIndex >= 0 && verifyCallIndex > rpcIndex && isVerifiedIndex > verifyCallIndex)
+  })
+
+  test('an unverified assignment is reported as assignment_unverified, never full_success', () => {
+    const match = endpointSrc.match(/if \(!isAssignmentVerified\(verification, expectedManagerProfileId\)\) \{([\s\S]*?continue\n\s*\})/)
+    assert.ok(match, 'could not locate the verification-failure branch')
+    assert.match(match[1], /status: 'assignment_unverified'/)
+    assert.doesNotMatch(match[1], /status: 'full_success'/)
+  })
+})
+
 describe('concurrency safety: no duplicate profiles or assignments on a retry or a race', () => {
   test('createProfileFromApprovedEmployee is a plain create-only insert (never upsert) — profiles.id is the primary key, so a racing duplicate insert fails loudly rather than silently overwriting', () => {
     const insertBlock = serviceClientSrc.match(/export async function createProfileFromApprovedEmployee[\s\S]*?\n\}/)
@@ -120,16 +171,16 @@ describe('first-login compatibility: pre-provisioned profiles are indistinguisha
   })
 })
 
-describe('api/_lib/supabaseServiceClient.ts — hasActiveAssignmentToManager is a narrow, purpose-built read, not a generic client export', () => {
+describe('api/_lib/supabaseServiceClient.ts — findActiveAssignmentForRep is a narrow, purpose-built read, not a generic client export', () => {
   test('getServiceClient itself is still never exported', () => {
     assert.doesNotMatch(serviceClientSrc, /export function getServiceClient/)
     assert.doesNotMatch(serviceClientSrc, /export \{ getServiceClient \}/)
   })
 
-  test('hasActiveAssignmentToManager queries rep_manager_assignments scoped to one exact (rep, manager) pair', () => {
-    assert.match(serviceClientSrc, /export async function hasActiveAssignmentToManager/)
+  test('findActiveAssignmentForRep queries rep_manager_assignments scoped to one rep, distinguishing found/none/lookup_failed', () => {
+    assert.match(serviceClientSrc, /export async function findActiveAssignmentForRep/)
     assert.match(serviceClientSrc, /\.eq\('rep_id', repProfileId\)/)
-    assert.match(serviceClientSrc, /\.eq\('manager_id', managerProfileId\)/)
     assert.match(serviceClientSrc, /\.is\('unassigned_at', null\)/)
+    assert.match(serviceClientSrc, /status: 'lookup_failed'/)
   })
 })

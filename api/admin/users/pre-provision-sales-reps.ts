@@ -5,9 +5,15 @@ import {
   findProfileByUserId,
   findProfileByEmail,
   normalizeEmail,
-  hasActiveAssignmentToManager,
+  findActiveAssignmentForRep,
 } from '../../_lib/supabaseServiceClient.js'
-import { decidePreProvisioningAction, type PreProvisioningSnapshot } from '../../_lib/salesRepPreProvisioning.js'
+import {
+  decidePreProvisioningAction,
+  isAssignmentVerified,
+  type PreProvisioningSnapshot,
+  type ManagerProfileLookupStatus,
+  type ProfileLookupStatus,
+} from '../../_lib/salesRepPreProvisioning.js'
 import { APPROVED_PRE_PROVISIONING_ROSTER } from '../../_lib/salesRepPreProvisioningRoster.js'
 
 interface VercelRequest {
@@ -34,7 +40,7 @@ interface EntryResult {
   decision: string
   profileCreated: boolean
   assigned: boolean
-  status: 'preview' | 'skipped' | 'full_success' | 'profile_created_assignment_failed' | 'error'
+  status: 'preview' | 'skipped' | 'full_success' | 'profile_created_assignment_failed' | 'assignment_unverified' | 'error'
   message: string
 }
 
@@ -82,18 +88,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const managerEmailNormalized = normalizeEmail(entry.managerEmail)
 
       const rep = await lookupApprovedEmployeeByNormalizedEmail(repEmailNormalized)
-      const managerProfileLookup = await findProfileByEmail(managerEmailNormalized)
-      const managerProfile = managerProfileLookup.status === 'found' ? managerProfileLookup.profile : null
 
-      let repProfileExists = false
+      // Every lookup below is reported as found / not_found-or-none /
+      // lookup_failed — never collapsed to a plain boolean/null. A failed
+      // lookup must never be treated the same as "doesn't exist" (see
+      // decidePreProvisioningAction, which refuses to create or assign
+      // anything on a lookup_failed).
+      let repProfileLookup: ProfileLookupStatus = { status: 'not_found' }
       if (rep?.authUserId) {
-        const repProfileLookup = await findProfileByUserId(rep.authUserId)
-        repProfileExists = repProfileLookup.status === 'found'
+        const repProfileResult = await findProfileByUserId(rep.authUserId)
+        repProfileLookup =
+          repProfileResult.status === 'found'
+            ? { status: 'found' }
+            : repProfileResult.status === 'error'
+              ? { status: 'lookup_failed' }
+              : { status: 'not_found' }
       }
 
-      let activeAssignmentToThisManagerExists = false
-      if (rep?.authUserId && repProfileExists && managerProfile) {
-        activeAssignmentToThisManagerExists = (await hasActiveAssignmentToManager(rep.authUserId, managerProfile.id)) === true
+      const managerProfileResult = await findProfileByEmail(managerEmailNormalized)
+      const managerProfileLookup: ManagerProfileLookupStatus =
+        managerProfileResult.status === 'found'
+          ? {
+              status: 'found',
+              profileId: managerProfileResult.profile.id,
+              role: managerProfileResult.profile.role,
+              isActive: managerProfileResult.profile.isActive,
+            }
+          : managerProfileResult.status === 'error'
+            ? { status: 'lookup_failed' }
+            : { status: 'not_found' }
+
+      // An assignment can only exist once a profile exists — skip the query
+      // (rather than misreport it) when the profile lookup itself didn't
+      // resolve to 'found'.
+      let existingAssignmentLookup: PreProvisioningSnapshot['existingAssignmentLookup'] = { status: 'none' }
+      if (repProfileLookup.status === 'found' && rep?.authUserId) {
+        existingAssignmentLookup = await findActiveAssignmentForRep(rep.authUserId)
       }
 
       const snapshot: PreProvisioningSnapshot = {
@@ -101,12 +131,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         repAuthUserId: rep?.authUserId ?? null,
         repPortalRole: rep?.portalRole ?? null,
         repIsActive: rep?.isActive ?? null,
-        repProfileExists,
+        repProfileLookup,
         managerEmail: entry.managerEmail,
-        managerProfileId: managerProfile?.id ?? null,
-        managerRole: managerProfile?.role ?? null,
-        managerIsActive: managerProfile?.isActive ?? null,
-        activeAssignmentToThisManagerExists,
+        managerProfileLookup,
+        existingAssignmentLookup,
       }
 
       const decision = decidePreProvisioningAction(snapshot)
@@ -128,11 +156,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // status — a profile created without its assignment succeeding is
       // NEVER reported as full success (requirement 7). ---
 
+      if (decision.action === 'skip_lookup_failed') {
+        results.push({ repEmail: entry.repEmail, managerEmail: entry.managerEmail, decision: decision.action, profileCreated: false, assigned: false, status: 'error', message: decision.reason })
+        continue
+      }
       if (decision.action === 'skip_already_done') {
         results.push({ repEmail: entry.repEmail, managerEmail: entry.managerEmail, decision: decision.action, profileCreated: false, assigned: false, status: 'skipped', message: 'Already fully provisioned and assigned — no action taken.' })
         continue
       }
-      if (decision.action === 'skip_rep_not_found_or_ineligible' || decision.action === 'skip_manager_not_found_or_ineligible') {
+      if (
+        decision.action === 'skip_rep_not_found_or_ineligible' ||
+        decision.action === 'skip_manager_not_found_or_ineligible' ||
+        decision.action === 'skip_assignment_conflict_different_manager'
+      ) {
         results.push({ repEmail: entry.repEmail, managerEmail: entry.managerEmail, decision: decision.action, profileCreated: false, assigned: false, status: 'skipped', message: decision.reason })
         continue
       }
@@ -159,10 +195,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // create_profile_and_assign or assign_only: attempt the assignment,
       // using the CALLER's own admin-scoped client (never service-role —
       // see the function header comment for why this matters).
+      const expectedManagerProfileId = managerProfileLookup.status === 'found' ? managerProfileLookup.profileId : null
       try {
         const { error: assignError } = await auth.supabase.rpc('assign_sales_rep', {
           p_rep_id: rep?.authUserId,
-          p_manager_id: snapshot.managerProfileId,
+          p_manager_id: expectedManagerProfileId,
         })
         if (assignError) {
           results.push({
@@ -185,6 +222,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           assigned: false,
           status: profileCreated ? 'profile_created_assignment_failed' : 'error',
           message: `Assignment threw: ${err instanceof Error ? err.message : 'unknown error'}`,
+        })
+        continue
+      }
+
+      // assign_sales_rep returned no error — but never trust that alone.
+      // Independently re-read the assignment before ever reporting
+      // full_success (requirement 3).
+      const verification = await findActiveAssignmentForRep(rep?.authUserId as string)
+      if (!isAssignmentVerified(verification, expectedManagerProfileId)) {
+        results.push({
+          repEmail: entry.repEmail,
+          managerEmail: entry.managerEmail,
+          decision: decision.action,
+          profileCreated,
+          assigned: false,
+          status: 'assignment_unverified',
+          message: 'assign_sales_rep returned no error, but the active assignment could not be independently confirmed afterward. Verify and retry manually.',
         })
         continue
       }

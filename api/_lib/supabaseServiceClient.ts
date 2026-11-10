@@ -1718,24 +1718,33 @@ export async function listSalesReps(): Promise<SalesRepSummary[] | null> {
     .sort((a, b) => a.fullName.localeCompare(b.fullName))
 }
 
-// Narrow, purpose-built check for one exact (rep, manager) pair — used by
-// pre-provisioning to decide idempotently whether assign_sales_rep still
-// needs to run. null on error (distinct from false) so a lookup failure is
-// never mistaken for "no assignment exists".
-export async function hasActiveAssignmentToManager(repProfileId: string, managerProfileId: string): Promise<boolean | null> {
+export type ActiveAssignmentLookupResult =
+  | { status: 'found'; managerProfileId: string }
+  | { status: 'none' }
+  | { status: 'lookup_failed' }
+
+// Narrow, purpose-built read for pre-provisioning: whichever ACTIVE
+// (unassigned_at IS NULL) assignment currently exists for this rep, to
+// WHATEVER manager — not pre-filtered to one expected manager, so a caller
+// can detect a conflict against a different one rather than silently
+// reassigning it. assign_sales_rep's own logic guarantees at most one
+// active row per rep (it unassigns any existing one before inserting the
+// new one), so .maybeSingle() is safe. 'lookup_failed' is distinct from
+// 'none' — a caller must never treat a failed read as "no assignment exists".
+export async function findActiveAssignmentForRep(repProfileId: string): Promise<ActiveAssignmentLookupResult> {
   const { data, error } = await getServiceClient()
     .from('rep_manager_assignments')
-    .select('id')
+    .select('manager_id')
     .eq('rep_id', repProfileId)
-    .eq('manager_id', managerProfileId)
     .is('unassigned_at', null)
-    .limit(1)
+    .maybeSingle()
 
   if (error) {
-    console.error('supabaseServiceClient: hasActiveAssignmentToManager lookup failed:', error.message)
-    return null
+    console.error('supabaseServiceClient: findActiveAssignmentForRep lookup failed:', error.message)
+    return { status: 'lookup_failed' }
   }
-  return (data?.length ?? 0) > 0
+  if (!data) return { status: 'none' }
+  return { status: 'found', managerProfileId: data.manager_id as string }
 }
 
 // Phase 1A real-employee onboarding (November 2026) — TEMPORARY, explicit
