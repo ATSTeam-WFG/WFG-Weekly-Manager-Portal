@@ -23,6 +23,9 @@ import SalesRepManagement from './components/SalesRepManagement'
 import SalesAdminShell from './components/SalesAdminShell'
 import SalesRepDashboard from './components/SalesRepDashboard'
 import MyReps from './components/MyReps'
+import ManagerPortalShell, { type ManagerDestination } from './components/ManagerPortalShell'
+import ManagerMySalesReps from './components/ManagerMySalesReps'
+import ManagerSalesRepReports from './components/ManagerSalesRepReports'
 import { supabase } from './lib/supabaseClient'
 import { listMyPendingConsentRequests, getCurrentConsentPolicy } from './lib/videoConsentService'
 import type { MediaConsent, ConsentPolicy } from './lib/videoPresenterConsent'
@@ -106,10 +109,11 @@ function App() {
   // leadershipReportOpen/videoCreationOpen) — App.tsx remains the sole owner
   // of which destination is showing.
   const [salesRepManagementOpen, setSalesRepManagementOpen] = useState(false)
-  // Phase 1B: a Manager's own small "My Reps" review screen, toggled
-  // alongside their Dashboard exactly the way myReportOpen toggles a
-  // dual-role Admin between AdminDashboard and their own Manager report.
+  // Secondary Manager review view. The Manager's primary destinations are
+  // managerTab; this flag only opens the existing MyReps approve/reject flow
+  // from its clearly labeled Review Reports action, never a fourth tab.
   const [myRepsOpen, setMyRepsOpen] = useState(false)
+  const [managerTab, setManagerTab] = useState<ManagerDestination>('dashboard')
   // Phase 1A: navigation + page shell only — no data, no sub-state of its
   // own yet. Declared here (before every authStatus-gated early return),
   // alongside every other top-level destination flag, for the same reason
@@ -859,6 +863,70 @@ function App() {
     setPendingConsentRequests((prev) => prev.filter((r) => r.id !== consentId))
   }
 
+  const managerReportWorkspace = (
+    <>
+      {view === 'dashboard' && (
+        <Dashboard
+          status={status}
+          managerId={managerId ?? ''}
+          statusLoaded={statusLoaded}
+          statusLoadError={statusLoadError}
+          reminderDismissed={reminderDismissed}
+          onDismissReminder={() => setReminderDismissed(true)}
+          onStart={() => setView('form')}
+          onContinue={() => setView('form')}
+          onEditSubmitted={() => setView('edit-submitted')}
+          onViewHistoryEntry={handleViewHistoryEntry}
+        />
+      )}
+      {view === 'form' && (
+        <ReportForm
+          initialData={reportData}
+          legacyReference={legacyReference}
+          leaderName={displayName}
+          lockMessage={lockMessage}
+          onBack={() => {
+            setLockMessage(null)
+            setView('dashboard')
+          }}
+          onSaveDraft={handleSaveDraft}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+          submitFailureMessage={submitFailureMessage}
+        />
+      )}
+      {view === 'submitted' && (
+        <SubmittedReport data={reportData} submittedAt={submittedAt} onBack={() => setView('dashboard')} />
+      )}
+      {view === 'edit-submitted' && (
+        <ReportForm
+          initialData={reportData}
+          legacyReference={legacyReference}
+          leaderName={displayName}
+          lockMessage={lockMessage}
+          onBack={() => {
+            setLockMessage(null)
+            setView('dashboard')
+          }}
+          onSaveDraft={handleSaveDraft}
+          onSubmit={handleSubmit}
+          isEditingSubmitted
+          onSaveChanges={handleSaveChanges}
+        />
+      )}
+      {view === 'history' && historyEntry && (
+        <HistoricalReportView
+          managerId={managerId ?? ''}
+          weekStartDate={historyEntry.weekStartDate}
+          weekLabel={historyEntry.weekLabel}
+          status={historyEntry.status}
+          submittedAt={historyEntry.submittedAt}
+          onBack={() => setView('dashboard')}
+        />
+      )}
+    </>
+  )
+
   return (
     <div className="app-shell">
       {pendingLeaveAction && (
@@ -959,6 +1027,28 @@ function App() {
             )}
           </AdminShell>
         )
+      ) : profile?.role === 'manager' ? (
+        <ManagerPortalShell
+          current={managerTab}
+          onNavigate={(destination) => {
+            setManagerTab(destination)
+            setMyRepsOpen(false)
+          }}
+          dashboard={managerReportWorkspace}
+          mySalesReps={myRepsOpen ? (
+            <MyReps managerId={managerId ?? ''} onBack={() => setMyRepsOpen(false)} />
+          ) : (
+            <ManagerMySalesReps managerName={displayName} onReviewReports={() => setMyRepsOpen(true)} />
+          )}
+          salesRepReports={(
+            <ManagerSalesRepReports
+              onReviewReports={() => {
+                setManagerTab('my-sales-reps')
+                setMyRepsOpen(true)
+              }}
+            />
+          )}
+        />
       ) : (
         <>
           {isAdmin && myReportOpen && (
@@ -966,87 +1056,7 @@ function App() {
               ← Back to Admin Dashboard
             </button>
           )}
-          {/* Phase 1B: a plain Manager's own small "My Reps" review toggle.
-              Deliberately gated on the real 'manager' role, not isSubmitter —
-              a dual-role Admin viewing their own report here never has any
-              assigned sales reps (assign_sales_rep only ever targets a
-              profile with role='manager'), so the link would be meaningless
-              noise for that case and is simply omitted. */}
-          {profile?.role === 'manager' &&
-            (myRepsOpen ? (
-              <button type="button" className="link-btn back-link" onClick={() => setMyRepsOpen(false)}>
-                ← Back to Dashboard
-              </button>
-            ) : (
-              <button type="button" className="link-btn back-link" onClick={() => setMyRepsOpen(true)}>
-                My Reps →
-              </button>
-            ))}
-          {myRepsOpen ? (
-            <MyReps managerId={managerId ?? ''} onBack={() => setMyRepsOpen(false)} />
-          ) : (
-            <>
-          {view === 'dashboard' && (
-            <Dashboard
-              status={status}
-              managerId={managerId ?? ''}
-              statusLoaded={statusLoaded}
-              statusLoadError={statusLoadError}
-              reminderDismissed={reminderDismissed}
-              onDismissReminder={() => setReminderDismissed(true)}
-              onStart={() => setView('form')}
-              onContinue={() => setView('form')}
-              onEditSubmitted={() => setView('edit-submitted')}
-              onViewHistoryEntry={handleViewHistoryEntry}
-            />
-          )}
-          {view === 'form' && (
-            <ReportForm
-              initialData={reportData}
-              legacyReference={legacyReference}
-              leaderName={displayName}
-              lockMessage={lockMessage}
-              onBack={() => {
-                setLockMessage(null)
-                setView('dashboard')
-              }}
-              onSaveDraft={handleSaveDraft}
-              onSubmit={handleSubmit}
-              isSubmitting={isSubmitting}
-              submitFailureMessage={submitFailureMessage}
-            />
-          )}
-          {view === 'submitted' && (
-            <SubmittedReport data={reportData} submittedAt={submittedAt} onBack={() => setView('dashboard')} />
-          )}
-          {view === 'edit-submitted' && (
-            <ReportForm
-              initialData={reportData}
-              legacyReference={legacyReference}
-              leaderName={displayName}
-              lockMessage={lockMessage}
-              onBack={() => {
-                setLockMessage(null)
-                setView('dashboard')
-              }}
-              onSaveDraft={handleSaveDraft}
-              onSubmit={handleSubmit}
-              isEditingSubmitted
-              onSaveChanges={handleSaveChanges}
-            />
-          )}
-          {view === 'history' && historyEntry && (
-            <HistoricalReportView
-              managerId={managerId ?? ''}
-              weekStartDate={historyEntry.weekStartDate}
-              weekLabel={historyEntry.weekLabel}
-              status={historyEntry.status}
-              submittedAt={historyEntry.submittedAt}
-              onBack={() => setView('dashboard')}
-            />
-          )}
-            </>
-          )}
+          {managerReportWorkspace}
         </>
       )}
     </div>

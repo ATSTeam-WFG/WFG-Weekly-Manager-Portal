@@ -1,0 +1,67 @@
+.manager-portal-shell {
+  width: 100%;
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 8px 24px 24px;
+  box-sizing: border-box;
+}
+
+.manager-portal-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.manager-portal-tab {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--muted-gray);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.manager-portal-tab:hover {
+  color: var(--espresso);
+}
+
+.manager-portal-tab-active,
+.manager-portal-tab-active:hover {
+  color: var(--terracotta);
+  border-bottom-color: var(--terracotta);
+}
+
+.manager-portal-tab:focus-visible {
+  outline: 2px solid var(--terracotta);
+  outline-offset: -2px;
+}
+
+.manager-portal-panel {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .manager-portal-shell {
+    padding: 4px 12px 20px;
+  }
+
+  .manager-portal-tabs {
+    gap: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .manager-portal-tab {
+    flex: 0 0 auto;
+    padding: 10px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+}
