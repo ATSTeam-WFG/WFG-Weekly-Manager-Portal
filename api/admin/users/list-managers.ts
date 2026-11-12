@@ -47,7 +47,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const managers = await listActiveManagers()
-    return res.status(200).json({ managers })
+    const scopedManagers = auth.role === 'sales_admin' ? managers.map(({ id, fullName }) => ({ id, fullName, email: '' })) : managers
+    return res.status(200).json({ managers: scopedManagers })
   } catch (err) {
     console.error('admin/users/list-managers: unexpected error:', err)
     return sendError(res, 500, 'UNKNOWN', 'An unexpected error occurred.')

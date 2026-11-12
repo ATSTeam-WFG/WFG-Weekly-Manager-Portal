@@ -9,6 +9,7 @@ import {
   type RosterEntrySnapshot,
   type EmployeeRecordSnapshot,
 } from './adminUserManagement.js'
+import { decideSalesRepProfileUpdate, type SalesRepProfileTarget } from './salesRepProfileUpdate.js'
 
 // This is the ONLY file in the repo permitted to reference
 // SUPABASE_SECRET_KEY. Every caller gets a narrow, purpose-built function
@@ -1025,6 +1026,7 @@ export type SetManagedUserActiveOutcome =
   | { status: 'ok' }
   | { status: 'not_found' }
   | { status: 'forbidden' }
+  | { status: 'partial_failure' }
   | { status: 'error' }
 
 // Deactivate/reactivate — from api/admin/users/set-active.ts, callable by
@@ -1054,7 +1056,7 @@ export async function setManagedUserActive(
 
   const { data: rosterRow, error: rosterSelectError } = await client
     .from('approved_employees')
-    .select('id, portal_role')
+    .select('id, portal_role, is_active')
     .eq('email_normalized', emailNormalized)
     .maybeSingle()
 
@@ -1067,30 +1069,337 @@ export async function setManagedUserActive(
     return { status: 'forbidden' }
   }
 
-  const { error: rosterUpdateError } = await client
+  // Resolve the profile before writing the roster so a lookup failure cannot
+  // leave the two active-state sources split.
+  const profileLookup = await findProfileByEmail(emailNormalized)
+  if (profileLookup.status === 'error') return { status: 'error' }
+
+  const profileId = profileLookup.status === 'found' ? profileLookup.profile.id : null
+  const originalRosterIsActive = rosterRow.is_active as boolean
+  const originalProfileIsActive = profileLookup.status === 'found' ? profileLookup.profile.isActive : null
+  let rosterUpdated = false
+  let profileUpdated = false
+
+  const rollbackRoster = async (): Promise<boolean> => {
+    if (!rosterUpdated) return true
+    const { data, error } = await client
+      .from('approved_employees')
+      .update({ is_active: originalRosterIsActive })
+      .eq('id', rosterRow.id)
+      .eq('portal_role', rosterRow.portal_role)
+      .eq('is_active', isActive)
+      .select('id, is_active')
+    return !error && data?.length === 1 && data[0].id === rosterRow.id && data[0].is_active === originalRosterIsActive
+  }
+
+  const rollbackProfile = async (): Promise<boolean> => {
+    if (!profileUpdated || !profileId || originalProfileIsActive === null) return true
+    let profileRollbackQuery = client
+      .from('profiles')
+      .update({ is_active: originalProfileIsActive })
+      .eq('id', profileId)
+      .eq('is_active', isActive)
+    if (restrictToPortalRole) profileRollbackQuery = profileRollbackQuery.eq('role', restrictToPortalRole)
+    const { data, error } = await profileRollbackQuery.select('id, is_active')
+    return !error && data?.length === 1 && data[0].id === profileId && data[0].is_active === originalProfileIsActive
+  }
+
+  const rollbackAndReport = async (reason: string): Promise<SetManagedUserActiveOutcome> => {
+    const profileRollback = await rollbackProfile()
+    const rosterRollback = await rollbackRoster()
+    const complete = profileRollback && rosterRollback
+    console.error(`supabaseServiceClient: setManagedUserActive ${complete ? 'rolled back' : 'PARTIAL FAILURE'} after ${reason}.`, {
+      approvedEmployeeId: rosterRow.id,
+      profileId,
+      profileRollback,
+      rosterRollback,
+    })
+    return complete ? { status: 'error' } : { status: 'partial_failure' }
+  }
+
+    const { data: rosterRows, error: rosterUpdateError } = await client
     .from('approved_employees')
     .update({ is_active: isActive })
-    .eq('email_normalized', emailNormalized)
+    .eq('id', rosterRow.id)
+      .eq('portal_role', rosterRow.portal_role)
+    .select('id, is_active')
 
   if (rosterUpdateError) {
     console.error('supabaseServiceClient: setManagedUserActive roster update failed:', rosterUpdateError.message)
-    return { status: 'error' }
+    return rollbackAndReport('roster update failure')
+  }
+  if (!rosterRows || rosterRows.length !== 1 || rosterRows[0].id !== rosterRow.id) {
+    rosterUpdated = !!rosterRows?.length
+    return rollbackAndReport('roster row verification failure')
+  }
+  rosterUpdated = true
+  if (rosterRows[0].is_active !== isActive) {
+    return rollbackAndReport('roster value verification failure')
   }
 
-  const profileLookup = await findProfileByEmail(emailNormalized)
-  if (profileLookup.status === 'error') return { status: 'error' }
-  if (profileLookup.status === 'found') {
-    const { error: profileUpdateError } = await client
-      .from('profiles')
-      .update({ is_active: isActive })
-      .eq('id', profileLookup.profile.id)
+  if (profileId) {
+    let profileUpdateQuery = client.from('profiles').update({ is_active: isActive }).eq('id', profileId)
+    if (restrictToPortalRole) profileUpdateQuery = profileUpdateQuery.eq('role', restrictToPortalRole)
+    const { data: profileRows, error: profileUpdateError } = await profileUpdateQuery.select('id, is_active')
 
     if (profileUpdateError) {
       console.error('supabaseServiceClient: setManagedUserActive profile update failed:', profileUpdateError.message)
-      return { status: 'error' }
+      return rollbackAndReport('profile update failure')
+    }
+    if (!profileRows || profileRows.length !== 1 || profileRows[0].id !== profileId) {
+      profileUpdated = !!profileRows?.length
+      return rollbackAndReport('profile row verification failure')
+    }
+    profileUpdated = true
+    if (profileRows[0].is_active !== isActive) {
+      return rollbackAndReport('profile value verification failure')
     }
   }
 
+  return { status: 'ok' }
+}
+
+export interface UpdateSalesRepProfileInput {
+  fullName: string
+  email: string
+}
+
+export type UpdateSalesRepProfileOutcome =
+  | { status: 'ok' }
+  | { status: 'not_found' }
+  | { status: 'forbidden' }
+  | { status: 'invalid_domain' }
+  | { status: 'email_conflict' }
+  | { status: 'auth_identity_unresolved' }
+  | { status: 'partial_failure' }
+  | { status: 'error' }
+
+// Dedicated Sales Rep profile update. This deliberately does not reuse
+// updateManagedEmployee: that operation is Admin-only and can change role
+// and weekly-report permissions. This service accepts only name/email,
+// verifies the actual approved_employees role by stable row id, and leaves
+// role, is_active, assignment rows, and reports untouched.
+export async function updateSalesRepProfile(
+  id: string,
+  updates: UpdateSalesRepProfileInput,
+  actorUserId: string,
+): Promise<UpdateSalesRepProfileOutcome> {
+  const client = getServiceClient()
+  const fullName = updates.fullName.trim()
+  const email = updates.email.trim()
+  const emailNormalized = normalizeEmail(email)
+
+  const { data: targetRow, error: targetError } = await client
+    .from('approved_employees')
+    .select('id, full_name, email, email_normalized, portal_role, account_created_at, auth_user_id')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (targetError) {
+    console.error('supabaseServiceClient: updateSalesRepProfile target lookup failed:', targetError.message)
+    return { status: 'error' }
+  }
+
+  const target: SalesRepProfileTarget | null = targetRow
+    ? { id: targetRow.id, emailNormalized: targetRow.email_normalized, portalRole: targetRow.portal_role }
+    : null
+
+  let emailConflictExists = false
+  if (target) {
+    const { data: conflictRow, error: conflictError } = await client
+      .from('approved_employees')
+      .select('id')
+      .eq('email_normalized', emailNormalized)
+      .neq('id', id)
+      .maybeSingle()
+    if (conflictError) {
+      console.error('supabaseServiceClient: updateSalesRepProfile email-conflict check failed:', conflictError.message)
+      return { status: 'error' }
+    }
+    emailConflictExists = !!conflictRow
+  }
+
+  const decision = decideSalesRepProfileUpdate(target, emailNormalized, emailConflictExists)
+  if (decision.action !== 'update') return { status: decision.action }
+
+  const emailChanging = emailNormalized !== targetRow!.email_normalized
+  const accountCreated = targetRow!.account_created_at !== null
+  const authUserId = targetRow!.auth_user_id as string | null
+
+  // Resolve a pre-existing profile by its current email before any write.
+  // Its actual role is checked independently; a corrupt roster/profile role
+  // mismatch fails closed instead of synchronizing an unrelated account.
+  const { data: existingProfile, error: profileLookupError } = await client
+    .from('profiles')
+    .select('id, full_name, email, role')
+    .eq('email', targetRow!.email_normalized)
+    .maybeSingle()
+  if (profileLookupError) {
+    console.error('supabaseServiceClient: updateSalesRepProfile profile lookup failed:', profileLookupError.message)
+    return { status: 'error' }
+  }
+  if (existingProfile && existingProfile.role !== 'sales_rep') {
+    console.error('supabaseServiceClient: updateSalesRepProfile refused a roster/profile role mismatch.', { approvedEmployeeId: id })
+    return { status: 'forbidden' }
+  }
+
+  // A created account must have a stable Auth id before its sign-in email
+  // can be changed. Never resolve Auth identities by scanning email.
+  if (emailChanging && accountCreated && !authUserId) {
+    console.error('supabaseServiceClient: updateSalesRepProfile refused an email change with unresolved Auth identity.', {
+      approvedEmployeeId: id,
+    })
+    return { status: 'auth_identity_unresolved' }
+  }
+
+  const originalRoster = {
+    fullName: targetRow!.full_name as string,
+    email: targetRow!.email as string,
+    emailNormalized: targetRow!.email_normalized as string,
+  }
+  const originalProfile = existingProfile
+    ? { fullName: existingProfile.full_name as string | null, email: existingProfile.email as string }
+    : null
+
+  let authEmailChanged = false
+  if (emailChanging && accountCreated) {
+    const { error: authUpdateError } = await client.auth.admin.updateUserById(authUserId!, {
+      email,
+      // Match the existing Super Admin edit behavior: the new sign-in email
+      // is immediately confirmed and NO notification/verification email is
+      // sent. This behavior is also surfaced in the Sales Admin edit UI.
+      email_confirm: true,
+    })
+    if (authUpdateError) {
+      const conflict = authUpdateError.code === 'email_exists' || authUpdateError.code === 'user_already_exists'
+      if (!conflict) console.error('supabaseServiceClient: updateSalesRepProfile Auth email update failed:', authUpdateError.message)
+      return conflict ? { status: 'email_conflict' } : { status: 'error' }
+    }
+    authEmailChanged = true
+  }
+
+  let rosterUpdated = false
+  let profileUpdated = false
+
+  const rollbackAuthEmail = async (): Promise<boolean> => {
+    if (!authEmailChanged || !authUserId) return true
+    const { error } = await client.auth.admin.updateUserById(authUserId, {
+      email: originalRoster.email,
+      email_confirm: true,
+    })
+    return !error
+  }
+
+  const rollbackRoster = async (): Promise<boolean> => {
+    if (!rosterUpdated) return true
+    const { data, error } = await client
+      .from('approved_employees')
+      .update({ full_name: originalRoster.fullName, email: originalRoster.email, email_normalized: originalRoster.emailNormalized })
+      .eq('id', id)
+      .eq('portal_role', 'sales_rep')
+      .select('id, full_name, email_normalized')
+    return !error && data?.length === 1 && data[0].id === id && data[0].full_name === originalRoster.fullName && data[0].email_normalized === originalRoster.emailNormalized
+  }
+
+  const rollbackProfile = async (): Promise<boolean> => {
+    if (!profileUpdated || !existingProfile || !originalProfile) return true
+    const { data, error } = await client
+      .from('profiles')
+      .update({ full_name: originalProfile.fullName, email: originalProfile.email })
+      .eq('id', existingProfile.id)
+      .eq('role', 'sales_rep')
+      .select('id, full_name, email')
+    return !error && data?.length === 1 && data[0].id === existingProfile.id && data[0].full_name === originalProfile.fullName && data[0].email === originalProfile.email
+  }
+
+  const rollbackAndReport = async (reason: string): Promise<UpdateSalesRepProfileOutcome> => {
+    const profileRollback = await rollbackProfile()
+    const rosterRollback = await rollbackRoster()
+    const authRollback = await rollbackAuthEmail()
+    const complete = profileRollback && rosterRollback && authRollback
+    console.error(`supabaseServiceClient: updateSalesRepProfile ${complete ? 'rolled back' : 'PARTIAL FAILURE'} after ${reason}.`, {
+      approvedEmployeeId: id,
+      actorUserId,
+      profileRollback,
+      rosterRollback,
+      authRollback,
+    })
+    return complete ? { status: 'error' } : { status: 'partial_failure' }
+  }
+
+  const { data: rosterRows, error: rosterUpdateError } = await client
+    .from('approved_employees')
+    .update({ full_name: fullName, email, email_normalized: emailNormalized })
+    .eq('id', id)
+    .eq('portal_role', 'sales_rep')
+    .select('id, full_name, email_normalized, portal_role')
+
+  if (rosterUpdateError) {
+    console.error('supabaseServiceClient: updateSalesRepProfile roster update failed:', rosterUpdateError.message)
+    return rollbackAndReport('roster update failure')
+  }
+  if (!rosterRows || rosterRows.length !== 1 || rosterRows[0].id !== id) {
+    rosterUpdated = !!rosterRows?.length
+    return rollbackAndReport('roster row verification failure')
+  }
+  rosterUpdated = true
+  if (
+    rosterRows[0].full_name !== fullName ||
+    rosterRows[0].email_normalized !== emailNormalized ||
+    rosterRows[0].portal_role !== 'sales_rep'
+  ) {
+    return rollbackAndReport('roster value verification failure')
+  }
+
+  if (existingProfile) {
+    const { data: profileRows, error: profileUpdateError } = await client
+      .from('profiles')
+      .update({ full_name: fullName, email: emailNormalized })
+      .eq('id', existingProfile.id)
+      .eq('role', 'sales_rep')
+      .select('id, full_name, email, role')
+
+    if (profileUpdateError) {
+      console.error('supabaseServiceClient: updateSalesRepProfile profile update failed:', profileUpdateError.message)
+      return rollbackAndReport('profile update failure')
+    }
+    if (!profileRows || profileRows.length !== 1 || profileRows[0].id !== existingProfile.id) {
+      profileUpdated = !!profileRows?.length
+      return rollbackAndReport('profile row verification failure')
+    }
+    profileUpdated = true
+    if (
+      profileRows[0].full_name !== fullName ||
+      profileRows[0].email !== emailNormalized ||
+      profileRows[0].role !== 'sales_rep'
+    ) {
+      return rollbackAndReport('profile value verification failure')
+    }
+  }
+
+  const changedFields = [
+    ...(originalRoster.fullName !== fullName ? ['full_name'] : []),
+    ...(originalRoster.emailNormalized !== emailNormalized ? ['email'] : []),
+  ]
+  if (changedFields.length > 0) {
+    // Structured server log is the existing no-migration audit mechanism.
+    // Avoid logging tokens or Auth credentials; include before/after business
+    // values so an authorized operator can reconstruct the profile change.
+    console.info(
+      'audit.sales_rep_profile_updated',
+      JSON.stringify({
+        version: 1,
+        actorUserId,
+        approvedEmployeeId: id,
+        changedFields,
+        before: { fullName: originalRoster.fullName, email: originalRoster.emailNormalized },
+        after: { fullName, email: emailNormalized },
+        emailConfirmedImmediately: emailChanging && accountCreated,
+        notificationEmailSent: false,
+        occurredAt: new Date().toISOString(),
+      }),
+    )
+  }
   return { status: 'ok' }
 }
 

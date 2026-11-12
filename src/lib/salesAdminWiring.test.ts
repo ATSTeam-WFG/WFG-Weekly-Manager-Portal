@@ -29,11 +29,13 @@ const dir = path.dirname(fileURLToPath(import.meta.url))
 const appSrc = readFileSync(path.join(dir, '..', 'App.tsx'), 'utf8')
 const salesAdminShellSrc = readFileSync(path.join(dir, '..', 'components', 'SalesAdminShell.tsx'), 'utf8')
 const salesAdminReportsSrc = readFileSync(path.join(dir, '..', 'components', 'SalesAdminReports.tsx'), 'utf8')
+const repReportsServiceSrc = readFileSync(path.join(dir, 'repReportsService.ts'), 'utf8')
 const salesRepManagementSrc = readFileSync(path.join(dir, '..', 'components', 'SalesRepManagement.tsx'), 'utf8')
 const typesSrc = readFileSync(path.join(dir, '..', 'types.ts'), 'utf8')
 const adminAuthSrc = readFileSync(path.join(dir, '..', '..', 'api', '_lib', 'adminAuth.ts'), 'utf8')
 const apiUsersDir = path.join(dir, '..', '..', 'api', 'admin', 'users')
 const inviteSalesRepSrc = readFileSync(path.join(apiUsersDir, 'invite-sales-rep.ts'), 'utf8')
+const updateSalesRepSrc = readFileSync(path.join(apiUsersDir, 'update-sales-rep.ts'), 'utf8')
 const listSalesRepsSrc = readFileSync(path.join(apiUsersDir, 'list-sales-reps.ts'), 'utf8')
 const listManagersSrc = readFileSync(path.join(apiUsersDir, 'list-managers.ts'), 'utf8')
 const setActiveSrc = readFileSync(path.join(apiUsersDir, 'set-active.ts'), 'utf8')
@@ -41,6 +43,7 @@ const updateSrc = readFileSync(path.join(apiUsersDir, 'update.ts'), 'utf8')
 const invokeManagerOnlySrc = readFileSync(path.join(apiUsersDir, 'invite.ts'), 'utf8')
 const listSrc = readFileSync(path.join(apiUsersDir, 'list.ts'), 'utf8')
 const supabaseServiceClientSrc = readFileSync(path.join(dir, '..', '..', 'api', '_lib', 'supabaseServiceClient.ts'), 'utf8')
+const salesRepManagementServiceSrc = readFileSync(path.join(dir, 'salesRepManagementService.ts'), 'utf8')
 
 describe('src/types.ts — ProfileRole recognizes sales_admin', () => {
   test('ProfileRole includes sales_admin alongside the three existing roles', () => {
@@ -68,9 +71,18 @@ describe('App.tsx — routing never lets a sales_admin profile fall through to a
 })
 
 describe('SalesAdminShell.tsx — only the two authorized destinations are reachable', () => {
-  test('renders SalesRepManagement restricted, and SalesAdminReports — nothing else', () => {
+  test('renders exactly two accessible tabs: Sales Representatives and Report Status', () => {
+    assert.match(salesAdminShellSrc, /type SalesAdminDestination = 'sales-reps' \| 'reports'/)
+    assert.equal((salesAdminShellSrc.match(/role="tab"/g) ?? []).length, 2)
+    assert.match(salesAdminShellSrc, /Sales Representatives/)
+    assert.match(salesAdminShellSrc, /Report Status/)
+    assert.doesNotMatch(salesAdminShellSrc, /Reporting by Manager|by-manager|SalesAdminManagerOverview/)
+  })
+
+  test('renders SalesRepManagement restricted, and SalesAdminReports inside their tab panels', () => {
     assert.match(salesAdminShellSrc, /<SalesRepManagement[\s\S]*restricted/)
     assert.match(salesAdminShellSrc, /<SalesAdminReports/)
+    assert.match(salesAdminShellSrc, /role="tabpanel"/)
   })
 
   test('never imports AdminShell, AdminDashboard, UserManagement, WeeklySummary, LeadershipReportGate, VideoCreation, or ReportsAnalytics — no path to any Full-Admin-only or Manager-only screen', () => {
@@ -86,6 +98,23 @@ describe('SalesAdminShell.tsx — only the two authorized destinations are reach
 })
 
 describe('SalesAdminReports.tsx — read-only, no review/approve/reject action exists', () => {
+  test('loads current-week rep reports through the existing RLS-scoped client query and supports manager/week/status filters', () => {
+    assert.match(salesAdminReportsSrc, /fetchRepReportsForWeek\(week\.weekStartDate\)/)
+    assert.match(repReportsServiceSrc, /rep_reports_select_sales_admin/)
+    assert.match(salesAdminReportsSrc, /aria-label="Filter by Manager"/)
+    assert.match(salesAdminReportsSrc, /aria-label="Filter by reporting week"/)
+    assert.match(salesAdminReportsSrc, /aria-label="Filter by report status"/)
+    assert.match(salesAdminReportsSrc, /Reporting by Manager/)
+  })
+
+  test('View Report is enabled only for submitted rows and renders a read-only report detail', () => {
+    assert.match(salesAdminReportsSrc, /disabled=\{!row\.report \|\| row\.report\.status !== 'submitted'\}/)
+    assert.match(salesAdminReportsSrc, /onClick=\{\(\) => setSelectedRow\(row\)\}/)
+    assert.match(salesAdminReportsSrc, /role="dialog"/)
+    assert.match(salesAdminReportsSrc, /Read-only report/)
+    assert.match(salesAdminReportsSrc, /ReportContent report=\{selectedRow\.report\}/)
+  })
+
   test('never calls review_rep_report, reviewRepReport, or any approve/reject RPC wrapper (the function body text may still explain the RPC by name in a comment)', () => {
     for (const forbidden of ['review_rep_report(', "'review_rep_report'", 'reviewRepReport(', 'approveReport(', 'rejectReport(']) {
       assert.equal(salesAdminReportsSrc.includes(forbidden), false, `SalesAdminReports.tsx must never call ${forbidden}`)
@@ -96,8 +125,10 @@ describe('SalesAdminReports.tsx — read-only, no review/approve/reject action e
     assert.equal(salesAdminReportsSrc.includes('grantLateSubmissionException'), false)
   })
 
-  test('fetches reports via the same RLS-scoped fetchRepReport every other screen uses, not a new privileged path', () => {
-    assert.match(salesAdminReportsSrc, /import \{ fetchRepReport \} from '\.\.\/lib\/repReportsService'/)
+  test('fetches reports through a RLS-scoped existing rep_reports query, not a new privileged path', () => {
+    assert.match(salesAdminReportsSrc, /import \{ fetchRepReportsForWeek, type RepReport \} from '\.\.\/lib\/repReportsService'/)
+    assert.match(repReportsServiceSrc, /export async function fetchRepReportsForWeek/)
+    assert.match(repReportsServiceSrc, /supabase\s+\.from\('rep_reports'\)/)
   })
 })
 
@@ -121,6 +152,88 @@ describe('SalesRepManagement.tsx — restricted prop hides the one action Sales 
     const guardIndex = salesRepManagementSrc.lastIndexOf('{!restricted && (', linkIndex)
     assert.ok(guardIndex !== -1 && guardIndex < linkIndex, 'the back link must be wrapped in a {!restricted && (...)} guard')
   })
+
+  test('Sales Admin account lifecycle actions use the existing scoped endpoint and non-destructive assignment RPC', () => {
+    assert.match(salesRepManagementSrc, /setSalesRepActive\(rep\.email, action === 'reactivate'\)/)
+    assert.match(salesRepManagementSrc, /await unassignSalesRep\(rep\.profileId\)/)
+    assert.match(salesRepManagementSrc, /Remove Assignment/)
+    assert.match(salesRepManagementSrc, /report history remain unchanged/)
+    assert.doesNotMatch(salesRepManagementSrc, /deleteSalesRep|\.delete\(/)
+  })
+
+  test('activation and assignment removal require the in-app confirmation dialog', () => {
+    assert.match(salesRepManagementSrc, /role="alertdialog"/)
+    assert.match(salesRepManagementSrc, /Confirm Remove Manager Assignment|Remove Manager Assignment/)
+    assert.match(salesRepManagementSrc, /setPendingRepAction\(\{ rep, action: rep\.isActive \? 'deactivate' : 'reactivate' \}\)/)
+  })
+
+  test('the Sales Admin activation UI preserves the server partial_failure warning and tells users not to retry', () => {
+    assert.match(setActiveSrc, /case 'partial_failure':/)
+    assert.match(setActiveSrc, /Do not retry; contact support for reconciliation\./)
+    assert.match(salesRepManagementServiceSrc, /body\?\.error === 'PARTIAL_FAILURE' \? \{ status: 'partial_failure' \}/)
+    assert.match(salesRepManagementSrc, /This status change may be incomplete\. Do not retry; contact support for reconciliation\./)
+    assert.match(supabaseServiceClientSrc, /\.eq\('portal_role', rosterRow\.portal_role\)/)
+    assert.match(supabaseServiceClientSrc, /profileUpdateQuery = profileUpdateQuery\.eq\('role', restrictToPortalRole\)/)
+  })
+})
+
+describe('Sales Admin Sales Rep edit — a dedicated, narrowly scoped path', () => {
+  test('the endpoint authenticates Admin or Sales Admin before calling the server-only update method', () => {
+    assert.match(updateSalesRepSrc, /authenticateAdminOrSalesAdmin\(/)
+    assert.match(updateSalesRepSrc, /if \(!auth\.ok\)/)
+    assert.match(updateSalesRepSrc, /updateSalesRepProfile\(id, \{ fullName, email \}, auth\.userId\)/)
+    assert.doesNotMatch(updateSalesRepSrc, /body\.role|submitsWeeklyReport|isActive/)
+  })
+
+  test('the privileged service targets a stable roster id, rejects non-sales_rep targets, and never writes role or activation fields', () => {
+    const fnStart = supabaseServiceClientSrc.indexOf('export async function updateSalesRepProfile(')
+    const fnEnd = supabaseServiceClientSrc.indexOf('\n}\n', fnStart)
+    assert.ok(fnStart !== -1 && fnEnd > fnStart)
+    const fn = supabaseServiceClientSrc.slice(fnStart, fnEnd)
+    assert.match(fn, /\.eq\('id', id\)/)
+    assert.match(fn, /decideSalesRepProfileUpdate\(target, emailNormalized, emailConflictExists\)/)
+    assert.match(fn, /portalRole: targetRow\.portal_role/)
+    assert.match(fn, /\.eq\('portal_role', 'sales_rep'\)/)
+    assert.match(fn, /\.eq\('role', 'sales_rep'\)/)
+    assert.match(fn, /existingProfile\.role !== 'sales_rep'/)
+    assert.doesNotMatch(fn, /portal_role:\s*['"]|role:\s*['"]|is_active|submits_weekly_report/)
+  })
+
+  test('email changes reject duplicates, use auth_user_id, confirm immediately without sending email, and roll back every changed store', () => {
+    const fnStart = supabaseServiceClientSrc.indexOf('export async function updateSalesRepProfile(')
+    const fnEnd = supabaseServiceClientSrc.indexOf('\n}\n', fnStart)
+    const fn = supabaseServiceClientSrc.slice(fnStart, fnEnd)
+    assert.match(fn, /\.eq\('email_normalized', emailNormalized\)\s*\.neq\('id', id\)/)
+    assert.match(fn, /updateUserById\(authUserId!,\s*\{[\s\S]*?email_confirm: true/)
+    assert.match(fn, /auth_identity_unresolved/)
+    assert.match(fn, /rollbackProfile\(\)[\s\S]*rollbackRoster\(\)[\s\S]*rollbackAuthEmail\(\)/)
+    assert.match(fn, /notificationEmailSent: false/)
+    assert.equal(/sendEmail|send.*notification/i.test(fn), false)
+  })
+
+  test('successful profile edits emit a server-side structured audit event with actor, target, changed fields, before/after, and timestamp', () => {
+    const fnStart = supabaseServiceClientSrc.indexOf('export async function updateSalesRepProfile(')
+    const fnEnd = supabaseServiceClientSrc.indexOf('\n}\n', fnStart)
+    const fn = supabaseServiceClientSrc.slice(fnStart, fnEnd)
+    assert.match(fn, /console\.info\([\s\S]*audit\.sales_rep_profile_updated/)
+    for (const field of ['actorUserId', 'approvedEmployeeId', 'changedFields', 'before:', 'after:', 'occurredAt']) {
+      assert.ok(fn.includes(field), `audit event should include ${field}`)
+    }
+  })
+
+  test('the browser service sends only stable id, full name, and email to the dedicated route', () => {
+    const fnStart = salesRepManagementServiceSrc.indexOf('export async function updateSalesRep(')
+    const fnEnd = salesRepManagementServiceSrc.indexOf('\n}', fnStart)
+    assert.ok(fnStart !== -1 && fnEnd > fnStart)
+    const fn = salesRepManagementServiceSrc.slice(fnStart, fnEnd)
+    assert.match(fn, /fetch\('\/api\/admin\/users\/update-sales-rep'/)
+    assert.match(fn, /JSON\.stringify\(\{ id, fullName, email \}\)/)
+    assert.doesNotMatch(fn, /SUPABASE_SECRET_KEY|service_role|portal_role|role:/)
+    assert.match(salesRepManagementSrc, /Edit Sales Rep/)
+    assert.match(salesRepManagementSrc, /Full Name/)
+    assert.match(salesRepManagementSrc, /WFG Email/)
+    assert.match(salesRepManagementSrc, /No notification or verification email is sent/)
+  })
 })
 
 describe('Shared Admin/Sales-Admin endpoints use authenticateAdminOrSalesAdmin, not the original admin-only authenticateAdmin', () => {
@@ -138,6 +251,7 @@ describe('Shared Admin/Sales-Admin endpoints use authenticateAdminOrSalesAdmin, 
   test('list-managers.ts', () => {
     assert.match(listManagersSrc, /import \{ authenticateAdminOrSalesAdmin \} from/)
     assert.match(listManagersSrc, /authenticateAdminOrSalesAdmin\(\{/)
+    assert.match(listManagersSrc, /auth\.role === 'sales_admin' \? managers\.map\(\(\{ id, fullName \}\) => \(\{ id, fullName, email: '' \}\)\) : managers/)
   })
 
   test('set-active.ts', () => {

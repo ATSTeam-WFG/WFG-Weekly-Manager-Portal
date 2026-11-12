@@ -60,12 +60,12 @@ describe('src/lib/adminUserManagementService.ts — client never sends a role', 
 })
 
 describe('src/components/UserManagement.tsx — the only UI entry point, Admin-only surface', () => {
-  test('renders a dedicated "+ Add Sales Admin" button, separate from "+ Add Employee"', () => {
+  test('renders a dedicated "+ Add Sales Admin" button, separate from "+ Add Manager"', () => {
     assert.match(userManagementSrc, /\+ Add Sales Admin/)
-    assert.match(userManagementSrc, /\+ Add Employee/)
+    assert.match(userManagementSrc, /\+ Add Manager/)
   })
 
-  test('the Sales Admin modal has its own, separate state from the Add Employee modal', () => {
+  test('the Sales Admin modal has its own, separate state from the Add Manager modal', () => {
     assert.match(userManagementSrc, /isAddSalesAdminModalOpen/)
     assert.match(userManagementSrc, /handleCreateSalesAdminAccountSubmit/)
   })

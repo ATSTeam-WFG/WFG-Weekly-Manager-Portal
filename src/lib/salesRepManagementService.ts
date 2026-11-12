@@ -123,6 +123,79 @@ export async function fetchActiveManagers(): Promise<ActiveManager[]> {
   return []
 }
 
+export type SetSalesRepActiveOutcome = { status: 'ok'; isActive: boolean } | { status: 'partial_failure' | 'error' }
+
+// Uses the existing Admin/Sales-Admin set-active endpoint. Its server-side
+// auth checks restrict a sales_admin to sales_rep targets before any write;
+// this wrapper never accepts a caller role or widens that authorization.
+export async function setSalesRepActive(email: string, isActive: boolean): Promise<SetSalesRepActiveOutcome> {
+  let accessToken: string
+  try {
+    accessToken = await getValidAccessToken()
+  } catch {
+    return { status: 'error' }
+  }
+
+  let response: Response
+  try {
+    response = await fetch('/api/admin/users/set-active', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, isActive }),
+    })
+  } catch {
+    return { status: 'error' }
+  }
+
+  const body = await response.json().catch(() => null)
+  if (!response.ok) return body?.error === 'PARTIAL_FAILURE' ? { status: 'partial_failure' } : { status: 'error' }
+  if (!body || typeof body.isActive !== 'boolean') return { status: 'error' }
+  return { status: 'ok', isActive: body.isActive }
+}
+
+export type UpdateSalesRepOutcome =
+  | { status: 'ok' }
+  | { status: 'not_found' | 'forbidden' | 'invalid_domain' | 'email_conflict' | 'auth_identity_unresolved' | 'partial_failure' | 'error' }
+
+const UPDATE_SALES_REP_ERROR_CODES: Record<string, Exclude<UpdateSalesRepOutcome['status'], 'ok'>> = {
+  NOT_FOUND: 'not_found',
+  FORBIDDEN: 'forbidden',
+  INVALID_DOMAIN: 'invalid_domain',
+  EMAIL_CONFLICT: 'email_conflict',
+  AUTH_IDENTITY_UNRESOLVED: 'auth_identity_unresolved',
+  PARTIAL_FAILURE: 'partial_failure',
+}
+
+// Name/email-only correction. The server independently checks active Admin
+// or Sales Admin authentication and the target's actual sales_rep role;
+// this browser service never receives or exposes a service-role credential.
+export async function updateSalesRep(id: string, fullName: string, email: string): Promise<UpdateSalesRepOutcome> {
+  let accessToken: string
+  try {
+    accessToken = await getValidAccessToken()
+  } catch {
+    return { status: 'error' }
+  }
+
+  let response: Response
+  try {
+    response = await fetch('/api/admin/users/update-sales-rep', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, fullName, email }),
+    })
+  } catch {
+    return { status: 'error' }
+  }
+
+  const body = await response.json().catch(() => null)
+  if (response.ok && body?.status === 'ok') return { status: 'ok' }
+  if (body && typeof body === 'object' && typeof body.error === 'string' && UPDATE_SALES_REP_ERROR_CODES[body.error]) {
+    return { status: UPDATE_SALES_REP_ERROR_CODES[body.error] }
+  }
+  return { status: 'error' }
+}
+
 export type InviteSalesRepOutcome =
   | { status: 'created' }
   | { status: 'already_created' }

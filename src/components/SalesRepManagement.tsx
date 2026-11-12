@@ -5,6 +5,8 @@ import {
   inviteSalesRep,
   assignSalesRep,
   unassignSalesRep,
+  setSalesRepActive,
+  updateSalesRep,
   grantLateSubmissionException,
   RepReportError,
   type SalesRep,
@@ -41,6 +43,8 @@ const STATUS_LABELS: Record<SalesRep['status'], string> = {
 }
 
 type StatusFilter = 'all' | SalesRep['status']
+
+type PendingRepAction = { rep: SalesRep; action: 'deactivate' | 'reactivate' | 'remove-assignment' } | null
 
 const STATUS_FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -103,6 +107,13 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
 
   const [rowActionId, setRowActionId] = useState<string | null>(null)
   const [rowMessage, setRowMessage] = useState<{ id: string; text: string; isError: boolean } | null>(null)
+  const [pendingRepAction, setPendingRepAction] = useState<PendingRepAction>(null)
+  const [confirmingRepAction, setConfirmingRepAction] = useState(false)
+  const [editingRep, setEditingRep] = useState<SalesRep | null>(null)
+  const [editFullName, setEditFullName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editMessage, setEditMessage] = useState<{ text: string; isError: boolean } | null>(null)
 
   // Grant Late Submission Exception — one expandable control per rep.
   const [expandedExceptionRepId, setExpandedExceptionRepId] = useState<string | null>(null)
@@ -196,6 +207,56 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
     }
   }
 
+  const handleOpenEdit = (rep: SalesRep) => {
+    setEditingRep(rep)
+    setEditFullName(rep.fullName)
+    setEditEmail(rep.email)
+    setEditMessage(null)
+  }
+
+  const handleCloseEdit = () => {
+    if (savingEdit) return
+    setEditingRep(null)
+    setEditMessage(null)
+  }
+
+  const handleSaveRepEdit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!editingRep) return
+    const fullNameValue = editFullName.trim()
+    const emailValue = editEmail.trim()
+    if (!fullNameValue || !emailValue) {
+      setEditMessage({ text: 'A name and email are required.', isError: true })
+      return
+    }
+
+    setSavingEdit(true)
+    const outcome = await updateSalesRep(editingRep.id, fullNameValue, emailValue)
+    setSavingEdit(false)
+
+    if (outcome.status === 'ok') {
+      setEditingRep(null)
+      setEditMessage(null)
+      loadReps()
+      return
+    }
+    const message =
+      outcome.status === 'not_found'
+        ? 'This Sales Rep could not be found. Refresh and try again.'
+        : outcome.status === 'forbidden'
+          ? 'Only Sales Rep accounts can be edited here.'
+          : outcome.status === 'invalid_domain'
+            ? 'Only approved @wfgtitle.com email addresses can be used.'
+            : outcome.status === 'email_conflict'
+              ? 'That email address is already in use by another portal account.'
+              : outcome.status === 'auth_identity_unresolved'
+                ? 'This account’s sign-in identity could not be safely verified. The email was not changed; contact support.'
+                : outcome.status === 'partial_failure'
+                  ? 'This change may be incomplete. Do not retry; contact support for reconciliation.'
+                  : 'Could not save this Sales Rep. Please try again.'
+    setEditMessage({ text: message, isError: true })
+  }
+
   const handleAssignManager = async (rep: SalesRep, managerId: string) => {
     if (!rep.profileId) return
     setRowActionId(rep.id)
@@ -214,6 +275,52 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
       setRowActionId(null)
     }
   }
+
+  const confirmPendingRepAction = async () => {
+    if (!pendingRepAction) return
+    const { rep, action } = pendingRepAction
+    setConfirmingRepAction(true)
+    setRowActionId(rep.id)
+    setRowMessage(null)
+    try {
+      if (action === 'remove-assignment') {
+        if (!rep.profileId) return
+        await unassignSalesRep(rep.profileId)
+        setRowMessage({
+          id: rep.id,
+          text: 'Manager assignment removed. The Sales Rep account and report history remain unchanged.',
+          isError: false,
+        })
+      } else {
+        const outcome = await setSalesRepActive(rep.email, action === 'reactivate')
+        if (outcome.status === 'partial_failure') {
+          throw new Error('This status change may be incomplete. Do not retry; contact support for reconciliation.')
+        }
+        if (outcome.status !== 'ok') throw new Error('Could not update this Sales Rep account. Please try again.')
+        setRowMessage({
+          id: rep.id,
+          text: action === 'reactivate' ? 'Sales Rep account reactivated.' : 'Sales Rep account deactivated.',
+          isError: false,
+        })
+      }
+      setPendingRepAction(null)
+      loadReps()
+    } catch (err) {
+      const text = err instanceof Error ? err.message : 'Could not update this Sales Rep. Please try again.'
+      setRowMessage({ id: rep.id, text, isError: true })
+    } finally {
+      setRowActionId(null)
+      setConfirmingRepAction(false)
+    }
+  }
+
+  const pendingActionMessage = pendingRepAction
+    ? pendingRepAction.action === 'remove-assignment'
+      ? `Remove ${pendingRepAction.rep.fullName}'s current Manager assignment? Their account and historical reports will remain unchanged.`
+      : pendingRepAction.action === 'deactivate'
+        ? `Deactivate ${pendingRepAction.rep.fullName}'s Sales Rep account? Their account and report history will be retained.`
+        : `Reactivate ${pendingRepAction.rep.fullName}'s Sales Rep account?`
+    : ''
 
   const handleToggleException = (rep: SalesRep) => {
     if (expandedExceptionRepId === rep.id) {
@@ -250,7 +357,7 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
   }
 
   return (
-    <div className="sales-rep-management">
+    <div className={`sales-rep-management${restricted ? ' srm-restricted' : ''}`}>
       {!restricted && (
         <button type="button" className="link-btn back-link" onClick={onBack}>
           &larr; Back to Admin Dashboard
@@ -259,8 +366,10 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
 
       <div className="srm-header">
         <div className="srm-header-titles">
-          <h1>Sales Rep Management</h1>
-          <p className="srm-header-subtitle">Add sales reps, assign them to a manager, and grant reporting exceptions.</p>
+          <h1>{restricted ? 'Sales Representatives' : 'Sales Representatives and Their Assigned Managers'}</h1>
+          <p className="srm-header-subtitle">
+            {restricted ? 'Manage Sales Rep accounts and Manager assignments.' : 'View Sales Representatives and the managers they report to.'}
+          </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={handleOpenAddModal}>
           + Add Sales Rep
@@ -351,8 +460,15 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
             <div className="srm-table" role="table" aria-label="Sales Reps">
               <div className="srm-table-header-row" role="row">
                 <span role="columnheader">Sales Rep</span>
-                <span role="columnheader">Status</span>
-                <span role="columnheader">Manager</span>
+                {restricted ? (
+                  <>
+                    <span role="columnheader">Account Status</span>
+                    <span role="columnheader">Onboarding</span>
+                  </>
+                ) : (
+                  <span role="columnheader">Status</span>
+                )}
+                <span role="columnheader">{restricted ? 'Assigned Manager' : 'Manager'}</span>
                 <span role="columnheader">Actions</span>
               </div>
               {filteredReps.map((rep) => (
@@ -368,10 +484,31 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
                       </span>
                       <span className="srm-rep-email">{rep.email}</span>
                     </div>
-                    <div className="srm-cell" role="cell">
-                      <span className={`status-badge srm-status-badge srm-status-${rep.status}`}>{STATUS_LABELS[rep.status]}</span>
-                    </div>
-                    <div className="srm-cell srm-cell-manager" role="cell">
+                    {restricted ? (
+                      <>
+                        <div className="srm-cell" role="cell" data-label="Account Status">
+                          <span className={`status-badge srm-status-badge srm-status-${rep.isActive ? 'active' : 'inactive'}`}>
+                            {rep.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                        <div className="srm-cell" role="cell" data-label="Onboarding">
+                          <span className={`status-badge srm-status-badge srm-status-${rep.status}`}>
+                            {rep.profileId
+                              ? 'Complete'
+                              : rep.status === 'pending'
+                                ? 'Pending'
+                                : rep.isActive
+                                  ? 'Awaiting First Login'
+                                  : 'Not available'}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="srm-cell" role="cell">
+                        <span className={`status-badge srm-status-badge srm-status-${rep.status}`}>{STATUS_LABELS[rep.status]}</span>
+                      </div>
+                    )}
+                    <div className="srm-cell srm-cell-manager" role="cell" data-label="Assigned Manager">
                       {rep.profileId ? (
                         <select
                           className="srm-manager-select"
@@ -380,10 +517,15 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
                           onChange={(e) => handleAssignManager(rep, e.target.value)}
                           aria-label={`Assign manager for ${rep.fullName}`}
                         >
-                          <option value="">Unassigned</option>
+                          <option value="" disabled={restricted}>{restricted && rep.currentManagerId ? 'Select a Manager' : 'Unassigned'}</option>
+                          {restricted && rep.currentManagerId && !managers.some((manager) => manager.id === rep.currentManagerId) && (
+                            <option value={rep.currentManagerId}>
+                              {rep.currentManagerName ?? 'Current Manager'} (inactive)
+                            </option>
+                          )}
                           {managers.map((m) => (
                             <option key={m.id} value={m.id}>
-                              {m.fullName ?? m.id} — {m.email}
+                              {m.fullName ?? m.id}{m.email ? ` — ${m.email}` : ''}
                             </option>
                           ))}
                         </select>
@@ -393,7 +535,37 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
                         </span>
                       )}
                     </div>
-                    <div className="srm-cell srm-cell-actions" role="cell">
+                    <div className="srm-cell srm-cell-actions" role="cell" data-label="Actions">
+                      {restricted && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled={rowActionId === rep.id}
+                          onClick={() => handleOpenEdit(rep)}
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {restricted && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled={rowActionId === rep.id}
+                          onClick={() => setPendingRepAction({ rep, action: rep.isActive ? 'deactivate' : 'reactivate' })}
+                        >
+                          {rep.isActive ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                      )}
+                      {restricted && rep.currentManagerId && rep.profileId && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled={rowActionId === rep.id}
+                          onClick={() => setPendingRepAction({ rep, action: 'remove-assignment' })}
+                        >
+                          Remove Assignment
+                        </button>
+                      )}
                       {!restricted && (
                         <button
                           type="button"
@@ -534,6 +706,102 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {editingRep && restricted && (
+        <div className="srm-modal-overlay" onClick={handleCloseEdit}>
+          <div
+            className="srm-modal-panel"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-sales-rep-modal-title"
+          >
+            <div className="srm-modal-header">
+              <h2 id="edit-sales-rep-modal-title">Edit Sales Rep</h2>
+              <button type="button" className="srm-modal-close-btn" onClick={handleCloseEdit} disabled={savingEdit} aria-label="Close">
+                &times;
+              </button>
+            </div>
+            <form className="srm-modal-form" onSubmit={handleSaveRepEdit}>
+              <p className="srm-modal-helper">
+                Changing the email updates the sign-in address immediately. No notification or verification email is sent; communicate the change to the Sales Rep through your approved internal channel.
+              </p>
+              <div className="srm-modal-field">
+                <label className="srm-modal-label" htmlFor="edit-rep-full-name">Full Name</label>
+                <input
+                  id="edit-rep-full-name"
+                  type="text"
+                  className="srm-modal-input"
+                  value={editFullName}
+                  onChange={(event) => setEditFullName(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="srm-modal-field">
+                <label className="srm-modal-label" htmlFor="edit-rep-email">WFG Email</label>
+                <input
+                  id="edit-rep-email"
+                  type="email"
+                  className="srm-modal-input"
+                  value={editEmail}
+                  onChange={(event) => setEditEmail(event.target.value)}
+                  required
+                />
+              </div>
+              {editMessage && (
+                <p className={editMessage.isError ? 'sales-rep-management-message-error' : 'sales-rep-management-message-success'} role="alert">
+                  {editMessage.text}
+                </p>
+              )}
+              <div className="srm-modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={handleCloseEdit} disabled={savingEdit}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={savingEdit}>
+                  {savingEdit ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {pendingRepAction && (
+        <div
+          className="srm-modal-overlay"
+          role="presentation"
+          onClick={() => !confirmingRepAction && setPendingRepAction(null)}
+        >
+          <div
+            className="srm-confirm-panel"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="sales-rep-action-title"
+            aria-describedby="sales-rep-action-message"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="sales-rep-action-title">
+              {pendingRepAction.action === 'remove-assignment'
+                ? 'Remove Manager Assignment'
+                : pendingRepAction.action === 'deactivate'
+                  ? 'Deactivate Sales Rep'
+                  : 'Reactivate Sales Rep'}
+            </h2>
+            <p id="sales-rep-action-message">{pendingActionMessage}</p>
+            <div className="srm-modal-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setPendingRepAction(null)}
+                disabled={confirmingRepAction}
+              >
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary" onClick={confirmPendingRepAction} disabled={confirmingRepAction}>
+                {confirmingRepAction ? 'Saving…' : 'Confirm'}
+              </button>
+            </div>
           </div>
         </div>
       )}

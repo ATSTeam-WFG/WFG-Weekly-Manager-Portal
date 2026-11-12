@@ -61,6 +61,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return sendError(res, 404, 'NOT_FOUND', 'No user was found for this email.')
       case 'forbidden':
         return sendError(res, 403, 'FORBIDDEN', 'A Sales Admin may only manage Sales Rep accounts.')
+      case 'partial_failure':
+        return sendError(
+          res,
+          500,
+          'PARTIAL_FAILURE',
+          'This status change may be incomplete. Do not retry; contact support for reconciliation.',
+        )
       default:
         return sendError(res, 500, 'UPDATE_FAILED', 'Could not update this user.')
     }
