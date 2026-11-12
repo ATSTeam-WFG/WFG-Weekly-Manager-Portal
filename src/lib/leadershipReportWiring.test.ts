@@ -35,7 +35,7 @@ describe('AdminSidebar — exact approved order/grouping with real dividers', ()
     assert.match(sidebarSrc, /\| 'leadership-report'/)
   })
 
-  test('groups render in the exact approved order: [Admin Dashboard], [Weekly Summary, Leadership Report, Video Creation], [User Management, Reports & Analytics, Sales Reps]', () => {
+  test('groups render in the approved order: [Admin Dashboard, Weekly Summary, Leadership Report], [Managers, Sales Reps], [Reports & Analytics, Video Creation]', () => {
     const groupsMatch = sidebarSrc.match(/const groups: [\s\S]*?\] = \[([\s\S]*?)\]\s*\n\n\s*return/)
     assert.ok(groupsMatch, 'could not locate the groups array')
     const groupsBody = groupsMatch[1]
@@ -44,10 +44,10 @@ describe('AdminSidebar — exact approved order/grouping with real dividers', ()
       'dashboard',
       'weekly-summary',
       'leadership-report',
-      'video-creation',
       'user-management',
-      'reports-analytics',
       'sales-reps',
+      'reports-analytics',
+      'video-creation',
     ])
   })
 

@@ -138,22 +138,24 @@ export default function AdminSidebar({
   onNavigateVideoCreation,
   onNavigateSalesReps,
 }: AdminSidebarProps) {
-  // Approved grouping/order: Admin Dashboard — divider — Weekly Summary,
-  // Leadership Report, Video Creation — divider — User Management,
-  // Reports & Analytics. Groups, not a flat list, so a subtle divider can
-  // render between them without threading extra per-item flags through the
-  // existing single .map() below.
+  // Approved grouping/order: Admin Dashboard, Present Weekly Summary,
+  // Leadership Report — divider — Managers, Sales Reps — divider —
+  // Reports & Analytics, Video Creation. Groups, not a flat list, so a
+  // subtle divider can render between them without threading extra per-item
+  // flags through the existing single .map() below.
   const groups: { key: AdminDestination; label: string; onClick: () => void; icon: ReactNode }[][] = [
-    [{ key: 'dashboard', label: 'Admin Dashboard', onClick: onNavigateDashboard, icon: <DashboardIcon /> }],
     [
-      { key: 'weekly-summary', label: 'Present Week Summary', onClick: onNavigateWeeklySummary, icon: <DocumentIcon /> },
+      { key: 'dashboard', label: 'Admin Dashboard', onClick: onNavigateDashboard, icon: <DashboardIcon /> },
+      { key: 'weekly-summary', label: 'Present Weekly Summary', onClick: onNavigateWeeklySummary, icon: <DocumentIcon /> },
       { key: 'leadership-report', label: 'Leadership Report', onClick: onNavigateLeadershipReport, icon: <LeadershipReportIcon /> },
-      { key: 'video-creation', label: 'Video Creation', onClick: onNavigateVideoCreation, icon: <VideoIcon /> },
     ],
     [
-      { key: 'user-management', label: 'User Management', onClick: onNavigateUserManagement, icon: <UsersIcon /> },
-      { key: 'reports-analytics', label: 'Reports & Analytics', onClick: onNavigateReportsAnalytics, icon: <ChartIcon /> },
+      { key: 'user-management', label: 'Managers', onClick: onNavigateUserManagement, icon: <UsersIcon /> },
       { key: 'sales-reps', label: 'Sales Reps', onClick: onNavigateSalesReps, icon: <UsersIcon /> },
+    ],
+    [
+      { key: 'reports-analytics', label: 'Reports & Analytics', onClick: onNavigateReportsAnalytics, icon: <ChartIcon /> },
+      { key: 'video-creation', label: 'Video Creation', onClick: onNavigateVideoCreation, icon: <VideoIcon /> },
     ],
   ]
 
