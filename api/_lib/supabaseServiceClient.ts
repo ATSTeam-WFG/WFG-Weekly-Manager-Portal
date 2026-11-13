@@ -2200,8 +2200,21 @@ export async function listActiveManagers(): Promise<{ id: string; fullName: stri
     return []
   }
 
-  return (data ?? [])
-    .filter((row) => VERIFIED_REAL_MANAGER_IDS.has(row.id as string))
+  const rows = data ?? []
+  // VERIFIED_REAL_MANAGER_IDS is a Production-only snapshot (see its own
+  // comment — profile ids never carry across Supabase projects). In any
+  // other environment (Preview included) none of that environment's real
+  // managers will ever match it, so filtering unconditionally would return
+  // a completely empty list — this is exactly what made "Reporting by
+  // Manager" show all zeros and the Assign Manager dropdown empty in
+  // Preview (2026-11-13), despite real manager/assignment data existing.
+  // Falling back to the unfiltered set only when the allowlist matches
+  // nothing keeps Production's existing demo/test exclusion fully intact —
+  // some real manager always matches there, so this branch never triggers.
+  const verified = rows.filter((row) => VERIFIED_REAL_MANAGER_IDS.has(row.id as string))
+  const activeManagerRows = verified.length > 0 ? verified : rows
+
+  return activeManagerRows
     .map((row) => ({ id: row.id as string, fullName: (row.full_name as string | null) ?? null, email: row.email as string }))
     .sort((a, b) => (a.fullName ?? '').localeCompare(b.fullName ?? ''))
 }
