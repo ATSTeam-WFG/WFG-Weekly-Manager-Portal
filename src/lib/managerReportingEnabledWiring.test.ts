@@ -38,22 +38,29 @@ describe('managerReportingEnabled — Profile type and fetch wiring', () => {
   })
 })
 
-describe('SalesAdminShell — Manager Reporting nav item is additive and opt-in only', () => {
-  test('onOpenManagerReporting is an optional prop; the extra nav button only renders when it is provided', () => {
+describe('SalesAdminShell — My Reports nav item is additive and opt-in only', () => {
+  test('onOpenManagerReporting is an optional prop; the extra nav button (labeled "My Reports") only renders when it is provided', () => {
     assert.match(salesAdminShellSrc, /onOpenManagerReporting\?: \(\) => void/)
     assert.match(salesAdminShellSrc, /\{onOpenManagerReporting && \(/)
+    assert.match(salesAdminShellSrc, />\s*My Reports\s*</)
   })
 
-  test('the two approved Sales Admin destinations (Sales Representatives, Report Status) are present and unchanged', () => {
-    assert.match(salesAdminShellSrc, /Sales Representatives/)
+  test('the two main Sales Admin destinations (User Management, Report Status) are present', () => {
+    assert.match(salesAdminShellSrc, /User Management/)
     assert.match(salesAdminShellSrc, /Report Status/)
-    assert.match(salesAdminShellSrc, /<SalesRepManagement onBack=\{\(\) => setDestination\('reports'\)\} restricted \/>/)
+    assert.match(salesAdminShellSrc, /<SalesRepManagement onBack=\{\(\) => setDestination\('report-status'\)\} restricted \/>/)
     assert.match(salesAdminShellSrc, /<SalesAdminReports \/>/)
   })
 
-  test('"Reporting by Manager" / SalesAdminManagerOverview is intentionally NOT wired into this shell — this integration branch uses the feedback-approved two-tab layout from PR #11, not main\'s three-tab layout; the component/service still exist in the tree, unused, for easy reactivation later', () => {
-    assert.doesNotMatch(salesAdminShellSrc, /Reporting by Manager/)
-    assert.doesNotMatch(salesAdminShellSrc, /SalesAdminManagerOverview/)
+  test('"Reporting by Manager" / SalesAdminManagerOverview is preserved — rendered inside Report Status, below SalesAdminReports, never removed or discarded', () => {
+    assert.match(salesAdminShellSrc, /import SalesAdminManagerOverview from '\.\/SalesAdminManagerOverview'/)
+    const fnMatch = salesAdminShellSrc.match(/export default function SalesAdminShell\([\s\S]*$/)
+    assert.ok(fnMatch)
+    const body = fnMatch[0]
+    assert.match(body, /<SalesAdminManagerOverview \/>/)
+    const reportsIndex = body.indexOf('<SalesAdminReports />')
+    const overviewIndex = body.indexOf('<SalesAdminManagerOverview />')
+    assert.ok(reportsIndex >= 0 && overviewIndex >= 0 && reportsIndex < overviewIndex, 'SalesAdminManagerOverview must render below SalesAdminReports, within the same Report Status panel')
   })
 })
 
