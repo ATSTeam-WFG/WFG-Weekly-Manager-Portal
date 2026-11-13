@@ -102,7 +102,7 @@ describe('SalesAdminReports.tsx — read-only, no review/approve/reject action e
   })
 
   test('fetches reports via the same RLS-scoped fetchRepReport every other screen uses, not a new privileged path', () => {
-    assert.match(salesAdminReportsSrc, /import \{ fetchRepReport \} from '\.\.\/lib\/repReportsService'/)
+    assert.match(salesAdminReportsSrc, /import \{ fetchRepReport(, type RepReport)? \} from '\.\.\/lib\/repReportsService'/)
   })
 })
 
