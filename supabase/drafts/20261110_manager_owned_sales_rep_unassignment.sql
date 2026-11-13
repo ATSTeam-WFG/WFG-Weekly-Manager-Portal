@@ -27,6 +27,42 @@
 -- must independently allow the action); it means the database can never be
 -- exposed by this grant alone, even if this migration were applied before
 -- the Node-side rollout decision was made.
+--
+-- ACTIVATION MECHANISM (reviewed for connection pooling — Supabase sits
+-- Supavisor/PgBouncer in front of Postgres, typically in transaction
+-- mode): activate with
+--   ALTER DATABASE postgres SET app.manager_account_actions_enabled = 'true';
+-- (a one-time statement against the target database, run by a project
+-- owner — e.g. via the Supabase SQL editor), NEVER with a plain SET or
+-- set_config(...) from application code. ALTER DATABASE ... SET writes a
+-- row into Postgres's own pg_db_role_setting catalog; every NEW backend
+-- that connects to that database has this default applied automatically
+-- at session start, by Postgres itself, regardless of which pooler or
+-- pooling mode sits in front of it — there is no "forgetting" it on a
+-- pooled/reused connection, because it was never a per-connection runtime
+-- SET to begin with, and no dependency on which specific backend a
+-- pooled client happens to land on. (A plain `SET app.manager_account_
+-- actions_enabled = 'true'` run once in a psql session, by contrast,
+-- would only affect that one session/transaction and would never reach
+-- the application's own pooled connections at all — this is the mistake
+-- this comment exists to prevent.) Verify activation took effect with:
+--   SELECT current_setting('app.manager_account_actions_enabled', true);
+-- run as a FRESH session/query (not reusing a session opened before the
+-- ALTER DATABASE), which should return 'true'. Deactivate the same way
+-- with RESET (ALTER DATABASE postgres RESET app.manager_account_actions_enabled;).
+--
+-- Direct-RPC-invocation safety (re-confirmed, not just asserted): GRANT
+-- EXECUTE ... TO authenticated below means ANY signed-in Manager can call
+-- this function directly via supabase.rpc(...), bypassing
+-- api/manager/sales-reps/unassign.ts entirely — this is BY DESIGN and
+-- safe specifically because every authorization check inside the function
+-- body derives from auth.uid() (the caller's own verified JWT), never
+-- from a parameter or anything the Node layer would have supplied; a
+-- direct call is authorized (or refused) by exactly the same rules as a
+-- call routed through the Node endpoint. The kill switch above is the one
+-- check that is NOT re-derived per-caller (it is a database-wide
+-- default), which is exactly why it needed its own explicit review and
+-- activation step, documented here.
 
 CREATE OR REPLACE FUNCTION public.unassign_own_sales_rep(p_rep_id uuid)
 RETURNS boolean
@@ -47,6 +83,29 @@ BEGIN
   IF coalesce(current_setting('app.manager_account_actions_enabled', true), 'false') <> 'true' THEN
     RAISE EXCEPTION 'FEATURE_DISABLED: Manager-initiated sales rep unassignment is not yet enabled on this database.';
   END IF;
+
+  -- Optional narrow allowlist, for controlled Preview validation before a
+  -- broad rollout: when app.manager_account_actions_allowed_ids holds a
+  -- non-empty, comma-separated list of Manager profile ids, ONLY those
+  -- Managers may proceed, even though the boolean switch above is already
+  -- 'true' for the whole database. Left unset (the only state this ever
+  -- had before this check existed, and the intended Production steady
+  -- state once broadly approved), every active Manager is allowed, exactly
+  -- as before. A malformed value (not valid uuids) fails this cast with a
+  -- genuine Postgres error rather than silently granting or denying
+  -- access — never a fail-open on a typo.
+  IF current_setting('app.manager_account_actions_allowed_ids', true) IS NOT NULL
+     AND trim(current_setting('app.manager_account_actions_allowed_ids', true)) <> ''
+     AND NOT (v_caller = ANY (string_to_array(current_setting('app.manager_account_actions_allowed_ids', true), ',')::uuid[]))
+  THEN
+    RAISE EXCEPTION 'FEATURE_DISABLED: Manager-initiated sales rep unassignment is not yet enabled for your account.';
+  END IF;
+  -- This exact check (narrowed vs. unset behavior, malformed-value
+  -- handling) is exercised with a fully synthetic fixture in the
+  -- companion self-assignment draft's own self-test (Test 7) — this
+  -- file's self-test below reuses real existing assignment data by
+  -- established convention and was not restructured to duplicate that
+  -- coverage, since the underlying SQL is identical in both files.
 
   IF v_caller IS NULL OR NOT EXISTS (
     SELECT 1 FROM public.profiles p
