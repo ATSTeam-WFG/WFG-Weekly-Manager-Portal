@@ -12,3 +12,17 @@
   color: var(--muted-gray);
   font-size: 14px;
 }
+
+/* Aligns the "← Back to Sales Admin" link (rendered as a sibling above
+   Dashboard, not a child of it — Dashboard.tsx itself is intentionally not
+   touched here, since it's shared with ordinary Managers and the dual-role
+   admin submitter) with Dashboard.tsx's own .dashboard-page container
+   (max-width: 1080px; margin: 0 auto; padding: 32px 24px ...) — same
+   horizontal max-width/centering/left-padding, so the link's left edge
+   lines up with the "Dashboard" heading directly below it, instead of
+   sitting at the raw viewport edge. */
+.sales-admin-my-reports-back-row {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 24px 0;
+}

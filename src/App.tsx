@@ -980,9 +980,11 @@ function App() {
             </button>
           )}
           {isSalesAdmin && managerReportingViewOpen && (
-            <button type="button" className="link-btn back-link" onClick={() => setManagerReportingViewOpen(false)}>
-              ← Back to Sales Admin
-            </button>
+            <div className="sales-admin-my-reports-back-row">
+              <button type="button" className="link-btn back-link" onClick={() => setManagerReportingViewOpen(false)}>
+                ← Back to Sales Admin
+              </button>
+            </div>
           )}
           {/* Phase 1B: a plain Manager's own small "My Reps" review toggle.
               Deliberately gated on the real 'manager' role, not isSubmitter —

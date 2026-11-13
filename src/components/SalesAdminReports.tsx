@@ -6,6 +6,7 @@ import type { SalesRepReportSections } from '../types'
 import './SalesRepManagement.css'
 import './SalesAdminManagerOverview.css'
 import './MyReps.css'
+import './SalesAdminReports.css'
 
 // Sales Admin's read-only view of every Sales Rep's current-week report
 // status, across ALL managers (not assignment-scoped, unlike the Manager's
