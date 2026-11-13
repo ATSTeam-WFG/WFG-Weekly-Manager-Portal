@@ -7,9 +7,17 @@
    file's existing flat table. */
 
 .samo-page {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 24px;
+  /* No max-width/margin/padding here — this component's only consumer,
+     SalesAdminShell, already provides that page-level chrome via
+     .sales-admin-shell. This used to be this component's own standalone
+     page (back when it was a separate top-level destination), which is
+     why it had its own copy; nesting it below SalesAdminReports inside
+     the same Report Status panel without removing the duplicate chrome
+     doubled the padding and narrowed the effective content width —
+     exactly the kind of unintended visual difference from the original
+     this file's own history warns about. Top margin only, to separate it
+     from SalesAdminReports above it within the same panel. */
+  margin-top: 32px;
 }
 
 .samo-top-row {

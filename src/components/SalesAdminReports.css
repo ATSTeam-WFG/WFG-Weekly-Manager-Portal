@@ -1,0 +1,26 @@
+/* Scoped overrides only. SalesAdminReports.tsx now reuses AdminDashboard.css's
+   .adp-kpi-row/.adp-table/.adp-row/.adp-view-link etc. directly (the Super
+   Admin dashboard this screen was asked to match) — nothing in
+   AdminDashboard.css or AdminDashboard.tsx itself was changed. The one thing
+   that file doesn't already provide is a button that looks like its
+   .adp-view-link text (that span is never a button there, since a manager
+   row's own onClick already handles navigation) — this screen's "View
+   Report" needs to be an actual interactive element, so this reduces a
+   <button> to look identical to .adp-view-link's existing text styling,
+   never introducing a new visual treatment. */
+.adp-view-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--terracotta);
+  white-space: nowrap;
+}
+
+.adp-view-link-btn:hover {
+  text-decoration: underline;
+}
