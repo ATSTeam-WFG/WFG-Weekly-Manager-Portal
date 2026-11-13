@@ -189,6 +189,13 @@ function App() {
   // set for a plain Admin — see onOpenMyReport below, only ever passed to
   // AdminDashboard when profile.submitsWeeklyReport is true.
   const [myReportOpen, setMyReportOpen] = useState(false)
+  // Same shape as myReportOpen above, for the parallel dual-role Sales
+  // Admin case: true while a Sales Admin flagged managerReportingEnabled is
+  // viewing their own Manager Reporting workspace instead of SalesAdminShell.
+  // Never set for a plain Sales Admin — see onOpenManagerReporting below,
+  // only ever passed to SalesAdminShell when profile.managerReportingEnabled
+  // is true.
+  const [managerReportingViewOpen, setManagerReportingViewOpen] = useState(false)
 
   const [view, setView] = useState<View>('dashboard')
   const [status, setStatus] = useState<ReportStatus>('not_started')
@@ -729,6 +736,12 @@ function App() {
   // Manager and for a dual-role admin submitter — an Admin explicitly
   // designated as also submitting their own weekly report. See src/types.ts.
   const isSubmitter = profile?.submitsWeeklyReport === true
+  // Explicit, additive flag — never inferred from role, independent of
+  // isSubmitter (that's the Admin-dual-role case; this is the
+  // Sales-Admin-dual-role case). True only for a Sales Admin explicitly
+  // designated as also completing their own Weekly Manager Report. See
+  // src/types.ts and public.is_manager_capable().
+  const hasManagerReporting = profile?.managerReportingEnabled === true
   const displayName = profile?.fullName || userEmail || 'Manager'
   const roleLabel = isAdmin ? 'Admin' : isSalesAdmin ? 'Sales Admin' : isSalesRep ? 'Sales Rep' : 'Manager'
   const adminWeek = getReportingWeekByOffset(adminWeekOffset)
@@ -960,8 +973,15 @@ function App() {
 
       {isSalesRep ? (
         <SalesRepDashboard repId={managerId ?? ''} />
+      ) : isSalesAdmin && managerReportingViewOpen ? (
+        <>
+          <button type="button" className="link-btn back-link" onClick={() => setManagerReportingViewOpen(false)}>
+            ← Back to Sales Admin
+          </button>
+          {managerReportWorkspace}
+        </>
       ) : isSalesAdmin ? (
-        <SalesAdminShell />
+        <SalesAdminShell onOpenManagerReporting={hasManagerReporting ? () => setManagerReportingViewOpen(true) : undefined} />
       ) : isAdmin && !myReportOpen ? (
         selectedManager ? (
           <ManagerReportView
