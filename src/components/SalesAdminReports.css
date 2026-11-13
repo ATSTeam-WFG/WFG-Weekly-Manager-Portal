@@ -1,25 +1,26 @@
-/* Scoped overrides only — SalesAdminReports.tsx reuses SalesRepManagement.css's
-   .srm-table/.srm-table-header-row/.srm-row-main classes as-is (no change to
-   that file, no change to SalesRepManagement.tsx's own screen), but that
-   file's grid-template-columns has exactly 4 tracks, sized for its own
-   4-column shape. This screen has 5 (Sales Rep / Email / Current Manager /
-   This Week's Status / Actions) — without a 5th track, the Actions cell
-   (the View button) had nowhere to go and fell onto a new implicit grid row
-   under Sales Rep, which is what made every row tall and wrapped "Actions"
-   under "Sales Rep" in the header. Every rule below is scoped under
-   .sales-admin-reports so none of it reaches SalesRepManagement.tsx's own
-   table. */
-
-.sales-admin-reports .srm-table {
-  overflow-x: auto;
-}
-
-.sales-admin-reports .srm-table-header-row,
-.sales-admin-reports .srm-row-main {
-  grid-template-columns: 1.8fr 2fr 1.3fr 1.3fr 0.8fr;
-  align-items: center;
-}
-
-.sales-admin-reports .srm-table-header-row > span {
+/* Scoped overrides only. SalesAdminReports.tsx now reuses AdminDashboard.css's
+   .adp-kpi-row/.adp-table/.adp-row/.adp-view-link etc. directly (the Super
+   Admin dashboard this screen was asked to match) — nothing in
+   AdminDashboard.css or AdminDashboard.tsx itself was changed. The one thing
+   that file doesn't already provide is a button that looks like its
+   .adp-view-link text (that span is never a button there, since a manager
+   row's own onClick already handles navigation) — this screen's "View
+   Report" needs to be an actual interactive element, so this reduces a
+   <button> to look identical to .adp-view-link's existing text styling,
+   never introducing a new visual treatment. */
+.adp-view-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--terracotta);
   white-space: nowrap;
+}
+
+.adp-view-link-btn:hover {
+  text-decoration: underline;
 }
