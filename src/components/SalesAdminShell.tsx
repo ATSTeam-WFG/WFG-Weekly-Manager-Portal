@@ -27,33 +27,30 @@ interface SalesAdminShellProps {
 // per role). Rather than parameterize that shared component under time
 // pressure and risk any of those six leaking into a restricted role's view,
 // this is a new, minimal nav that can only ever show the screens Sales
-// Admin is authorized for.
+// Admin is authorized for. All reuse existing, already-built components/
+// services as-is (SalesRepManagement with restricted=true; SalesAdminReports
+// and SalesAdminManagerOverview, which themselves only reuse existing,
+// already-authorized fetch functions — no new endpoint, no new RLS policy,
+// no new SECURITY DEFINER function for any of them).
 //
-// User Management reuses SalesRepManagement in its existing restricted
-// mode, unchanged — same component, same layout conventions (KPI row,
-// filter/search, semantic table) the Super Admin's own User Management
-// screen already follows, per that component's own header comment.
-//
-// Report Status stacks TWO existing, untouched components vertically,
-// rather than as separate tabs: SalesAdminReports (the per-Sales-Rep
-// report-status dashboard — not-started/draft/submitted/approved/rejected,
-// across every Manager) above, and SalesAdminManagerOverview ("Reporting
-// by Manager" — Sales Rep totals and reporting-status counts grouped by
-// Manager, with drill-down) below. Both are read-only, reuse existing
-// already-authorized fetch functions, and introduce no new endpoint or
-// database policy.
+// Structure intentionally matches the original markup exactly (plain nav
+// buttons, no ARIA tab/tabpanel roles, destination content rendered
+// directly — no wrapping <div> per destination) — this file previously,
+// briefly, picked up extra structure from a differently-styled draft that
+// was never the approved visual target; restored here to minimize
+// deviation from the original to exactly what the three-destination
+// reorganization requires. See SalesAdminManagerOverview.css's own
+// .samo-page comment for the one real (CSS, not markup) difference this
+// reorganization required: that component's own page-level max-width/
+// margin/padding was removed since it's no longer ever a standalone page.
 export default function SalesAdminShell({ onOpenManagerReporting }: SalesAdminShellProps) {
   const [destination, setDestination] = useState<SalesAdminDestination>('user-management')
 
   return (
     <div className="sales-admin-shell">
-      <nav className="sales-admin-shell-nav" role="tablist" aria-label="Sales Admin dashboard">
+      <nav className="sales-admin-shell-nav">
         <button
           type="button"
-          role="tab"
-          id="sales-admin-tab-user-management"
-          aria-controls="sales-admin-panel-user-management"
-          aria-selected={destination === 'user-management'}
           className={`sales-admin-shell-nav-item${destination === 'user-management' ? ' sales-admin-shell-nav-item-active' : ''}`}
           onClick={() => setDestination('user-management')}
         >
@@ -61,10 +58,6 @@ export default function SalesAdminShell({ onOpenManagerReporting }: SalesAdminSh
         </button>
         <button
           type="button"
-          role="tab"
-          id="sales-admin-tab-report-status"
-          aria-controls="sales-admin-panel-report-status"
-          aria-selected={destination === 'report-status'}
           className={`sales-admin-shell-nav-item${destination === 'report-status' ? ' sales-admin-shell-nav-item-active' : ''}`}
           onClick={() => setDestination('report-status')}
         >
@@ -73,7 +66,6 @@ export default function SalesAdminShell({ onOpenManagerReporting }: SalesAdminSh
         {onOpenManagerReporting && (
           <button
             type="button"
-            id="sales-admin-tab-my-reports"
             className="sales-admin-shell-nav-item"
             onClick={onOpenManagerReporting}
           >
@@ -83,15 +75,13 @@ export default function SalesAdminShell({ onOpenManagerReporting }: SalesAdminSh
       </nav>
 
       {destination === 'user-management' ? (
-        <div id="sales-admin-panel-user-management" role="tabpanel" aria-labelledby="sales-admin-tab-user-management">
-          <SalesRepManagement onBack={() => setDestination('report-status')} restricted />
-        </div>
-      ) : destination === 'report-status' ? (
-        <div id="sales-admin-panel-report-status" role="tabpanel" aria-labelledby="sales-admin-tab-report-status">
+        <SalesRepManagement onBack={() => setDestination('report-status')} restricted />
+      ) : (
+        <>
           <SalesAdminReports />
           <SalesAdminManagerOverview />
-        </div>
-      ) : null}
+        </>
+      )}
     </div>
   )
 }
