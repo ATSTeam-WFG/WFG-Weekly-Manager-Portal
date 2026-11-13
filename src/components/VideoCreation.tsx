@@ -7,6 +7,7 @@ import VideoCreationCinematicPlan from './VideoCreationCinematicPlan'
 import VideoCreationTemplate from './VideoCreationTemplate'
 import VideoCreationGenerate from './VideoCreationGenerate'
 import VideoCreationPreview from './VideoCreationPreview'
+import VideoCreationFinalLibrary from './VideoCreationFinalLibrary'
 import { expectedFixedNarrationText, hasReadyTalkingPresenter, type VideoStoryboard, type VideoStoryboardSourceType } from '../lib/videoStoryboard'
 import { DEFAULT_NARRATION_VOICE } from '../lib/narrationVoices'
 import { getCinematicGenerationCheckpoint } from '../lib/cinematicGenerationService'
@@ -233,15 +234,6 @@ export default function VideoCreation({ currentProfileId }: VideoCreationProps) 
   const handleBackToGenerate = () => {
     setStep('generate')
   }
-  const [finalVideoVersion, setFinalVideoVersion] = useState<'avatar' | 'no-avatar'>('avatar')
-
-const finalVideoFileName =
-  finalVideoVersion === 'avatar'
-    ? 'wfg-v3-final-with-avatar-fixed.mp4'
-    : 'wfg-v3-final-approved-candidate.mp4'
-
-const finalVideoUrl = `/dev/rendered-video/${finalVideoFileName}`
-
   const activeStepIndex = STEP_INDEX[step]
 
   return (
@@ -253,61 +245,7 @@ const finalVideoUrl = `/dev/rendered-video/${finalVideoFileName}`
         </p>
       </div>
 
-      <section className="vc-final-videos" aria-label="Final V3 videos">
-        <div className="vc-final-heading">
-          <div>
-            <span className="vc-final-eyebrow">WFG VIDEO LIBRARY</span>
-            <h2>Final V3 Videos</h2>
-            <p>Watch or download your approved presentation videos.</p>
-          </div>
-          <span className="vc-final-status">Ready to Watch</span>
-        </div>
-
-        <div className="vc-final-selector" role="group" aria-label="Choose video version">
-          <button
-            type="button"
-            className={`vc-final-option ${finalVideoVersion === 'avatar' ? 'is-selected' : ''}`}
-            aria-pressed={finalVideoVersion === 'avatar'}
-            onClick={() => setFinalVideoVersion('avatar')}
-          >
-            With Avatar
-          </button>
-          <button
-            type="button"
-            className={`vc-final-option ${finalVideoVersion === 'no-avatar' ? 'is-selected' : ''}`}
-            aria-pressed={finalVideoVersion === 'no-avatar'}
-            onClick={() => setFinalVideoVersion('no-avatar')}
-          >
-            Without Avatar
-          </button>
-        </div>
-
-        <div className="vc-final-player-wrap">
-          <video
-            key={finalVideoVersion}
-            className="vc-final-player"
-            src={finalVideoUrl}
-            controls
-            playsInline
-            preload="metadata"
-          />
-        </div>
-
-        <div className="vc-final-footer">
-          <p>
-            {finalVideoVersion === 'avatar'
-              ? 'With Avatar — approved presentation'
-              : 'Without Avatar — approved presentation'}
-          </p>
-          <a
-            className="btn btn-primary"
-            href={finalVideoUrl}
-            download={finalVideoFileName}
-          >
-            Download Selected Video
-          </a>
-        </div>
-      </section>
+      <VideoCreationFinalLibrary />
 
       <div className="vc-workflow" aria-label="Video creation workflow">
         {WORKFLOW_STEPS.map((label, index) => (
