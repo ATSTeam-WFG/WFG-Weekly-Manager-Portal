@@ -9,6 +9,15 @@ import {
   type RosterEntrySnapshot,
   type EmployeeRecordSnapshot,
 } from './adminUserManagement.js'
+import { decideSalesRepProfileUpdate, type SalesRepProfileTarget } from './salesRepProfileUpdate.js'
+import {
+  decidePendingAssignmentCreation,
+  decideFinalizePendingAssignment,
+  type OpenPendingAssignment,
+} from './managerPendingAssignment.js'
+import { generateEmailChangeToken, hashEmailChangeToken, verifyEmailChangeToken } from './emailChangeToken.js'
+import { decideEmailChangeVerification } from './emailChangeVerification.js'
+import { getEmailSender } from './emailSender.js'
 
 // This is the ONLY file in the repo permitted to reference
 // SUPABASE_SECRET_KEY. Every caller gets a narrow, purpose-built function
@@ -1025,6 +1034,7 @@ export type SetManagedUserActiveOutcome =
   | { status: 'ok' }
   | { status: 'not_found' }
   | { status: 'forbidden' }
+  | { status: 'partial_failure' }
   | { status: 'error' }
 
 // Deactivate/reactivate — from api/admin/users/set-active.ts, callable by
@@ -1054,7 +1064,7 @@ export async function setManagedUserActive(
 
   const { data: rosterRow, error: rosterSelectError } = await client
     .from('approved_employees')
-    .select('id, portal_role')
+    .select('id, portal_role, is_active')
     .eq('email_normalized', emailNormalized)
     .maybeSingle()
 
@@ -1067,29 +1077,709 @@ export async function setManagedUserActive(
     return { status: 'forbidden' }
   }
 
-  const { error: rosterUpdateError } = await client
+  // Resolve the profile before writing the roster so a lookup failure cannot
+  // leave the two active-state sources split.
+  const profileLookup = await findProfileByEmail(emailNormalized)
+  if (profileLookup.status === 'error') return { status: 'error' }
+
+  const profileId = profileLookup.status === 'found' ? profileLookup.profile.id : null
+  const originalRosterIsActive = rosterRow.is_active as boolean
+  const originalProfileIsActive = profileLookup.status === 'found' ? profileLookup.profile.isActive : null
+  let rosterUpdated = false
+  let profileUpdated = false
+
+  const rollbackRoster = async (): Promise<boolean> => {
+    if (!rosterUpdated) return true
+    const { data, error } = await client
+      .from('approved_employees')
+      .update({ is_active: originalRosterIsActive })
+      .eq('id', rosterRow.id)
+      .eq('portal_role', rosterRow.portal_role)
+      .eq('is_active', isActive)
+      .select('id, is_active')
+    return !error && data?.length === 1 && data[0].id === rosterRow.id && data[0].is_active === originalRosterIsActive
+  }
+
+  const rollbackProfile = async (): Promise<boolean> => {
+    if (!profileUpdated || !profileId || originalProfileIsActive === null) return true
+    let profileRollbackQuery = client
+      .from('profiles')
+      .update({ is_active: originalProfileIsActive })
+      .eq('id', profileId)
+      .eq('is_active', isActive)
+    if (restrictToPortalRole) profileRollbackQuery = profileRollbackQuery.eq('role', restrictToPortalRole)
+    const { data, error } = await profileRollbackQuery.select('id, is_active')
+    return !error && data?.length === 1 && data[0].id === profileId && data[0].is_active === originalProfileIsActive
+  }
+
+  const rollbackAndReport = async (reason: string): Promise<SetManagedUserActiveOutcome> => {
+    const profileRollback = await rollbackProfile()
+    const rosterRollback = await rollbackRoster()
+    const complete = profileRollback && rosterRollback
+    console.error(`supabaseServiceClient: setManagedUserActive ${complete ? 'rolled back' : 'PARTIAL FAILURE'} after ${reason}.`, {
+      approvedEmployeeId: rosterRow.id,
+      profileId,
+      profileRollback,
+      rosterRollback,
+    })
+    return complete ? { status: 'error' } : { status: 'partial_failure' }
+  }
+
+    const { data: rosterRows, error: rosterUpdateError } = await client
     .from('approved_employees')
     .update({ is_active: isActive })
-    .eq('email_normalized', emailNormalized)
+    .eq('id', rosterRow.id)
+      .eq('portal_role', rosterRow.portal_role)
+    .select('id, is_active')
 
   if (rosterUpdateError) {
     console.error('supabaseServiceClient: setManagedUserActive roster update failed:', rosterUpdateError.message)
-    return { status: 'error' }
+    return rollbackAndReport('roster update failure')
+  }
+  if (!rosterRows || rosterRows.length !== 1 || rosterRows[0].id !== rosterRow.id) {
+    rosterUpdated = !!rosterRows?.length
+    return rollbackAndReport('roster row verification failure')
+  }
+  rosterUpdated = true
+  if (rosterRows[0].is_active !== isActive) {
+    return rollbackAndReport('roster value verification failure')
   }
 
-  const profileLookup = await findProfileByEmail(emailNormalized)
-  if (profileLookup.status === 'error') return { status: 'error' }
-  if (profileLookup.status === 'found') {
-    const { error: profileUpdateError } = await client
-      .from('profiles')
-      .update({ is_active: isActive })
-      .eq('id', profileLookup.profile.id)
+  if (profileId) {
+    let profileUpdateQuery = client.from('profiles').update({ is_active: isActive }).eq('id', profileId)
+    if (restrictToPortalRole) profileUpdateQuery = profileUpdateQuery.eq('role', restrictToPortalRole)
+    const { data: profileRows, error: profileUpdateError } = await profileUpdateQuery.select('id, is_active')
 
     if (profileUpdateError) {
       console.error('supabaseServiceClient: setManagedUserActive profile update failed:', profileUpdateError.message)
-      return { status: 'error' }
+      return rollbackAndReport('profile update failure')
+    }
+    if (!profileRows || profileRows.length !== 1 || profileRows[0].id !== profileId) {
+      profileUpdated = !!profileRows?.length
+      return rollbackAndReport('profile row verification failure')
+    }
+    profileUpdated = true
+    if (profileRows[0].is_active !== isActive) {
+      return rollbackAndReport('profile value verification failure')
     }
   }
+
+  return { status: 'ok' }
+}
+
+export interface UpdateSalesRepProfileInput {
+  fullName: string
+  email: string
+}
+
+export type UpdateSalesRepProfileOutcome =
+  | { status: 'ok' }
+  // The name (if changed) is saved immediately; the email change is NOT
+  // yet effective — a verification link was sent to the NEW address, and
+  // the account keeps signing in with its current email until that link
+  // is clicked (see requestEmailChangeVerification/
+  // finalizeEmailChangeVerification below).
+  | { status: 'pending_verification' }
+  | { status: 'not_found' }
+  | { status: 'forbidden' }
+  | { status: 'invalid_domain' }
+  | { status: 'email_conflict' }
+  | { status: 'auth_identity_unresolved' }
+  | { status: 'partial_failure' }
+  | { status: 'error' }
+
+// Dedicated Sales Rep profile update. This deliberately does not reuse
+// updateManagedEmployee: that operation is Admin-only and can change role
+// and weekly-report permissions. This service accepts only name/email,
+// verifies the actual approved_employees role by stable row id, and leaves
+// role, is_active, assignment rows, and reports untouched.
+export async function updateSalesRepProfile(
+  id: string,
+  updates: UpdateSalesRepProfileInput,
+  actorUserId: string,
+  callerRole: 'admin' | 'sales_admin' | 'manager' = 'admin',
+): Promise<UpdateSalesRepProfileOutcome> {
+  const client = getServiceClient()
+  const fullName = updates.fullName.trim()
+  const email = updates.email.trim()
+  const emailNormalized = normalizeEmail(email)
+
+  // A Manager has no visibility into approved_employees at all (rightly —
+  // it holds every employee's own account-provisioning metadata, not just
+  // Sales Reps), so the browser can only ever have the rep's PROFILE id for
+  // them (from rep_manager_assignments, the one thing Manager-scoped RLS
+  // does expose). Admin/Sales Admin, by contrast, pass the roster id
+  // directly, exactly as before this parameter existed. Bridging a profile
+  // id to its roster row by email is safe here specifically because this
+  // function already independently re-verifies the Manager's OWNERSHIP of
+  // whichever row resolves (see isAuthorizedCaller below) before any write
+  // — the bridge only decides WHICH row to look at, never whether editing
+  // it is allowed.
+  let targetRow: {
+    id: string
+    full_name: string
+    email: string
+    email_normalized: string
+    portal_role: string
+    account_created_at: string | null
+    auth_user_id: string | null
+  } | null = null
+
+  if (callerRole === 'manager') {
+    const { data: profileRow, error: profileRowError } = await client
+      .from('profiles')
+      .select('email')
+      .eq('id', id)
+      .maybeSingle()
+    if (profileRowError) {
+      console.error('supabaseServiceClient: updateSalesRepProfile Manager profile-id lookup failed:', profileRowError.message)
+      return { status: 'error' }
+    }
+    if (profileRow) {
+      const { data: rosterRow, error: rosterRowError } = await client
+        .from('approved_employees')
+        .select('id, full_name, email, email_normalized, portal_role, account_created_at, auth_user_id')
+        .eq('email_normalized', normalizeEmail(profileRow.email))
+        .maybeSingle()
+      if (rosterRowError) {
+        console.error('supabaseServiceClient: updateSalesRepProfile Manager roster-bridge lookup failed:', rosterRowError.message)
+        return { status: 'error' }
+      }
+      targetRow = rosterRow
+    }
+  } else {
+    const { data: rosterRow, error: targetError } = await client
+      .from('approved_employees')
+      .select('id, full_name, email, email_normalized, portal_role, account_created_at, auth_user_id')
+      .eq('id', id)
+      .maybeSingle()
+    if (targetError) {
+      console.error('supabaseServiceClient: updateSalesRepProfile target lookup failed:', targetError.message)
+      return { status: 'error' }
+    }
+    targetRow = rosterRow
+  }
+
+  const target: SalesRepProfileTarget | null = targetRow
+    ? { id: targetRow.id, emailNormalized: targetRow.email_normalized, portalRole: targetRow.portal_role }
+    : null
+
+  let emailConflictExists = false
+  if (target) {
+    const { data: conflictRow, error: conflictError } = await client
+      .from('approved_employees')
+      .select('id')
+      .eq('email_normalized', emailNormalized)
+      .neq('id', target.id)
+      .maybeSingle()
+    if (conflictError) {
+      console.error('supabaseServiceClient: updateSalesRepProfile email-conflict check failed:', conflictError.message)
+      return { status: 'error' }
+    }
+    emailConflictExists = !!conflictRow
+  }
+
+  // Resolve a pre-existing profile by its current email before any write
+  // AND before the authorization decision, since a Manager caller's
+  // authorization depends on it (see isAuthorizedCaller below). Its actual
+  // role is checked independently; a corrupt roster/profile role mismatch
+  // fails closed instead of synchronizing an unrelated account.
+  const { data: existingProfile, error: profileLookupError } = target
+    ? await client.from('profiles').select('id, full_name, email, role').eq('email', target.emailNormalized).maybeSingle()
+    : { data: null, error: null }
+  if (profileLookupError) {
+    console.error('supabaseServiceClient: updateSalesRepProfile profile lookup failed:', profileLookupError.message)
+    return { status: 'error' }
+  }
+  if (existingProfile && existingProfile.role !== 'sales_rep') {
+    console.error('supabaseServiceClient: updateSalesRepProfile refused a roster/profile role mismatch.', { approvedEmployeeId: targetRow!.id })
+    return { status: 'forbidden' }
+  }
+
+  // A Manager may only edit a Sales Rep who is CURRENTLY assigned to them —
+  // checked by a direct, service-role query (actorUserId was already
+  // verified as the caller's own id by authenticateManager upstream, never
+  // client-supplied), not an RPC, since this function has no caller-scoped
+  // client/JWT context to evaluate auth.uid() against. A rep with no
+  // profile yet (not onboarded) can have no assignment row either, so a
+  // Manager is correctly denied for one. Admin/Sales Admin are always
+  // authorized, exactly as before this parameter existed.
+  let isAuthorizedCaller = callerRole !== 'manager'
+  if (callerRole === 'manager' && existingProfile) {
+    const { data: ownAssignment, error: ownAssignmentError } = await client
+      .from('rep_manager_assignments')
+      .select('id')
+      .eq('rep_id', existingProfile.id)
+      .eq('manager_id', actorUserId)
+      .is('unassigned_at', null)
+      .maybeSingle()
+    if (ownAssignmentError) {
+      console.error('supabaseServiceClient: updateSalesRepProfile Manager-ownership check failed:', ownAssignmentError.message)
+      return { status: 'error' }
+    }
+    isAuthorizedCaller = !!ownAssignment
+  }
+
+  const decision = decideSalesRepProfileUpdate(target, emailNormalized, emailConflictExists, isAuthorizedCaller)
+  if (decision.action !== 'update') return { status: decision.action }
+
+  const emailChanging = emailNormalized !== targetRow!.email_normalized
+  const accountCreated = targetRow!.account_created_at !== null
+  const authUserId = targetRow!.auth_user_id as string | null
+
+  // A created account must have a stable Auth id before its sign-in email
+  // can be changed. Never resolve Auth identities by scanning email.
+  if (emailChanging && accountCreated && !authUserId) {
+    console.error('supabaseServiceClient: updateSalesRepProfile refused an email change with unresolved Auth identity.', {
+      approvedEmployeeId: targetRow!.id,
+    })
+    return { status: 'auth_identity_unresolved' }
+  }
+
+  // SECURITY: an email change on an already-active, already-onboarded
+  // account (existingProfile present) must be verified before it takes
+  // effect — see requestEmailChangeVerification below. A not-yet-onboarded
+  // account (accountCreated but no profiles row yet) has no "rightful
+  // owner already relying on this email for access" to protect, so that
+  // case is intentionally unchanged: the roster/Auth email updates
+  // immediately, exactly as before this feature existed, and
+  // "Ensure ... existing accounts and invitations continue working"
+  // holds for it without any special-casing.
+  const deferEmailVerification = emailChanging && accountCreated && !!existingProfile
+
+  const originalRoster = {
+    fullName: targetRow!.full_name as string,
+    email: targetRow!.email as string,
+    emailNormalized: targetRow!.email_normalized as string,
+  }
+  const originalProfile = existingProfile
+    ? { fullName: existingProfile.full_name as string | null, email: existingProfile.email as string }
+    : null
+
+  // While verification is pending, the roster/profile/Auth email all stay
+  // at their ORIGINAL value — only full_name (if changed) is written now.
+  // effectiveEmail/-Normalized feed every write below instead of the raw
+  // email/emailNormalized inputs, so "pending verification" can never
+  // partially apply the new email to one store but not another.
+  const effectiveEmail = deferEmailVerification ? originalRoster.email : email
+  const effectiveEmailNormalized = deferEmailVerification ? originalRoster.emailNormalized : emailNormalized
+
+  let authEmailChanged = false
+  if (emailChanging && accountCreated && !deferEmailVerification) {
+    const { error: authUpdateError } = await client.auth.admin.updateUserById(authUserId!, {
+      email,
+      // Match the existing Super Admin edit behavior: the new sign-in email
+      // is immediately confirmed and NO notification/verification email is
+      // sent. This behavior is also surfaced in the Sales Admin edit UI.
+      // Only reachable for a not-yet-onboarded account — see
+      // deferEmailVerification above.
+      email_confirm: true,
+    })
+    if (authUpdateError) {
+      const conflict = authUpdateError.code === 'email_exists' || authUpdateError.code === 'user_already_exists'
+      if (!conflict) console.error('supabaseServiceClient: updateSalesRepProfile Auth email update failed:', authUpdateError.message)
+      return conflict ? { status: 'email_conflict' } : { status: 'error' }
+    }
+    authEmailChanged = true
+  }
+
+  let rosterUpdated = false
+  let profileUpdated = false
+
+  const rollbackAuthEmail = async (): Promise<boolean> => {
+    if (!authEmailChanged || !authUserId) return true
+    const { error } = await client.auth.admin.updateUserById(authUserId, {
+      email: originalRoster.email,
+      email_confirm: true,
+    })
+    return !error
+  }
+
+  const rollbackRoster = async (): Promise<boolean> => {
+    if (!rosterUpdated) return true
+    const { data, error } = await client
+      .from('approved_employees')
+      .update({ full_name: originalRoster.fullName, email: originalRoster.email, email_normalized: originalRoster.emailNormalized })
+      .eq('id', targetRow!.id)
+      .eq('portal_role', 'sales_rep')
+      .select('id, full_name, email_normalized')
+    return !error && data?.length === 1 && data[0].id === targetRow!.id && data[0].full_name === originalRoster.fullName && data[0].email_normalized === originalRoster.emailNormalized
+  }
+
+  const rollbackProfile = async (): Promise<boolean> => {
+    if (!profileUpdated || !existingProfile || !originalProfile) return true
+    const { data, error } = await client
+      .from('profiles')
+      .update({ full_name: originalProfile.fullName, email: originalProfile.email })
+      .eq('id', existingProfile.id)
+      .eq('role', 'sales_rep')
+      .select('id, full_name, email')
+    return !error && data?.length === 1 && data[0].id === existingProfile.id && data[0].full_name === originalProfile.fullName && data[0].email === originalProfile.email
+  }
+
+  const rollbackAndReport = async (reason: string): Promise<UpdateSalesRepProfileOutcome> => {
+    const profileRollback = await rollbackProfile()
+    const rosterRollback = await rollbackRoster()
+    const authRollback = await rollbackAuthEmail()
+    const complete = profileRollback && rosterRollback && authRollback
+    console.error(`supabaseServiceClient: updateSalesRepProfile ${complete ? 'rolled back' : 'PARTIAL FAILURE'} after ${reason}.`, {
+      approvedEmployeeId: targetRow?.id ?? id,
+      actorUserId,
+      profileRollback,
+      rosterRollback,
+      authRollback,
+    })
+    return complete ? { status: 'error' } : { status: 'partial_failure' }
+  }
+
+  const { data: rosterRows, error: rosterUpdateError } = await client
+    .from('approved_employees')
+    .update({ full_name: fullName, email: effectiveEmail, email_normalized: effectiveEmailNormalized })
+    .eq('id', targetRow!.id)
+    .eq('portal_role', 'sales_rep')
+    .select('id, full_name, email_normalized, portal_role')
+
+  if (rosterUpdateError) {
+    console.error('supabaseServiceClient: updateSalesRepProfile roster update failed:', rosterUpdateError.message)
+    return rollbackAndReport('roster update failure')
+  }
+  if (!rosterRows || rosterRows.length !== 1 || rosterRows[0].id !== targetRow!.id) {
+    rosterUpdated = !!rosterRows?.length
+    return rollbackAndReport('roster row verification failure')
+  }
+  rosterUpdated = true
+  if (
+    rosterRows[0].full_name !== fullName ||
+    rosterRows[0].email_normalized !== effectiveEmailNormalized ||
+    rosterRows[0].portal_role !== 'sales_rep'
+  ) {
+    return rollbackAndReport('roster value verification failure')
+  }
+
+  if (existingProfile) {
+    const { data: profileRows, error: profileUpdateError } = await client
+      .from('profiles')
+      .update({ full_name: fullName, email: effectiveEmailNormalized })
+      .eq('id', existingProfile.id)
+      .eq('role', 'sales_rep')
+      .select('id, full_name, email, role')
+
+    if (profileUpdateError) {
+      console.error('supabaseServiceClient: updateSalesRepProfile profile update failed:', profileUpdateError.message)
+      return rollbackAndReport('profile update failure')
+    }
+    if (!profileRows || profileRows.length !== 1 || profileRows[0].id !== existingProfile.id) {
+      profileUpdated = !!profileRows?.length
+      return rollbackAndReport('profile row verification failure')
+    }
+    profileUpdated = true
+    if (
+      profileRows[0].full_name !== fullName ||
+      profileRows[0].email !== effectiveEmailNormalized ||
+      profileRows[0].role !== 'sales_rep'
+    ) {
+      return rollbackAndReport('profile value verification failure')
+    }
+  }
+
+  let verificationRequested = false
+  if (deferEmailVerification) {
+    const sent = await requestEmailChangeVerification(existingProfile!.id, emailNormalized)
+    if (!sent) return rollbackAndReport('email verification request failure')
+    verificationRequested = true
+  }
+
+  const changedFields = [
+    ...(originalRoster.fullName !== fullName ? ['full_name'] : []),
+    ...(originalRoster.emailNormalized !== effectiveEmailNormalized ? ['email'] : []),
+    ...(verificationRequested ? ['pending_email'] : []),
+  ]
+  if (changedFields.length > 0) {
+    // Structured server log is the existing no-migration audit mechanism.
+    // Avoid logging tokens or Auth credentials; include before/after business
+    // values so an authorized operator can reconstruct the profile change.
+    console.info(
+      'audit.sales_rep_profile_updated',
+      JSON.stringify({
+        version: 1,
+        actorUserId,
+        approvedEmployeeId: targetRow!.id,
+        changedFields,
+        before: { fullName: originalRoster.fullName, email: originalRoster.emailNormalized },
+        after: { fullName, email: effectiveEmailNormalized },
+        pendingEmail: verificationRequested ? emailNormalized : null,
+        emailConfirmedImmediately: emailChanging && accountCreated && !deferEmailVerification,
+        notificationEmailSent: verificationRequested,
+        occurredAt: new Date().toISOString(),
+      }),
+    )
+  }
+  return verificationRequested ? { status: 'pending_verification' } : { status: 'ok' }
+}
+
+const EMAIL_CHANGE_VERIFICATION_WINDOW_MS = 48 * 60 * 60 * 1000 // 48 hours
+
+// Writes the pending-email fields and sends the verification link. Returns
+// false ONLY on a failure to write those fields — the caller
+// (updateSalesRepProfile) treats that as fatal and rolls back the whole
+// request, since a verification request that can't even be recorded must
+// never be reported as having succeeded. A failure to actually SEND the
+// email, by contrast, is logged but does not fail the request: the pending
+// record itself is valid and correct either way (the same pattern already
+// established by every other email in this app's reminder pipeline,
+// which also only ever best-effort-sends via getEmailSender() — see its
+// own TestModeEmailSender until a real provider is configured).
+async function requestEmailChangeVerification(profileId: string, newEmailNormalized: string): Promise<boolean> {
+  const client = getServiceClient()
+  const token = generateEmailChangeToken()
+  const tokenHash = hashEmailChangeToken(token)
+
+  // sales_rep_pending_email_changes, never profiles — see that table's own
+  // migration comment for why: RLS filters rows, never columns, so a
+  // token hash must live somewhere with NO grant to authenticated/anon at
+  // all, not merely a column a client-facing query happens not to select
+  // today. profile_id is this table's PRIMARY KEY, so a second request
+  // for the same profile simply replaces the prior pending request
+  // (upsert) rather than erroring or leaving two rows — a Sales Rep's
+  // record here is never a bounded history, only "what is the one
+  // outstanding request, if any, right now."
+  const { error } = await client.from('sales_rep_pending_email_changes').upsert({
+    profile_id: profileId,
+    pending_email: newEmailNormalized,
+    token_hash: tokenHash,
+    requested_at: new Date().toISOString(),
+  })
+  if (error) {
+    console.error('supabaseServiceClient: requestEmailChangeVerification failed to record the pending email change:', error.message)
+    return false
+  }
+
+  const redirectBase = process.env.ONBOARDING_REDIRECT_URL
+  if (!redirectBase) {
+    // Configuration gap, not a reason to fail the request — the pending
+    // record is valid; an operator can resend/reconstruct the link once
+    // this is configured. Logged loudly since a missing verification link
+    // is otherwise silent.
+    console.error('supabaseServiceClient: requestEmailChangeVerification missing ONBOARDING_REDIRECT_URL — no verification link could be sent.')
+    return true
+  }
+
+  const verifyUrl = `${redirectBase.replace(/\/$/, '')}/verify-email-change?id=${encodeURIComponent(profileId)}&token=${token}`
+  try {
+    const result = await getEmailSender().send({
+      to: newEmailNormalized,
+      subject: 'Confirm your new WFG OneReport Pulse email address',
+      body:
+        'A request was made to change the email address on your WFG OneReport Pulse account to this address.\n\n' +
+        `To confirm this change, open the following link within 48 hours:\n${verifyUrl}\n\n` +
+        'Your account will keep signing in with its current email address until you confirm this change. ' +
+        'If you did not expect this, no action is needed — nothing has changed yet, and this link will simply expire.',
+    })
+    if (result.status === 'failed') {
+      console.error('supabaseServiceClient: requestEmailChangeVerification email send failed:', result.detail)
+    }
+  } catch (err) {
+    console.error('supabaseServiceClient: requestEmailChangeVerification email send threw unexpectedly:', err)
+  }
+
+  return true
+}
+
+export type FinalizeEmailChangeOutcome =
+  | { status: 'ok' }
+  | { status: 'not_found' | 'invalid_token' | 'expired' | 'email_conflict' | 'partial_failure' | 'error' }
+
+// Finalizes a Sales Rep email-change verification link — the ONLY place
+// the new email ever actually takes effect. Re-checks everything fresh
+// (never trusts anything computed at request time): the token is compared
+// in constant time against the stored hash, expiry is computed from the
+// stored requestedAt (never a client-supplied value), and the new email is
+// re-checked for a conflict against BOTH approved_employees and profiles
+// immediately before writing (another account could have taken that email
+// in the time since the link was sent). The three real writes (roster,
+// profile, Auth) use the exact same rollback-on-partial-failure discipline
+// as updateSalesRepProfile itself, reused directly rather than
+// reimplemented, since a failure partway through here is exactly as
+// dangerous as one partway through that function.
+export async function finalizeEmailChangeVerification(profileId: string, token: string): Promise<FinalizeEmailChangeOutcome> {
+  const client = getServiceClient()
+
+  const { data: profileRow, error: profileLookupError } = await client
+    .from('profiles')
+    .select('id, full_name, email, role')
+    .eq('id', profileId)
+    .maybeSingle()
+  if (profileLookupError) {
+    console.error('supabaseServiceClient: finalizeEmailChangeVerification profile lookup failed:', profileLookupError.message)
+    return { status: 'error' }
+  }
+  if (!profileRow) return { status: 'not_found' }
+
+  const { data: pendingRow, error: pendingLookupError } = await client
+    .from('sales_rep_pending_email_changes')
+    .select('pending_email, token_hash, requested_at')
+    .eq('profile_id', profileId)
+    .maybeSingle()
+  if (pendingLookupError) {
+    console.error('supabaseServiceClient: finalizeEmailChangeVerification pending-change lookup failed:', pendingLookupError.message)
+    return { status: 'error' }
+  }
+  if (!pendingRow) return { status: 'not_found' }
+
+  const tokenIsValid = verifyEmailChangeToken(token, pendingRow.token_hash as string)
+  const pendingEmailNormalized = normalizeEmail(pendingRow.pending_email as string)
+
+  const { data: rosterConflict } = await client
+    .from('approved_employees')
+    .select('id')
+    .eq('email_normalized', pendingEmailNormalized)
+    .neq('id', profileId) // approved_employees.id generally differs from profiles.id; this excludes nothing real but mirrors the defensive style used elsewhere rather than omitting the guard
+    .maybeSingle()
+  const { data: profileConflict } = await client
+    .from('profiles')
+    .select('id')
+    .eq('email', pendingEmailNormalized)
+    .neq('id', profileId)
+    .maybeSingle()
+  const emailConflictExists = !!rosterConflict || !!profileConflict
+
+  const decision = decideEmailChangeVerification(
+    {
+      pendingEmail: pendingEmailNormalized,
+      tokenHash: pendingRow.token_hash as string,
+      requestedAt: pendingRow.requested_at as string,
+    },
+    tokenIsValid,
+    new Date().toISOString(),
+    EMAIL_CHANGE_VERIFICATION_WINDOW_MS,
+    emailConflictExists,
+  )
+
+  if (decision.action !== 'finalize') return { status: decision.action }
+
+  const { data: rosterRow, error: rosterLookupError } = await client
+    .from('approved_employees')
+    .select('id, full_name, email, email_normalized, auth_user_id')
+    .eq('email_normalized', normalizeEmail(profileRow.email as string))
+    .maybeSingle()
+  if (rosterLookupError || !rosterRow) {
+    console.error('supabaseServiceClient: finalizeEmailChangeVerification could not resolve the roster row for this profile:', rosterLookupError?.message)
+    return { status: 'error' }
+  }
+  const authUserId = rosterRow.auth_user_id as string | null
+  if (!authUserId) {
+    console.error('supabaseServiceClient: finalizeEmailChangeVerification refused — no resolved Auth identity for this roster row.', { profileId })
+    return { status: 'error' }
+  }
+
+  const originalRosterEmail = { email: rosterRow.email as string, emailNormalized: rosterRow.email_normalized as string }
+  const originalProfileEmail = profileRow.email as string
+
+  let authEmailChanged = false
+  let rosterUpdated = false
+  let profileUpdated = false
+
+  const rollback = async (reason: string): Promise<FinalizeEmailChangeOutcome> => {
+    const authOk = !authEmailChanged || !(await client.auth.admin.updateUserById(authUserId, { email: originalRosterEmail.email, email_confirm: true }).then((r) => !r.error))
+    const rosterOk =
+      !rosterUpdated ||
+      (await client
+        .from('approved_employees')
+        .update({ email: originalRosterEmail.email, email_normalized: originalRosterEmail.emailNormalized })
+        .eq('id', rosterRow.id)
+        .then((r) => !r.error))
+    const profileOk =
+      !profileUpdated ||
+      (await client
+        .from('profiles')
+        .update({ email: originalProfileEmail })
+        .eq('id', profileId)
+        .then((r) => !r.error))
+    const complete = authOk && rosterOk && profileOk
+    console.error(`supabaseServiceClient: finalizeEmailChangeVerification ${complete ? 'rolled back' : 'PARTIAL FAILURE'} after ${reason}.`, {
+      profileId,
+      authOk,
+      rosterOk,
+      profileOk,
+    })
+    return { status: complete ? 'error' : 'partial_failure' }
+  }
+
+  const { error: authUpdateError } = await client.auth.admin.updateUserById(authUserId, {
+    email: decision.newEmail,
+    email_confirm: true,
+  })
+  if (authUpdateError) {
+    const conflict = authUpdateError.code === 'email_exists' || authUpdateError.code === 'user_already_exists'
+    if (!conflict) console.error('supabaseServiceClient: finalizeEmailChangeVerification Auth email update failed:', authUpdateError.message)
+    return { status: conflict ? 'email_conflict' : 'error' }
+  }
+  authEmailChanged = true
+
+  const { error: rosterUpdateError } = await client
+    .from('approved_employees')
+    .update({ email: decision.newEmail, email_normalized: pendingEmailNormalized })
+    .eq('id', rosterRow.id)
+  if (rosterUpdateError) {
+    console.error('supabaseServiceClient: finalizeEmailChangeVerification roster update failed:', rosterUpdateError.message)
+    return rollback('roster update failure')
+  }
+  rosterUpdated = true
+
+  const { error: profileUpdateError } = await client
+    .from('profiles')
+    .update({ email: pendingEmailNormalized })
+    .eq('id', profileId)
+  if (profileUpdateError) {
+    console.error('supabaseServiceClient: finalizeEmailChangeVerification profile update failed:', profileUpdateError.message)
+    return rollback('profile update failure')
+  }
+  profileUpdated = true
+
+  // Replay protection: deleted LAST, only once the real change is fully
+  // committed — if this delete itself fails, a repeat click simply
+  // reproduces the exact same (already-applied) end state rather than
+  // losing the request, since the email conflict check above excludes
+  // the rep's own profile id and so never blocks re-applying its own
+  // already-current value.
+  const { error: pendingDeleteError } = await client.from('sales_rep_pending_email_changes').delete().eq('profile_id', profileId)
+  if (pendingDeleteError) {
+    console.error('supabaseServiceClient: finalizeEmailChangeVerification succeeded but failed to clear the pending-change row:', pendingDeleteError.message, {
+      profileId,
+    })
+  }
+
+  // Security notification to the OLD address — best-effort, never fails
+  // the request (the change itself already succeeded and must not be
+  // reported as failed over a notification). Lets the original account
+  // owner notice and react if this change wasn't actually theirs; the new
+  // address already received its own confirmation implicitly by being
+  // the one that could click the link at all.
+  try {
+    const result = await getEmailSender().send({
+      to: originalRosterEmail.email,
+      subject: 'Your WFG OneReport Pulse email address was changed',
+      body:
+        `The sign-in email on your WFG OneReport Pulse account was changed from this address to ${pendingEmailNormalized}.\n\n` +
+        'If you made this change yourself, no action is needed. If you did not expect this, contact your Admin, Sales Admin, or Manager immediately.',
+    })
+    if (result.status === 'failed') {
+      console.error('supabaseServiceClient: finalizeEmailChangeVerification old-address notification failed:', result.detail)
+    }
+  } catch (err) {
+    console.error('supabaseServiceClient: finalizeEmailChangeVerification old-address notification threw unexpectedly:', err)
+  }
+
+  console.info(
+    'audit.sales_rep_email_change_verified',
+    JSON.stringify({
+      version: 1,
+      profileId,
+      before: { email: originalRosterEmail.emailNormalized },
+      after: { email: pendingEmailNormalized },
+      occurredAt: new Date().toISOString(),
+    }),
+  )
 
   return { status: 'ok' }
 }
@@ -1812,7 +2502,236 @@ export async function addOrCreateSalesRepAccount(fullName: string, email: string
   const result = await createAccountAndMarkRoster(emailNormalized, email)
   if (result.status === 'error') return { status: 'error' }
   if (result.status === 'already_created') return { status: 'already_created' }
+
+  // Best-effort, never fails the request — the account itself is already
+  // created regardless of whether this notification goes out. Sent only
+  // on a genuine first creation, never on already_created, to avoid a
+  // duplicate send on a repeat invite attempt for the same person.
+  // Deliberately contains NO password: every new account shares one
+  // static temporary password (see createEmployeeAccount), and emailing
+  // that value would mean the SAME secret travels through every future
+  // invitation email ever sent — exactly what communicating it through a
+  // manual internal channel instead was already chosen to avoid. This
+  // email only tells the person an account exists and where to sign in.
+  try {
+    const redirectBase = process.env.ONBOARDING_REDIRECT_URL
+    if (redirectBase) {
+      const sendResult = await getEmailSender().send({
+        to: email,
+        subject: 'Your WFG OneReport Pulse account is ready',
+        body:
+          `An account has been created for you on WFG OneReport Pulse at ${redirectBase.replace(/\/$/, '')}.\n\n` +
+          'Your manager or admin will provide your temporary sign-in password through your usual internal channel. ' +
+          'You will be asked to set your own password the first time you sign in.',
+      })
+      if (sendResult.status === 'failed') {
+        console.error('supabaseServiceClient: addOrCreateSalesRepAccount invitation email failed:', sendResult.detail)
+      }
+    } else {
+      console.error('supabaseServiceClient: addOrCreateSalesRepAccount missing ONBOARDING_REDIRECT_URL — no invitation email could be sent.')
+    }
+  } catch (err) {
+    console.error('supabaseServiceClient: addOrCreateSalesRepAccount invitation email threw unexpectedly:', err)
+  }
+
   return { status: 'created' }
+}
+
+const PENDING_ASSIGNMENT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000 // 14 days
+
+export type InviteSalesRepAsManagerOutcome =
+  | { status: 'created_and_pending' }
+  | { status: 'already_created_and_pending' } // account pre-existed (awaiting first login), pending assignment attached now
+  | { status: 'already_registered' } // a profile already exists — out of scope for Manager self-service; direct to Admin/Sales Admin
+  | { status: 'pending_conflict'; conflictingManagerName: string | null }
+  | { status: 'invalid_domain' | 'role_conflict' | 'inactive' | 'error' }
+
+// "Add Sales Rep" for a Manager caller — entirely additive on top of
+// addOrCreateSalesRepAccount, which is completely untouched and still used
+// exactly as before for Admin/Sales Admin (no pending-assignment row is
+// ever created for those callers — see invite-sales-rep.ts, which only
+// calls this wrapper when the authenticated caller is a Manager).
+//
+// Deliberately does NOT attempt anything for 'already_registered' (a
+// profile already exists for this email) — reaching that rep by email
+// alone, with no way to confirm ownership of an already-provisioned
+// account, is exactly the "browse unassigned Sales Reps" surface this
+// Manager-scoped flow was explicitly asked not to build. A Manager who
+// hits this should be told to contact an Admin/Sales Admin, same as the
+// existing message already shown for this outcome.
+export async function inviteSalesRepAsManager(
+  fullName: string,
+  email: string,
+  managerId: string,
+): Promise<InviteSalesRepAsManagerOutcome> {
+  const accountOutcome = await addOrCreateSalesRepAccount(fullName, email)
+  if (accountOutcome.status === 'invalid_domain') return { status: 'invalid_domain' }
+  if (accountOutcome.status === 'role_conflict') return { status: 'role_conflict' }
+  if (accountOutcome.status === 'inactive') return { status: 'inactive' }
+  if (accountOutcome.status === 'already_registered') return { status: 'already_registered' }
+  if (accountOutcome.status === 'error') return { status: 'error' }
+
+  const emailNormalized = normalizeEmail(email)
+  const { data: rosterRow, error: rosterLookupError } = await getServiceClient()
+    .from('approved_employees')
+    .select('auth_user_id')
+    .eq('email_normalized', emailNormalized)
+    .maybeSingle()
+  if (rosterLookupError || !rosterRow?.auth_user_id) {
+    console.error('supabaseServiceClient: inviteSalesRepAsManager could not resolve the new Auth user id:', rosterLookupError?.message)
+    return { status: 'error' }
+  }
+
+  const pendingOutcome = await createManagerPendingAssignment(rosterRow.auth_user_id as string, managerId)
+  if (pendingOutcome.status === 'conflict') {
+    const { data: conflictingManager } = await getServiceClient()
+      .from('profiles')
+      .select('full_name')
+      .eq('id', pendingOutcome.conflictingManagerId)
+      .maybeSingle()
+    return { status: 'pending_conflict', conflictingManagerName: (conflictingManager?.full_name as string | null) ?? null }
+  }
+  if (pendingOutcome.status === 'error') return { status: 'error' }
+
+  return accountOutcome.status === 'already_created' ? { status: 'already_created_and_pending' } : { status: 'created_and_pending' }
+}
+
+type CreatePendingAssignmentOutcome = { status: 'ok' } | { status: 'conflict'; conflictingManagerId: string } | { status: 'error' }
+
+// Atomic insert-or-read: attempts the insert directly and reads the
+// existing row only on a unique-constraint failure, so two concurrent
+// invites for the same rep can never both believe they "won" — the
+// database's own partial unique index is the single source of truth, not
+// a separate check-then-insert in Node. See decidePendingAssignmentCreation
+// for the idempotent-vs-conflict decision made from whatever this reads.
+async function createManagerPendingAssignment(repAuthUserId: string, managerId: string): Promise<CreatePendingAssignmentOutcome> {
+  const client = getServiceClient()
+  const expiresAt = new Date(Date.now() + PENDING_ASSIGNMENT_WINDOW_MS).toISOString()
+
+  const { error: insertError } = await client
+    .from('manager_sales_rep_pending_assignments')
+    .insert({ rep_auth_user_id: repAuthUserId, manager_id: managerId, expires_at: expiresAt })
+
+  if (!insertError) return { status: 'ok' }
+  if (insertError.code !== '23505') {
+    console.error('supabaseServiceClient: createManagerPendingAssignment insert failed:', insertError.message)
+    return { status: 'error' }
+  }
+
+  const { data: existing, error: readError } = await client
+    .from('manager_sales_rep_pending_assignments')
+    .select('manager_id, expires_at')
+    .eq('rep_auth_user_id', repAuthUserId)
+    .is('resolved_at', null)
+    .maybeSingle()
+  if (readError || !existing) {
+    console.error('supabaseServiceClient: createManagerPendingAssignment conflict-read failed:', readError?.message)
+    return { status: 'error' }
+  }
+
+  const existingPending: OpenPendingAssignment = { managerId: existing.manager_id as string, expiresAt: existing.expires_at as string }
+  // existingPending is always non-null here, so decidePendingAssignmentCreation
+  // can only ever return 'idempotent' or 'conflict' for this call — 'create'
+  // is unreachable, but handled defensively rather than asserted away.
+  const decision = decidePendingAssignmentCreation(existingPending, managerId)
+  if (decision.action === 'conflict') return { status: 'conflict', conflictingManagerId: decision.conflictingManagerId }
+  return { status: 'ok' }
+}
+
+export type FinalizePendingAssignmentOutcome =
+  | { status: 'noop' | 'expired' | 'manager_inactive' | 'already_assigned' }
+  | { status: 'assigned'; managerId: string }
+  | { status: 'error' }
+
+// Called right after a profiles row is created for a Sales Rep, from all
+// three places that can do that (complete-profile.ts,
+// pre-provision-sales-reps.ts, pre-provision-manager-profile.ts). A no-op
+// the vast majority of the time (no pending row exists) — this is the ONE
+// place a Manager-initiated invite's pending claim is ever turned into a
+// real rep_manager_assignments row. Writes directly via the service-role
+// client rather than the assign_sales_rep/assign_own_sales_rep RPCs: both
+// of those derive the caller from auth.uid(), which does not exist in this
+// server-only context, and no advisory lock is needed here specifically
+// because a brand-new profile cannot have a pre-existing active assignment
+// to "close" first (assign_sales_rep's lock exists to protect exactly that
+// close-then-open pair) — the one remaining race (a concurrent assignment
+// appearing between the already_assigned check and this INSERT) is still
+// caught by rep_manager_assignments' own partial unique index and handled
+// below rather than left to surface as a raw constraint error.
+export async function finalizePendingManagerAssignment(repProfileId: string): Promise<FinalizePendingAssignmentOutcome> {
+  const client = getServiceClient()
+
+  const { data: pendingRow, error: pendingLookupError } = await client
+    .from('manager_sales_rep_pending_assignments')
+    .select('id, manager_id, expires_at')
+    .eq('rep_auth_user_id', repProfileId)
+    .is('resolved_at', null)
+    .maybeSingle()
+  if (pendingLookupError) {
+    console.error('supabaseServiceClient: finalizePendingManagerAssignment pending lookup failed:', pendingLookupError.message)
+    return { status: 'error' }
+  }
+  if (!pendingRow) return { status: 'noop' }
+
+  const [{ data: managerProfile }, { data: activeAssignment }] = await Promise.all([
+    client.from('profiles').select('role, is_active').eq('id', pendingRow.manager_id).maybeSingle(),
+    client.from('rep_manager_assignments').select('id').eq('rep_id', repProfileId).is('unassigned_at', null).maybeSingle(),
+  ])
+
+  const pending: OpenPendingAssignment = { managerId: pendingRow.manager_id as string, expiresAt: pendingRow.expires_at as string }
+  const managerStillActive = managerProfile?.role === 'manager' && managerProfile?.is_active === true
+  const decision = decideFinalizePendingAssignment(pending, new Date().toISOString(), managerStillActive, !!activeAssignment)
+
+  if (decision.action === 'noop') return { status: 'noop' }
+
+  if (decision.action !== 'assign') {
+    const { error: resolveError } = await client
+      .from('manager_sales_rep_pending_assignments')
+      .update({ resolved_at: new Date().toISOString(), resolution: decision.action })
+      .eq('id', pendingRow.id)
+    if (resolveError) {
+      console.error('supabaseServiceClient: finalizePendingManagerAssignment failed to record resolution:', resolveError.message, {
+        pendingId: pendingRow.id,
+        resolution: decision.action,
+      })
+    }
+    return { status: decision.action }
+  }
+
+  const { error: assignError } = await client
+    .from('rep_manager_assignments')
+    .insert({ rep_id: repProfileId, manager_id: decision.managerId, assigned_by: decision.managerId })
+  if (assignError) {
+    const conflict = assignError.code === '23505'
+    const { error: resolveError } = await client
+      .from('manager_sales_rep_pending_assignments')
+      .update({ resolved_at: new Date().toISOString(), resolution: conflict ? 'conflict' : 'expired' })
+      .eq('id', pendingRow.id)
+    if (resolveError) {
+      console.error('supabaseServiceClient: finalizePendingManagerAssignment failed to record resolution after a failed assignment insert:', resolveError.message)
+    }
+    if (!conflict) {
+      console.error('supabaseServiceClient: finalizePendingManagerAssignment assignment insert failed:', assignError.message, { pendingId: pendingRow.id })
+      return { status: 'error' }
+    }
+    return { status: 'already_assigned' }
+  }
+
+  const { error: resolveError } = await client
+    .from('manager_sales_rep_pending_assignments')
+    .update({ resolved_at: new Date().toISOString(), resolution: 'assigned' })
+    .eq('id', pendingRow.id)
+  if (resolveError) {
+    // The assignment itself is already live and correct — this only means
+    // the pending row's own bookkeeping didn't update, which is surfaced
+    // for an operator to clean up rather than treated as the assignment
+    // having failed (it didn't).
+    console.error('supabaseServiceClient: finalizePendingManagerAssignment assigned successfully but failed to mark the pending row resolved:', resolveError.message, {
+      pendingId: pendingRow.id,
+    })
+  }
+
+  return { status: 'assigned', managerId: decision.managerId }
 }
 
 // -----------------------------------------------------------------------

@@ -173,15 +173,20 @@ describe('Phase 1A real-employee onboarding — Manager dropdown shows name + em
     assert.doesNotMatch(fnMatch[0], /\.includes\(|\.match\(|\.test\(|startsWith|endsWith/)
   })
 
-  test('the allowlist is a fixed Set of exactly 15 UUIDs — the current real, active production Managers (corrected 2026-11-10 from a stale 10-entry PREVIEW-id snapshot), one per entry, each labeled by name in a comment', () => {
+  test('the allowlist is a fixed Set of exactly 16 UUIDs — the current real, active production Managers (corrected 2026-11-10 from a stale 10-entry PREVIEW-id snapshot; Robert Bauchle added 2026-11-10 once his Manager profile was pre-provisioned), one per entry, each labeled by name in a comment', () => {
     const setMatch = supabaseServiceClientSrc.match(/const VERIFIED_REAL_MANAGER_IDS = new Set\(\[[\s\S]*?\]\)/)
     assert.ok(setMatch, 'could not locate VERIFIED_REAL_MANAGER_IDS')
     const uuidMatches = setMatch[0].match(/'[0-9a-f-]{36}'/g) ?? []
-    assert.equal(uuidMatches.length, 15)
+    assert.equal(uuidMatches.length, 16)
   })
 
   test('the dropdown option renders the Manager\'s name AND email together, so similarly named Managers are distinguishable', () => {
-    assert.match(salesRepManagementComponentSrc, /\{m\.fullName \?\? m\.id\} — \{m\.email\}/)
+    assert.match(salesRepManagementComponentSrc, /\{m\.fullName \?\? m\.id\}\{m\.email \? ` — \$\{m\.email\}` : ''\}/)
+  })
+
+  test('Sales Admin receives no Manager email detail from list-managers while Admin keeps existing disambiguating emails', () => {
+    const listManagersSrc = readFileSync(path.join(dir, '..', '..', 'api', 'admin', 'users', 'list-managers.ts'), 'utf8')
+    assert.match(listManagersSrc, /auth\.role === 'sales_admin' \? managers\.map\(\(\{ id, fullName \}\) => \(\{ id, fullName, email: '' \}\)\) : managers/)
   })
 
   test('ActiveManager (the client-side type the dropdown renders from) requires email, not an optional field that could silently be missing', () => {
@@ -209,11 +214,11 @@ describe('Phase 4 refinement — Sales Rep real-vs-demo/test classification, mir
     assert.doesNotMatch(fnMatch[0], /isVerifiedReal[\s\S]{0,80}(\.includes\(|\.match\(|\.test\(|startsWith|endsWith)/)
   })
 
-  test('the allowlist is a fixed Set of exactly 29 UUIDs — the real production Sales Reps pre-provisioned via the launch rollout (corrected 2026-11-10 from a stale 33-entry PREVIEW-id snapshot), one per entry, each labeled by name in a comment', () => {
+  test('the allowlist is a fixed Set of exactly 30 UUIDs — the real production Sales Reps pre-provisioned via the launch rollout (corrected 2026-11-10 from a stale 33-entry PREVIEW-id snapshot; Austin Rozier added 2026-11-10 once converted from Manager to Sales Rep), one per entry, each labeled by name in a comment', () => {
     const setMatch = supabaseServiceClientSrc.match(/const VERIFIED_REAL_SALES_REP_IDS = new Set\(\[[\s\S]*?\]\)/)
     assert.ok(setMatch, 'could not locate VERIFIED_REAL_SALES_REP_IDS')
     const uuidMatches = setMatch[0].match(/'[0-9a-f-]{36}'/g) ?? []
-    assert.equal(uuidMatches.length, 29)
+    assert.equal(uuidMatches.length, 30)
   })
 
   test('the two known demo/test accounts are not in the allowlist', () => {

@@ -128,6 +128,19 @@ function parseRpcError(message: string | undefined): RepReportError {
 // their own report, a manager (current or former, per RLS) reading an
 // assigned/historical rep's report, or an admin.
 export async function fetchRepReport(repId: string, weekStartDate: string): Promise<RepReport | null> {
+  const result = await fetchRepReportWithOutcome(repId, weekStartDate)
+  return result.status === 'found' ? result.report : null
+}
+
+export type FetchRepReportOutcome =
+  | { status: 'found'; report: RepReport }
+  | { status: 'not_found' }
+  | { status: 'error' }
+
+// Detailed read outcome for UIs that must not confuse an RLS/network error
+// with a genuinely absent report. Same signed-in Supabase client and RLS
+// query as fetchRepReport; no service-role or privileged path is added.
+export async function fetchRepReportWithOutcome(repId: string, weekStartDate: string): Promise<FetchRepReportOutcome> {
   const { data, error } = await supabase
     .from('rep_reports')
     .select(REP_REPORT_COLUMNS)
@@ -137,9 +150,9 @@ export async function fetchRepReport(repId: string, weekStartDate: string): Prom
 
   if (error) {
     console.error('Failed to fetch rep report:', error.message)
-    return null
+    return { status: 'error' }
   }
-  return data ? fromRow(data as RepReportRow) : null
+  return data ? { status: 'found', report: fromRow(data as RepReportRow) } : { status: 'not_found' }
 }
 
 // Read-only history for a single rep, most recent first — used by both the
@@ -417,16 +430,16 @@ function assignmentFromRow(row: RepManagerAssignmentRow): RepManagerAssignment {
   }
 }
 
-// Admin-only. Idempotent (re-assigning to the already-active manager
-// returns the existing assignment unchanged) and concurrency-safe
-// server-side.
+// Admin or Sales Admin. Idempotent (re-assigning to the already-active
+// manager returns the existing assignment unchanged) and concurrency-safe
+// server-side; the RPC independently checks the caller role.
 export async function assignSalesRep(repId: string, managerId: string): Promise<RepManagerAssignment> {
   const { data, error } = await supabase.rpc('assign_sales_rep', { p_rep_id: repId, p_manager_id: managerId })
   if (error) throw parseRpcError(error.message)
   return assignmentFromRow(data as RepManagerAssignmentRow)
 }
 
-// Admin-only.
+// Admin or Sales Admin; the RPC independently checks the caller role.
 export async function unassignSalesRep(repId: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('unassign_sales_rep', { p_rep_id: repId })
   if (error) throw parseRpcError(error.message)
@@ -520,4 +533,26 @@ export async function fetchAllRepReportsForWeek(weekStartDate: string): Promise<
     return []
   }
   return (data ?? []).map((row) => fromRow(row as RepReportRow))
+}
+
+export type FetchRepReportsForWeekOutcome =
+  | { status: 'ok'; reports: RepReport[] }
+  | { status: 'error'; message: string }
+
+// Read-only, RLS-scoped list for Sales Admin's Report Status screen. Unlike
+// fetchAllRepReportsForWeek(), this returns a safe failure state instead of
+// collapsing a denied/failed SELECT into an empty week. The query itself is
+// unchanged and is authorized by rep_reports_select_sales_admin; no service-
+// role client or privileged endpoint is involved.
+export async function fetchRepReportsForWeek(weekStartDate: string): Promise<FetchRepReportsForWeekOutcome> {
+  const { data, error } = await supabase
+    .from('rep_reports')
+    .select(REP_REPORT_COLUMNS)
+    .eq('week_start_date', weekStartDate)
+
+  if (error) {
+    console.error('Failed to fetch Sales Admin rep reports for week:', error.message)
+    return { status: 'error', message: 'Could not load report status for this week. Please try again.' }
+  }
+  return { status: 'ok', reports: (data ?? []).map((row) => fromRow(row as RepReportRow)) }
 }

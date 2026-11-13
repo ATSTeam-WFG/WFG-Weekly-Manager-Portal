@@ -2,6 +2,7 @@ import { authenticateAdmin } from '../../_lib/adminAuth.js'
 import {
   lookupApprovedEmployeeByNormalizedEmail,
   createProfileFromApprovedEmployee,
+  finalizePendingManagerAssignment,
   findProfileByUserId,
   findProfileByEmail,
   normalizeEmail,
@@ -185,6 +186,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           continue
         }
         profileCreated = true
+        // Best-effort, same discipline as elsewhere in this endpoint — the
+        // profile is already created regardless of this call's outcome. A
+        // no-op unless a Manager's own "Add Sales Rep" pending claim (see
+        // inviteSalesRepAsManager) is waiting for exactly this rep; if this
+        // Admin batch also assigns the rep below (create_profile_and_assign),
+        // that explicit assignment simply reassigns it afterward — the
+        // Admin's own choice of manager still wins.
+        try {
+          await finalizePendingManagerAssignment(rep.authUserId as string)
+        } catch (err) {
+          console.error('pre-provision-sales-reps: finalizePendingManagerAssignment threw unexpectedly:', err)
+        }
       }
 
       if (decision.action === 'create_profile_only') {

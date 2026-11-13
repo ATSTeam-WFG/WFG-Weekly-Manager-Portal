@@ -209,6 +209,11 @@
   border-bottom: none;
 }
 
+.srm-restricted .srm-table-header-row,
+.srm-restricted .srm-row-main {
+  grid-template-columns: 2fr 0.9fr 1.1fr 1.5fr 1.8fr;
+}
+
 .srm-row-main {
   display: grid;
   grid-template-columns: 2fr 1.1fr 1.6fr 1.4fr;
@@ -395,6 +400,29 @@
   box-shadow: 0 24px 60px -20px rgba(11, 35, 69, 0.45);
 }
 
+.srm-confirm-panel {
+  width: 100%;
+  max-width: 440px;
+  padding: 24px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px -20px rgba(11, 35, 69, 0.45);
+}
+
+.srm-confirm-panel h2 {
+  margin: 0 0 8px;
+  color: var(--dark-charcoal);
+  font-size: 18px;
+}
+
+.srm-confirm-panel p {
+  margin: 0 0 20px;
+  color: var(--muted-gray);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .srm-modal-header {
   display: flex;
   align-items: center;
@@ -515,6 +543,21 @@
     gap: 8px;
   }
 
+  .srm-restricted .srm-row-main {
+    grid-template-columns: 1fr;
+  }
+
+  .srm-restricted .srm-row-main > .srm-cell:not(.srm-cell-rep)::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted-gray);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
   .srm-cell-actions {
     width: 100%;
   }
@@ -530,4 +573,278 @@
   .srm-modal-actions .btn {
     width: 100%;
   }
+
+  .srm-confirm-panel {
+    padding: 20px 16px;
+  }
+}
+
+/* Sales Admin Report Status — shares the same WFG tokens and card/table
+   conventions as AdminDashboard.css without changing the Sales Rep portal. */
+.sales-admin-reports {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 8px 0 64px;
+}
+
+.sar-header,
+.sar-card-heading,
+.sar-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sar-header {
+  margin-bottom: 20px;
+}
+
+.sar-header h1 {
+  margin: 0 0 4px;
+  color: var(--dark-charcoal);
+  font-size: 26px;
+}
+
+.sar-subtitle,
+.sar-card-heading p,
+.sar-detail-header p {
+  margin: 0;
+  color: var(--muted-gray);
+  font-size: 13px;
+}
+
+.sar-week-control,
+.sar-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--muted-gray);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sar-week-control select,
+.sar-filters select {
+  min-width: 180px;
+  padding: 9px 12px;
+  color: var(--dark-charcoal);
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.sar-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.sar-kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 78px;
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(11, 35, 69, 0.08);
+}
+
+.sar-kpi-value {
+  color: var(--dark-charcoal);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.sar-kpi-label {
+  color: var(--muted-gray);
+  font-size: 12px;
+}
+
+.sar-kpi-submitted .sar-kpi-value { color: var(--green); }
+.sar-kpi-draft .sar-kpi-value { color: var(--amber); }
+.sar-kpi-missing .sar-kpi-value { color: var(--status-error); }
+
+.sar-card {
+  margin-bottom: 20px;
+  padding: 22px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(11, 35, 69, 0.06);
+}
+
+.sar-card-heading {
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.sar-card-heading h2 {
+  margin: 0 0 4px;
+  color: var(--dark-charcoal);
+  font-size: 17px;
+}
+
+.sar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sar-table {
+  overflow: hidden;
+  border: 1px solid var(--soft-sand);
+  border-radius: 10px;
+}
+
+.sar-table-header,
+.sar-table-row {
+  display: grid;
+  grid-template-columns: 1.7fr 1.1fr 1.15fr 1.4fr 0.9fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.sar-table-header,
+.sar-manager-header {
+  padding: 12px 14px;
+  color: var(--muted-gray);
+  background: var(--warm-cream);
+  border-bottom: 1px solid var(--soft-sand);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sar-table-row,
+.sar-manager-row {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--soft-sand);
+}
+
+.sar-table-row:last-child,
+.sar-manager-row:last-child { border-bottom: 0; }
+
+.sar-cell { min-width: 0; color: var(--espresso); font-size: 13px; }
+.sar-cell-rep { display: flex; flex-direction: column; gap: 2px; }
+.sar-cell-rep strong { color: var(--dark-charcoal); font-size: 13px; }
+.sar-cell-rep span { overflow: hidden; color: var(--muted-gray); font-size: 11px; text-overflow: ellipsis; }
+.sar-cell-action .btn { white-space: nowrap; }
+
+.sar-status {
+  display: inline-block;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--soft-sand);
+  color: var(--muted-gray);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sar-status-pending { color: var(--terracotta); background: rgba(8, 102, 232, 0.12); }
+.sar-status-approved { color: var(--green); background: rgba(22, 131, 75, 0.12); }
+.sar-status-rejected { color: var(--status-error); background: rgba(183, 101, 74, 0.16); }
+.sar-status-draft { color: var(--amber); background: rgba(217, 119, 6, 0.14); }
+.sar-status-not-started { color: var(--muted-gray); background: var(--soft-sand); }
+
+.sar-manager-header,
+.sar-manager-row {
+  display: grid;
+  grid-template-columns: 1.5fr repeat(7, minmax(70px, 1fr));
+  gap: 12px;
+  align-items: center;
+}
+
+.sar-manager-row { color: var(--espresso); font-size: 13px; }
+.sar-manager-row > :not(:first-child) { text-align: center; }
+
+.sar-loading,
+.sar-empty-state,
+.sar-error-state {
+  padding: 32px 16px;
+  color: var(--muted-gray);
+  text-align: center;
+  font-size: 14px;
+}
+
+.sar-error-state p { margin: 0 0 12px; color: var(--status-error); }
+
+.sar-detail-overlay {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;
+  background: rgba(11, 35, 69, 0.55);
+}
+
+.sar-detail-dialog {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px -20px rgba(11, 35, 69, 0.45);
+}
+
+.sar-detail-header { margin-bottom: 18px; }
+.sar-detail-header h2 { margin: 4px 0; color: var(--dark-charcoal); font-size: 21px; }
+.sar-detail-header p + p { margin-top: 4px; }
+.sar-readonly-label { color: var(--terracotta); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.sar-report-content { display: grid; gap: 10px; }
+.sar-report-section { padding: 14px 16px; background: var(--warm-cream); border: 1px solid var(--soft-sand); border-radius: 10px; }
+.sar-report-section h3 { margin: 0 0 8px; color: var(--dark-charcoal); font-size: 13px; }
+.sar-report-section p { margin: 0; color: var(--espresso); font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.sar-report-section ul { margin: 0; padding-left: 20px; color: var(--espresso); font-size: 13px; line-height: 1.55; }
+.sar-report-section li + li { margin-top: 4px; }
+.sar-report-empty { color: var(--muted-gray) !important; font-style: italic; }
+
+@media (max-width: 860px) {
+  .sar-kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .sar-table-header,
+  .sar-table-row { grid-template-columns: 1.5fr 1fr 1fr 1.2fr 0.9fr; gap: 8px; }
+}
+
+@media (max-width: 640px) {
+  .sales-admin-reports { padding: 4px 0 48px; }
+  .sar-header,
+  .sar-card-heading,
+  .sar-detail-header { flex-direction: column; align-items: stretch; }
+  .sar-week-control select,
+  .sar-filters,
+  .sar-filters label,
+  .sar-filters select { width: 100%; box-sizing: border-box; }
+  .sar-filters { flex-direction: column; }
+  .sar-card { padding: 16px; }
+  .sar-table-header,
+  .sar-manager-header { display: none; }
+  .sar-table-row,
+  .sar-manager-row { grid-template-columns: 1fr; gap: 9px; padding: 14px; }
+  .sar-cell::before,
+  .sar-manager-row > span::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 3px;
+    color: var(--muted-gray);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .sar-manager-row > :not(:first-child) { text-align: left; }
+  .sar-detail-dialog { padding: 18px 14px; }
 }

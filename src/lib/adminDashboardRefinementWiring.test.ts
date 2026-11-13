@@ -178,11 +178,11 @@ describe('AdminDashboard.tsx — the three redundant navigation buttons are remo
     assert.match(usageMatch[1], /onOpenMyReport=\{isSubmitter \? \(\) => setMyReportOpen\(true\) : undefined\}/)
   })
 
-  test('the sidebar itself (AdminSidebar.tsx, from Step 1) is untouched and still offers exactly these four destinations — removing the Dashboard buttons does not remove the actual navigation capability', () => {
+  test('the sidebar retains the approved Manager and Reports destinations after removing Dashboard buttons', () => {
     const sidebarSrc = readFileSync(path.join(dir, '..', 'components', 'AdminSidebar.tsx'), 'utf8')
-    assert.match(sidebarSrc, /key: 'user-management', label: 'User Management'/)
+    assert.match(sidebarSrc, /key: 'user-management', label: 'Managers'/)
     assert.match(sidebarSrc, /key: 'reports-analytics', label: 'Reports & Analytics'/)
-    assert.match(sidebarSrc, /key: 'weekly-summary', label: 'Present Week Summary'/)
+    assert.match(sidebarSrc, /key: 'weekly-summary', label: 'Present Weekly Summary'/)
   })
 
   test('My Weekly Report button is preserved exactly — still optional, still gated by onOpenMyReport, still not one of the sidebar destinations', () => {

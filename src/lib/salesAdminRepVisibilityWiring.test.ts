@@ -34,6 +34,7 @@ import path from 'node:path'
 const dir = path.dirname(fileURLToPath(import.meta.url))
 const serviceSrc = readFileSync(path.join(dir, 'salesAdminRepVisibilityService.ts'), 'utf8')
 const componentSrc = readFileSync(path.join(dir, '..', 'components', 'SalesAdminManagerOverview.tsx'), 'utf8')
+const reportStatusComponentSrc = readFileSync(path.join(dir, '..', 'components', 'SalesAdminReports.tsx'), 'utf8')
 const shellSrc = readFileSync(path.join(dir, '..', 'components', 'SalesAdminShell.tsx'), 'utf8')
 const shellCssSrc = readFileSync(path.join(dir, '..', 'components', 'SalesAdminShell.css'), 'utf8')
 
@@ -204,21 +205,22 @@ describe('SalesAdminManagerOverview.tsx — strictly read-only, no new authoriza
   })
 })
 
-describe('SalesAdminShell.tsx — "Reporting by Manager" is the third destination, additive only', () => {
-  test('imports and renders SalesAdminManagerOverview as a new destination, never replacing the existing two', () => {
-    assert.match(shellSrc, /import SalesAdminManagerOverview from '\.\/SalesAdminManagerOverview'/)
-    assert.match(shellSrc, /type SalesAdminDestination = 'sales-reps' \| 'reports' \| 'by-manager'/)
-    assert.match(shellSrc, /<SalesAdminManagerOverview \/>/)
+describe('SalesAdminShell.tsx — exactly two destinations, with the manager rollup retained in Report Status', () => {
+  test('does not expose Reporting by Manager as a separate destination', () => {
+    assert.doesNotMatch(shellSrc, /SalesAdminManagerOverview|by-manager|Reporting by Manager/)
+    assert.match(shellSrc, /type SalesAdminDestination = 'sales-reps' \| 'reports'/)
+    assert.equal((shellSrc.match(/role="tab"/g) ?? []).length, 2)
   })
 
-  test('the existing sales-reps (restricted SalesRepManagement) and reports (SalesAdminReports) destinations are still present, unchanged', () => {
+  test('the restricted SalesRepManagement and Report Status destinations remain present', () => {
     assert.match(shellSrc, /<SalesRepManagement onBack=\{\(\) => setDestination\('reports'\)\} restricted \/>/)
     assert.match(shellSrc, /<SalesAdminReports \/>/)
+    assert.match(reportStatusComponentSrc, /Reporting by Manager/)
   })
 })
 
 describe('SalesAdminShell.css — nav wraps on unusually narrow screens, minimal and scoped', () => {
-  test('.sales-admin-shell-nav sets flex-wrap so a 3rd tab wraps to a new line instead of overflowing off-screen', () => {
+  test('.sales-admin-shell-nav sets flex-wrap for narrow screens', () => {
     const navRuleMatch = shellCssSrc.match(/\.sales-admin-shell-nav\s*\{[\s\S]*?\}/)
     assert.ok(navRuleMatch, 'could not locate .sales-admin-shell-nav rule')
     assert.match(navRuleMatch[0], /flex-wrap:\s*wrap/)

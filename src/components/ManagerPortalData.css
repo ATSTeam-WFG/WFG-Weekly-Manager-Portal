@@ -1,0 +1,241 @@
+/* Manager tabs reuse the Portal's existing typography, color tokens, status
+   badges, cards, and responsive table conventions; no separate design system. */
+.manager-sales-page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 8px 0 64px;
+}
+
+.manager-sales-header,
+.manager-sales-card-heading,
+.manager-report-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.manager-sales-header { margin-bottom: 20px; }
+.manager-sales-header h1 { margin: 0 0 4px; color: var(--dark-charcoal); font-size: 26px; }
+.manager-sales-header p,
+.manager-sales-card-heading p,
+.manager-report-dialog-header p { margin: 0; color: var(--muted-gray); font-size: 13px; }
+.manager-sales-header-actions { display: flex; align-items: flex-end; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+
+.manager-action-notice {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  border-radius: 10px;
+  background: rgba(217, 119, 6, 0.07);
+  color: var(--espresso);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.manager-action-notice strong { color: var(--dark-charcoal); }
+
+.manager-sales-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.manager-sales-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 72px;
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(11, 35, 69, 0.08);
+}
+.manager-sales-kpi > span { color: var(--dark-charcoal); font-size: 22px; font-weight: 700; }
+.manager-sales-kpi small { color: var(--muted-gray); font-size: 12px; }
+.manager-sales-kpi-active > span { color: var(--green); }
+.manager-sales-kpi-inactive > span { color: var(--status-error); }
+.manager-sales-kpi-draft > span { color: var(--amber); }
+
+.manager-sales-controls { display: flex; gap: 10px; margin-bottom: 14px; }
+.manager-sales-search,
+.manager-sales-filter,
+.manager-sales-week-control select,
+.manager-sales-status-control select {
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--dark-charcoal);
+  font: inherit;
+  font-size: 13px;
+}
+.manager-sales-search { flex: 1; min-width: 0; }
+.manager-sales-filter { min-width: 190px; }
+.manager-sales-search:focus,
+.manager-sales-filter:focus,
+.manager-sales-week-control select:focus,
+.manager-sales-status-control select:focus { outline: none; border-color: var(--terracotta); }
+.manager-sales-week-control,
+.manager-sales-status-control { display: flex; flex-direction: column; gap: 5px; color: var(--muted-gray); font-size: 11px; font-weight: 700; }
+.manager-sales-week-control select { min-width: 205px; }
+.manager-sales-status-control select { min-width: 180px; }
+
+.manager-sales-table,
+.manager-reports-table {
+  overflow: hidden;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+}
+.manager-sales-table-header,
+.manager-sales-row,
+.manager-reports-header,
+.manager-reports-row {
+  display: grid;
+  gap: 12px;
+  align-items: center;
+}
+.manager-sales-table-header,
+.manager-sales-row { grid-template-columns: 1.7fr 0.85fr 1.15fr 0.9fr 2fr; }
+.manager-reports-header,
+.manager-reports-row { grid-template-columns: 1.7fr 1.05fr 1.4fr 1.05fr 0.9fr; }
+.manager-sales-table-header,
+.manager-reports-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--soft-sand);
+  background: var(--warm-cream);
+  color: var(--muted-gray);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.manager-sales-row,
+.manager-reports-row { padding: 12px 14px; border-bottom: 1px solid var(--soft-sand); }
+.manager-sales-row:last-child,
+.manager-reports-row:last-child { border-bottom: 0; }
+.manager-sales-cell,
+.manager-reports-cell { min-width: 0; color: var(--espresso); font-size: 13px; }
+.manager-sales-person,
+.manager-reports-person { display: flex; flex-direction: column; gap: 2px; }
+.manager-sales-person strong,
+.manager-reports-person strong { color: var(--dark-charcoal); font-size: 13px; }
+.manager-sales-person span,
+.manager-reports-person span { overflow: hidden; color: var(--muted-gray); font-size: 11px; text-overflow: ellipsis; }
+.manager-sales-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.manager-sales-actions .btn { padding: 6px 9px; font-size: 11px; }
+.manager-sales-actions .btn:disabled,
+.manager-sales-header-actions .btn:disabled { cursor: not-allowed; opacity: 0.55; }
+.manager-reports-action .btn { white-space: nowrap; }
+
+.manager-sales-status {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--soft-sand);
+  color: var(--muted-gray);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.manager-sales-status.status-active,
+.manager-sales-status.status-approved { background: rgba(22, 131, 75, 0.14); color: var(--green); }
+.manager-sales-status.status-inactive,
+.manager-sales-status.status-rejected { background: rgba(183, 101, 74, 0.16); color: var(--status-error); }
+.manager-sales-status.status-pending { background: rgba(8, 102, 232, 0.12); color: var(--terracotta); }
+.manager-sales-status.status-draft { background: rgba(217, 119, 6, 0.14); color: var(--amber); }
+.manager-sales-status.status-unavailable,
+.manager-sales-status.status-not-started { background: var(--soft-sand); color: var(--muted-gray); }
+
+.manager-sales-card {
+  padding: 20px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(11, 35, 69, 0.06);
+}
+.manager-sales-card-heading { align-items: center; margin-bottom: 14px; }
+.manager-sales-card-heading h2 { margin: 0 0 4px; color: var(--dark-charcoal); font-size: 17px; }
+.manager-sales-loading,
+.manager-sales-empty,
+.manager-sales-error { padding: 32px 16px; color: var(--muted-gray); text-align: center; font-size: 14px; }
+.manager-sales-error { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.manager-sales-error p { margin: 0; color: var(--status-error); }
+
+.manager-report-overlay {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;
+  background: rgba(11, 35, 69, 0.55);
+}
+.manager-report-dialog {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px -20px rgba(11, 35, 69, 0.45);
+}
+.manager-report-dialog-header { margin-bottom: 18px; }
+.manager-report-dialog-header h2 { margin: 4px 0; color: var(--dark-charcoal); font-size: 21px; }
+.manager-report-dialog-header p + p { margin-top: 4px; }
+.manager-report-readonly-label { color: var(--terracotta); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.manager-report-content { display: grid; gap: 10px; }
+.manager-report-section { padding: 14px 16px; background: var(--warm-cream); border: 1px solid var(--soft-sand); border-radius: 10px; }
+.manager-report-section h3 { margin: 0 0 8px; color: var(--dark-charcoal); font-size: 13px; }
+.manager-report-section p { margin: 0; color: var(--espresso); font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.manager-report-section ul { margin: 0; padding-left: 20px; color: var(--espresso); font-size: 13px; line-height: 1.55; }
+.manager-report-section li + li { margin-top: 4px; }
+.manager-report-empty { color: var(--muted-gray) !important; font-style: italic; }
+
+@media (max-width: 900px) {
+  .manager-sales-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manager-sales-table-header,
+  .manager-sales-row { grid-template-columns: 1.4fr 0.8fr 1fr 0.8fr 1.5fr; gap: 8px; }
+  .manager-reports-header,
+  .manager-reports-row { grid-template-columns: 1.4fr 0.9fr 1.3fr 0.9fr 0.8fr; gap: 8px; }
+}
+
+@media (max-width: 640px) {
+  .manager-sales-page { padding: 4px 0 48px; }
+  .manager-sales-header,
+  .manager-sales-card-heading,
+  .manager-report-dialog-header { flex-direction: column; align-items: stretch; }
+  .manager-sales-header-actions { width: 100%; justify-content: stretch; }
+  .manager-sales-header-actions > .btn { flex: 1; }
+  .manager-sales-week-control,
+  .manager-sales-week-control select,
+  .manager-sales-status-control,
+  .manager-sales-status-control select { width: 100%; box-sizing: border-box; }
+  .manager-sales-controls { flex-direction: column; }
+  .manager-sales-search,
+  .manager-sales-filter { width: 100%; }
+  .manager-sales-table-header,
+  .manager-reports-header { display: none; }
+  .manager-sales-row,
+  .manager-reports-row { grid-template-columns: 1fr; gap: 9px; padding: 14px; }
+  .manager-sales-cell::before,
+  .manager-reports-cell::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 3px;
+    color: var(--muted-gray);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .manager-sales-actions .btn { flex: 1 1 30%; }
+  .manager-sales-card { padding: 14px; }
+  .manager-report-dialog { padding: 18px 14px; }
+}

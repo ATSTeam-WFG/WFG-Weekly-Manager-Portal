@@ -3,9 +3,8 @@ import './AddEmployeeModal.css'
 
 interface AddEmployeeModalProps {
   isOpen: boolean
-  // Defaults to "Add Employee" (the original, only caller before Sales
-  // Admin provisioning) — passed explicitly by any other caller so the
-  // modal's own heading never misleadingly says "Add Employee" for a
+  // Defaults to "Add Manager" — passed explicitly by any other caller so
+  // the modal's own heading never misleadingly says "Add Manager" for a
   // different role's flow.
   title?: string
   fullName: string
@@ -29,7 +28,7 @@ interface AddEmployeeModalProps {
 // account-creation flow.
 export default function AddEmployeeModal({
   isOpen,
-  title = 'Add Employee',
+  title = 'Add Manager',
   fullName,
   email,
   onFullNameChange,

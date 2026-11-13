@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import {
   clearPasswordChangeRequired,
   createProfileFromApprovedEmployee,
+  finalizePendingManagerAssignment,
   findProfileByUserId,
   lookupApprovedEmployeeByNormalizedEmail,
   normalizeEmail,
@@ -111,6 +112,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const created = await createProfileFromApprovedEmployee(userData.user.id, employee)
     if (!created) {
       return sendError(res, 500, 'PROFILE_CREATION_FAILED', 'Could not finish setting up your account.')
+    }
+
+    // Best-effort, same discipline as clearPasswordChangeRequired just
+    // below: the profile is already created and must not be reported as
+    // failed because of trouble with this follow-up step. A no-op in the
+    // overwhelming majority of cases (no Manager ever invited this person);
+    // only turns into a real write when a Manager's pending "Add Sales Rep"
+    // claim (see inviteSalesRepAsManager) is waiting for exactly this
+    // profile id.
+    try {
+      await finalizePendingManagerAssignment(userData.user.id)
+    } catch (err) {
+      console.error('complete-profile: finalizePendingManagerAssignment threw unexpectedly:', err)
     }
 
     // Only reachable once the profile itself was created successfully —

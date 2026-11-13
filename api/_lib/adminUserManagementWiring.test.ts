@@ -211,6 +211,29 @@ describe('supabaseServiceClient.ts wires the pure decision logic before any rost
     assert.match(body, /from\('profiles'\)\s*\n\s*\.update/)
   })
 
+  test('setManagedUserActive resolves both original states before the first write and verifies each updated row', () => {
+    const fnMatch = serviceClientSrc.match(/export async function setManagedUserActive\([\s\S]*?\n\}/)
+    assert.ok(fnMatch)
+    const body = fnMatch[0]
+    const profileLookupIndex = body.indexOf('findProfileByEmail(emailNormalized)')
+    const rosterWriteIndex = body.indexOf(".from('approved_employees')\n    .update({ is_active: isActive })")
+    assert.ok(profileLookupIndex !== -1 && rosterWriteIndex !== -1)
+    assert.ok(profileLookupIndex < rosterWriteIndex, 'look up the profile before changing the roster')
+    assert.match(body, /\.select\('id, is_active'\)/)
+    assert.match(body, /rosterRows\[0\]\.is_active !== isActive/)
+    assert.match(body, /profileRows\[0\]\.is_active !== isActive/)
+  })
+
+  test('setManagedUserActive compensates the roster after a failed profile write and reports incomplete rollback distinctly', () => {
+    const fnMatch = serviceClientSrc.match(/export async function setManagedUserActive\([\s\S]*?\n\}/)
+    assert.ok(fnMatch)
+    const body = fnMatch[0]
+    assert.match(body, /rollbackAndReport\('profile update failure'\)/)
+    assert.match(body, /\.update\(\{ is_active: originalRosterIsActive \}\)/)
+    assert.match(body, /\.update\(\{ is_active: originalProfileIsActive \}\)/)
+    assert.match(body, /return complete \? \{ status: 'error' \} : \{ status: 'partial_failure' \}/)
+  })
+
   test('listManagedUsers joins approved_employees and profiles by normalized email, reads account_created_at, and passes it into deriveManagedUserStatus', () => {
     const fnMatch = serviceClientSrc.match(/export async function listManagedUsers\([\s\S]*?\n\}/)
     assert.ok(fnMatch, 'could not locate listManagedUsers')

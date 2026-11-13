@@ -94,7 +94,7 @@ export default function UserManagement({ onBack, currentUserEmail }: UserManagem
   const [createAccountMessageIsError, setCreateAccountMessageIsError] = useState(false)
 
   // "+ Add Sales Admin" — a completely separate modal/state pair from
-  // "+ Add Employee" above, since they hit different endpoints with
+  // "+ Add Manager" above, since they hit different endpoints with
   // different hardcoded roles (manager vs. sales_admin) and must never
   // share submit state.
   const [isAddSalesAdminModalOpen, setIsAddSalesAdminModalOpen] = useState(false)
@@ -343,11 +343,11 @@ export default function UserManagement({ onBack, currentUserEmail }: UserManagem
 
       <div className="um-header">
         <div className="um-header-titles">
-          <h1>User Management</h1>
-          <p className="um-header-subtitle">Manage employee access, roles, and weekly reporting permissions.</p>
+          <h1>Managers</h1>
+          <p className="um-header-subtitle">Manage manager access, roles, and weekly reporting permissions.</p>
         </div>
         <button type="button" className="btn btn-primary" onClick={handleOpenAddModal}>
-          + Add Employee
+          + Add Manager
         </button>
         <button type="button" className="btn btn-secondary" onClick={handleOpenAddSalesAdminModal}>
           + Add Sales Admin
@@ -588,6 +588,7 @@ export default function UserManagement({ onBack, currentUserEmail }: UserManagem
 
       <AddEmployeeModal
         isOpen={isAddModalOpen}
+        title="Add Manager"
         fullName={fullName}
         email={email}
         onFullNameChange={setFullName}

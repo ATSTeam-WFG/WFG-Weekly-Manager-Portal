@@ -50,12 +50,12 @@ describe('AdminSidebar.tsx — exactly seven destinations, no more, no fewer', (
     assert.ok(groupsMatch, 'could not locate the groups array')
     const body = groupsMatch[1]
     assert.match(body, /key: 'dashboard', label: 'Admin Dashboard'/)
-    assert.match(body, /key: 'weekly-summary', label: 'Present Week Summary'/)
+    assert.match(body, /key: 'weekly-summary', label: 'Present Weekly Summary'/)
     assert.match(body, /key: 'leadership-report', label: 'Leadership Report'/)
-    assert.match(body, /key: 'video-creation', label: 'Video Creation'/)
-    assert.match(body, /key: 'user-management', label: 'User Management'/)
-    assert.match(body, /key: 'reports-analytics', label: 'Reports & Analytics'/)
+    assert.match(body, /key: 'user-management', label: 'Managers'/)
     assert.match(body, /key: 'sales-reps', label: 'Sales Reps'/)
+    assert.match(body, /key: 'reports-analytics', label: 'Reports & Analytics'/)
+    assert.match(body, /key: 'video-creation', label: 'Video Creation'/)
     // Exactly seven — no eighth entry (e.g. a manager-report or my-report item).
     assert.equal((body.match(/key: '/g) ?? []).length, 7)
   })
