@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   fetchMyCurrentReps,
   fetchRepReport,
@@ -133,6 +133,8 @@ export default function MyReps({ managerId, onBack }: MyRepsProps) {
   const [selectedRepId, setSelectedRepId] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
   const [weekOffset, setWeekOffset] = useState(0)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | RepReportBucket>('all')
 
   const week = getReportingWeekByOffset(weekOffset)
   const isCurrentWeek = weekOffset === 0
@@ -201,6 +203,18 @@ export default function MyReps({ managerId, onBack }: MyRepsProps) {
     { missing: 0, pending: 0, approved: 0, rejected: 0 } as Record<RepReportBucket, number>,
   )
   const submittedCount = summaryCounts.pending + summaryCounts.approved + summaryCounts.rejected
+
+  // Additive, client-side only — search/filter never change which rows were
+  // fetched (still every rep RLS already scoped to this Manager), only which
+  // of those already-loaded rows are displayed.
+  const filteredRows = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    return rows.filter((row) => {
+      if (statusFilter !== 'all' && deriveRepReportBucket(row.report) !== statusFilter) return false
+      if (!query) return true
+      return (row.fullName ?? '').toLowerCase().includes(query) || row.email.toLowerCase().includes(query)
+    })
+  }, [rows, searchQuery, statusFilter])
 
   const selectedRow = rows.find((r) => r.repId === selectedRepId) ?? null
 
@@ -285,9 +299,44 @@ export default function MyReps({ managerId, onBack }: MyRepsProps) {
         </div>
       )}
 
+      {loadState === 'ready' && rows.length > 0 && (
+        <div className="myreps-search-row">
+          <input
+            type="search"
+            className="myreps-search-input"
+            placeholder="Search by name or email"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search assigned reps by name or email"
+          />
+          <div className="myreps-filter-row">
+            {(
+              [
+                { key: 'all', label: 'All' },
+                { key: 'missing', label: 'Missing' },
+                { key: 'pending', label: 'Pending Review' },
+                { key: 'approved', label: 'Approved' },
+                { key: 'rejected', label: 'Needs Correction' },
+              ] as { key: 'all' | RepReportBucket; label: string }[]
+            ).map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                className={`myreps-filter-btn ${statusFilter === f.key ? 'active' : ''}`}
+                onClick={() => setStatusFilter(f.key)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loadState === 'ready' &&
         (rows.length === 0 ? (
           <p className="myreps-empty-state">You have no reps currently assigned to you.</p>
+        ) : filteredRows.length === 0 ? (
+          <p className="myreps-empty-state">No reps match your search or filter.</p>
         ) : (
           <div className="myreps-table" role="table" aria-label="My Reps">
             <div className="myreps-table-header-row" role="row">
@@ -296,7 +345,7 @@ export default function MyReps({ managerId, onBack }: MyRepsProps) {
               <span role="columnheader">Submitted</span>
               <span role="columnheader">Review</span>
             </div>
-            {rows.map((row) => {
+            {filteredRows.map((row) => {
               const reviewable = isReviewable(row.report)
               return (
                 <div

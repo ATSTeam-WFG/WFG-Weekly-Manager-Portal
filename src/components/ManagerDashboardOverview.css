@@ -1,0 +1,75 @@
+/* Manager Dashboard overview — styled to match AdminDashboard.css's own
+   .adp-kpi-row/.adp-kpi-card conventions (page width, card treatment, color
+   tokens) under its own mdo- prefix, same approach as MyReps.css's own
+   myreps- prefix. Self-contained; nothing here is shared with or overrides
+   another file's classes. */
+
+.mdo-page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 24px 100px;
+}
+
+.mdo-header-titles h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.mdo-header-subtitle {
+  font-size: 14px;
+  color: var(--muted-gray);
+  margin: 0 0 24px;
+}
+
+.mdo-loading,
+.mdo-error-state {
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+  padding: 40px 0;
+}
+
+.mdo-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.mdo-kpi-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mdo-kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.mdo-kpi-label {
+  font-size: 13px;
+  color: var(--muted-gray);
+}
+
+@media (max-width: 860px) {
+  .mdo-kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .mdo-page {
+    padding: 24px 16px 80px;
+  }
+
+  .mdo-header-titles h1 {
+    font-size: 22px;
+  }
+}

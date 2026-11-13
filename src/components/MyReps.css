@@ -93,6 +93,74 @@
   padding: 40px 0;
 }
 
+/* Search + status filter — added alongside Team Reports' "Assigned Sales
+   Reps" search/filter (2026-11-13). Mirrors SalesRepManagement.css's
+   .srm-search and AdminDashboard.css's .adp-filter-row/.adp-filter-btn
+   conventions exactly, under this file's own myreps- prefix (never sharing
+   a class with either file, per this file's own header comment). */
+.myreps-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.myreps-search-input {
+  flex: 1;
+  min-width: 220px;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 14px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--dark-charcoal);
+}
+
+.myreps-search-input:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+.myreps-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.myreps-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--soft-sand);
+  background: var(--white);
+  color: var(--muted-gray);
+  cursor: pointer;
+}
+
+.myreps-filter-btn:hover {
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+
+.myreps-filter-btn.active {
+  background: var(--terracotta);
+  border-color: var(--terracotta);
+  color: var(--white);
+}
+
+@media (max-width: 480px) {
+  .myreps-search-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 .myreps-error-state {
   text-align: center;
   color: var(--muted-gray);

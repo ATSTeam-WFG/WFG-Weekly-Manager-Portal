@@ -1,0 +1,73 @@
+/* Manager Dashboard — the first left-sidebar nav in this app (every other
+   shell — AdminShell, SalesAdminShell — uses a horizontal top-tab nav). New,
+   self-contained layout; reuses the same color tokens as every other shell
+   for visual consistency, never a shared class name with AdminShell.css/
+   SalesAdminShell.css. */
+
+.manager-shell {
+  display: flex;
+  align-items: flex-start;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.manager-shell-nav {
+  flex-shrink: 0;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 32px 16px;
+  position: sticky;
+  top: 0;
+}
+
+.manager-shell-nav-item {
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--muted-gray);
+  cursor: pointer;
+}
+
+.manager-shell-nav-item:hover {
+  background: var(--warm-cream);
+  color: var(--espresso);
+}
+
+.manager-shell-nav-item-active,
+.manager-shell-nav-item-active:hover {
+  background: var(--terracotta);
+  color: var(--white);
+}
+
+.manager-shell-content {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .manager-shell {
+    flex-direction: column;
+  }
+
+  .manager-shell-nav {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 16px;
+    position: static;
+    border-bottom: 1px solid var(--soft-sand);
+  }
+
+  .manager-shell-nav-item {
+    flex: 1;
+    min-width: 120px;
+    text-align: center;
+  }
+}
