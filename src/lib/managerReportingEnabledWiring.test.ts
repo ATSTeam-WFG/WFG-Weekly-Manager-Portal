@@ -44,13 +44,16 @@ describe('SalesAdminShell — Manager Reporting nav item is additive and opt-in 
     assert.match(salesAdminShellSrc, /\{onOpenManagerReporting && \(/)
   })
 
-  test('the three existing Sales Admin destinations (Sales Representatives, Sales Rep Reports, Reporting by Manager) are untouched', () => {
+  test('the two approved Sales Admin destinations (Sales Representatives, Report Status) are present and unchanged', () => {
     assert.match(salesAdminShellSrc, /Sales Representatives/)
-    assert.match(salesAdminShellSrc, /Sales Rep Reports/)
-    assert.match(salesAdminShellSrc, /Reporting by Manager/)
+    assert.match(salesAdminShellSrc, /Report Status/)
     assert.match(salesAdminShellSrc, /<SalesRepManagement onBack=\{\(\) => setDestination\('reports'\)\} restricted \/>/)
     assert.match(salesAdminShellSrc, /<SalesAdminReports \/>/)
-    assert.match(salesAdminShellSrc, /<SalesAdminManagerOverview \/>/)
+  })
+
+  test('"Reporting by Manager" / SalesAdminManagerOverview is intentionally NOT wired into this shell — this integration branch uses the feedback-approved two-tab layout from PR #11, not main\'s three-tab layout; the component/service still exist in the tree, unused, for easy reactivation later', () => {
+    assert.doesNotMatch(salesAdminShellSrc, /Reporting by Manager/)
+    assert.doesNotMatch(salesAdminShellSrc, /SalesAdminManagerOverview/)
   })
 })
 

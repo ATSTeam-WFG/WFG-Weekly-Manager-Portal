@@ -204,11 +204,17 @@ describe('SalesAdminManagerOverview.tsx — strictly read-only, no new authoriza
   })
 })
 
-describe('SalesAdminShell.tsx — "Reporting by Manager" is the third destination, additive only', () => {
-  test('imports and renders SalesAdminManagerOverview as a new destination, never replacing the existing two', () => {
-    assert.match(shellSrc, /import SalesAdminManagerOverview from '\.\/SalesAdminManagerOverview'/)
-    assert.match(shellSrc, /type SalesAdminDestination = 'sales-reps' \| 'reports' \| 'by-manager'/)
-    assert.match(shellSrc, /<SalesAdminManagerOverview \/>/)
+describe('SalesAdminShell.tsx — this integration branch uses the feedback-approved two-destination layout (Sales Representatives, Report Status) from PR #11, not "Reporting by Manager"', () => {
+  // salesAdminRepVisibilityService.ts and SalesAdminManagerOverview.tsx
+  // themselves are untouched and fully covered by every describe block
+  // above this one — only their wiring into THIS shell has intentionally
+  // been removed, per the explicit final-navigation spec for this
+  // integration (Sales Representatives / Report Status / Manager
+  // Reporting — three items, no fourth). Nothing is deleted; this can be
+  // re-wired later with a one-line change if that decision changes.
+  test('SalesAdminShell no longer imports or renders SalesAdminManagerOverview, and has no "by-manager" destination', () => {
+    assert.doesNotMatch(shellSrc, /SalesAdminManagerOverview/)
+    assert.doesNotMatch(shellSrc, /by-manager/)
   })
 
   test('the existing sales-reps (restricted SalesRepManagement) and reports (SalesAdminReports) destinations are still present, unchanged', () => {
