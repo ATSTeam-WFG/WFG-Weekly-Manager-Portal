@@ -5,10 +5,16 @@
    overrides the other's classes. */
 
 .manager-shell {
+  /* Approximates Header.css's own rendered height — same estimate
+     AdminShell.css already uses for the identical problem (a sidebar that
+     must reach the bottom of the viewport, even when the page itself is
+     short). Header.tsx/.css are untouched and shared by every role. */
+  --manager-shell-header-height: 61px;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   max-width: 1280px;
   margin: 0 auto;
+  min-height: calc(100vh - var(--manager-shell-header-height));
 }
 
 .manager-shell-nav {
@@ -21,7 +27,9 @@
   background: var(--espresso);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   position: sticky;
-  top: 0;
+  top: var(--manager-shell-header-height);
+  height: calc(100vh - var(--manager-shell-header-height));
+  overflow-y: auto;
 }
 
 .manager-shell-nav-item {
@@ -81,6 +89,7 @@
 @media (max-width: 860px) {
   .manager-shell {
     flex-direction: column;
+    min-height: 0;
   }
 
   .manager-shell-nav {
@@ -90,6 +99,8 @@
     gap: 8px;
     padding: 16px;
     position: static;
+    height: auto;
+    overflow-y: visible;
     border-right: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }

@@ -30,13 +30,22 @@
   margin: 0 0 12px;
 }
 
+/* Desktop (above the 860px tablet handoff below): never wraps, so the Back
+   button/week selector always sit on one row at the upper-right, beside the
+   heading — the layout Demo Manager preferred — and (combined with the
+   badge's reserved space above) stays identical across every reporting
+   week, not just the current one. */
 .myreps-top-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 16px;
   margin-bottom: 20px;
+}
+
+.myreps-header-titles {
+  min-width: 0;
 }
 
 .myreps-header-titles h1 {
@@ -55,7 +64,8 @@
 .myreps-top-row-right {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   gap: 12px;
 }
 
@@ -519,16 +529,26 @@
   margin-top: 12px;
 }
 
-@media (max-width: 640px) {
+/* Tablet handoff (860px) — the same breakpoint ManagerShell.css's own
+   sidebar already switches to a horizontal top bar at, so the whole page's
+   responsive story changes at one consistent width. Above this, the header
+   row never wraps (see .myreps-top-row/.myreps-top-row-right above); below
+   it, the Back button/week selector stack cleanly beneath the heading
+   instead of being forced to overflow. */
+@media (max-width: 860px) {
   .myreps-top-row {
     flex-direction: column;
     align-items: stretch;
+    flex-wrap: wrap;
   }
 
   .myreps-top-row-right {
+    flex-wrap: wrap;
     justify-content: space-between;
   }
+}
 
+@media (max-width: 640px) {
   /* The shared .week-selector-label (AdminDashboard.css, never redefined —
      see this file's own header comment) has no internal flex-wrap of its
      own, so at narrow widths its three children (prev/label/next) can
