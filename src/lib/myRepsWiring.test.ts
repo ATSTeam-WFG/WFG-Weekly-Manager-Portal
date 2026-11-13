@@ -75,9 +75,14 @@ describe('MyReps.tsx — goes through the service layer for the roster, never qu
 })
 
 describe('MyReps.tsx — other required wiring', () => {
-  test('is a self-contained, droppable component: managerId + onBack only, no other required props', () => {
-    assert.match(myRepsSrc, /interface MyRepsProps \{\s*\n\s*managerId: string\s*\n\s*onBack: \(\) => void\s*\n\s*\}/)
-    assert.match(myRepsSrc, /export default function MyReps\(\{ managerId, onBack \}: MyRepsProps\)/)
+  // Manager Dashboard redesign (2026-11-13) added one additive, optional
+  // prop (embedded) for reuse inside ManagerDashboardOverview — managerId
+  // and onBack remain the only REQUIRED props, and embedded defaults to
+  // false, so every existing caller (Team Reports) is unaffected.
+  test('is a self-contained, droppable component: managerId + onBack required, embedded optional and additive only', () => {
+    assert.match(myRepsSrc, /interface MyRepsProps \{\s*\n\s*managerId: string\s*\n\s*onBack: \(\) => void/)
+    assert.match(myRepsSrc, /embedded\?: boolean/)
+    assert.match(myRepsSrc, /export default function MyReps\(\{ managerId, onBack, embedded = false \}: MyRepsProps\)/)
   })
 
   test('a failed roster load surfaces an error state with a Retry control, never silently rendering blank', () => {
@@ -149,7 +154,14 @@ describe('MyReps.tsx — weekly summary reuses deriveRepReportBucket from Phase 
   })
 
   test('the summary row only renders once data has loaded (loadState === \'ready\' && rows.length > 0), never with stale/zeroed counts while loading', () => {
-    assert.match(myRepsSrc, /\{loadState === 'ready' && rows\.length > 0 && \(\s*\n\s*<div className="myreps-summary-row">/)
+    assert.match(myRepsSrc, /loadState === 'ready' && rows\.length > 0 && \(\s*\n\s*<div className="myreps-summary-row">/)
+  })
+
+  // Manager Dashboard redesign (2026-11-13) — the summary row is additionally
+  // suppressed in embedded mode (the Dashboard overview already shows its
+  // own KPI cards above), never in Team Reports' own standalone page.
+  test('the summary row is also gated on !embedded, on top of the existing loadState/rows.length checks', () => {
+    assert.match(myRepsSrc, /\{!embedded && loadState === 'ready' && rows\.length > 0 && \(/)
   })
 })
 
@@ -165,6 +177,9 @@ describe('MyReps.tsx — Manager visibility is still scoped entirely by fetchMyC
   })
 
   test('the component never accepts or reads a different manager id from props, query params, or user input — managerId is the only id-shaped prop', () => {
-    assert.match(myRepsSrc, /interface MyRepsProps \{\s*\n\s*managerId: string\s*\n\s*onBack: \(\) => void\s*\n\s*\}/)
+    const ifaceMatch = myRepsSrc.match(/interface MyRepsProps \{[\s\S]*?\n\}/)
+    assert.ok(ifaceMatch, 'could not locate MyRepsProps')
+    assert.match(ifaceMatch[0], /managerId: string/)
+    assert.doesNotMatch(ifaceMatch[0], /\bid\b|repId|employeeId|assignedManagerId/)
   })
 })

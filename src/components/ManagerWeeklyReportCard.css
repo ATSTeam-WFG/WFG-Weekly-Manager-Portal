@@ -1,0 +1,70 @@
+.mwrc-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-top: 4px solid var(--terracotta);
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+
+.mwrc-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.mwrc-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-gray);
+}
+
+.mwrc-week {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 2px 0 0;
+}
+
+.mwrc-message {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted-gray);
+}
+
+.mwrc-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.mwrc-deadline {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--terracotta);
+  background: var(--soft-sand);
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+.mwrc-deadline-passed {
+  color: var(--status-error);
+  background: rgba(183, 101, 74, 0.14);
+}
+
+@media (max-width: 480px) {
+  .mwrc-action-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mwrc-action-row .btn {
+    width: 100%;
+  }
+}

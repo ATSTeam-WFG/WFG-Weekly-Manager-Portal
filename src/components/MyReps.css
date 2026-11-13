@@ -10,6 +10,26 @@
   padding: 32px 24px 100px;
 }
 
+/* Embedded mode (2026-11-13) — rendered inside the Manager Dashboard
+   overview's own .mdo-page container, which already supplies page-level
+   max-width/margin/padding; redeclaring them here would double it (the same
+   double-page-chrome bug this app has already fixed once — see
+   SalesAdminManagerOverview.css's own .samo-page comment). */
+.myreps-embedded {
+  margin: 0;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 16px;
+  padding: 20px 24px;
+}
+
+.myreps-embedded-heading {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 12px;
+}
+
 .myreps-top-row {
   display: flex;
   align-items: flex-start;

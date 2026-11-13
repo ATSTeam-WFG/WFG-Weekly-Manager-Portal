@@ -35,6 +35,15 @@ import './MyReps.css'
 interface MyRepsProps {
   managerId: string
   onBack: () => void
+  // Additive, optional (2026-11-13) — when true, renders only the
+  // search/filter row + table + review panel, for embedding inside the
+  // Manager Dashboard overview (which already shows its own heading/KPI
+  // summary above). onBack is still required and still wired by every
+  // caller (the Team Reports destination still needs it); it is simply
+  // never rendered/reachable in embedded mode. No fetch, review, or
+  // permission logic changes based on this flag — purely a presentation
+  // toggle.
+  embedded?: boolean
 }
 
 interface RepRow {
@@ -126,7 +135,7 @@ const SECTION_LIST_FIELDS: {
   { key: 'nextWeekPriorities', label: 'Next Week Priorities' },
 ]
 
-export default function MyReps({ managerId, onBack }: MyRepsProps) {
+export default function MyReps({ managerId, onBack, embedded = false }: MyRepsProps) {
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [loadErrorMessage, setLoadErrorMessage] = useState<string | null>(null)
   const [rows, setRows] = useState<RepRow[]>([])
@@ -223,43 +232,47 @@ export default function MyReps({ managerId, onBack }: MyRepsProps) {
   }, [])
 
   return (
-    <div className="myreps-page">
-      <div className="myreps-top-row">
-        <div className="myreps-header-titles">
-          <h1>My Reps</h1>
-          <p className="myreps-header-subtitle">See this week's status for your assigned reps and review what they've submitted.</p>
-        </div>
-        <div className="myreps-top-row-right">
-          <button type="button" className="btn btn-secondary" onClick={onBack}>
-            &larr; Back
-          </button>
-          <span className="week-selector-label">
-            <button
-              type="button"
-              className="week-nav-btn"
-              onClick={() => setWeekOffset((o) => o - 1)}
-              aria-label="Previous reporting week"
-            >
-              &lsaquo;
+    <div className={embedded ? 'myreps-embedded' : 'myreps-page'}>
+      {!embedded && (
+        <div className="myreps-top-row">
+          <div className="myreps-header-titles">
+            <h1>My Reps</h1>
+            <p className="myreps-header-subtitle">See this week's status for your assigned reps and review what they've submitted.</p>
+          </div>
+          <div className="myreps-top-row-right">
+            <button type="button" className="btn btn-secondary" onClick={onBack}>
+              &larr; Back
             </button>
-            <span className="myreps-week-label">
-              Week of {week.label}
-              {isCurrentWeek && <span className="week-current-badge">Current</span>}
+            <span className="week-selector-label">
+              <button
+                type="button"
+                className="week-nav-btn"
+                onClick={() => setWeekOffset((o) => o - 1)}
+                aria-label="Previous reporting week"
+              >
+                &lsaquo;
+              </button>
+              <span className="myreps-week-label">
+                Week of {week.label}
+                {isCurrentWeek && <span className="week-current-badge">Current</span>}
+              </span>
+              <button
+                type="button"
+                className="week-nav-btn"
+                onClick={() => setWeekOffset((o) => Math.min(0, o + 1))}
+                disabled={isCurrentWeek}
+                aria-label="Next reporting week"
+              >
+                &rsaquo;
+              </button>
             </span>
-            <button
-              type="button"
-              className="week-nav-btn"
-              onClick={() => setWeekOffset((o) => Math.min(0, o + 1))}
-              disabled={isCurrentWeek}
-              aria-label="Next reporting week"
-            >
-              &rsaquo;
-            </button>
-          </span>
+          </div>
         </div>
-      </div>
+      )}
 
-      {loadState === 'ready' && rows.length > 0 && (
+      {embedded && <h2 className="myreps-embedded-heading">Assigned Sales Reps</h2>}
+
+      {!embedded && loadState === 'ready' && rows.length > 0 && (
         <div className="myreps-summary-row">
           <div className="myreps-summary-card">
             <span className="myreps-summary-value">{rows.length}</span>
