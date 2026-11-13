@@ -33,6 +33,112 @@
   margin: 0;
 }
 
+/* Summary cards (2026-11-13) — mirrors AdminDashboard.css's own
+   .adp-kpi-row/.adp-kpi-card conventions under this file's own amro-
+   prefix, never sharing or overriding that file's classes. Folded from the
+   same rows already fetched for the table below — see
+   AdminManagerRepOverview.tsx's own `totals` reduce. */
+.amro-summary-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.amro-summary-card {
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amro-summary-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+}
+
+.amro-summary-label {
+  font-size: 12px;
+  color: var(--muted-gray);
+}
+
+/* Search + status filter (2026-11-13) — mirrors SalesRepManagement.css's
+   .srm-search and AdminDashboard.css's .adp-filter-row/.adp-filter-btn
+   conventions, under this file's own amro- prefix. Purely client-side,
+   local state — independent of weekStartDate/weekLabel, so it is never
+   reset by a week change. Filters by MANAGER (a row is kept if that
+   Manager currently has at least one rep in the selected bucket), since
+   this table's rows are Managers, not individual reps. */
+.amro-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.amro-search-input {
+  flex: 1;
+  min-width: 220px;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 14px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--dark-charcoal);
+}
+
+.amro-search-input:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+.amro-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.amro-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--soft-sand);
+  background: var(--white);
+  color: var(--muted-gray);
+  cursor: pointer;
+}
+
+.amro-filter-btn:hover {
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+
+.amro-filter-btn.active {
+  background: var(--terracotta);
+  border-color: var(--terracotta);
+  color: var(--white);
+}
+
+/* Mobile (below), the overview table scrolls horizontally inside this
+   wrapper rather than reflowing/stacking — the table gained an 8th
+   (Completion) column, and a single-column stacked-card layout would make
+   each row very tall. overflow-x is scoped to this wrapper only, so it
+   can never cause page- or sidebar-level horizontal scrolling. */
+.amro-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .amro-table {
   border: 1px solid var(--soft-sand);
   border-radius: 12px;
@@ -54,7 +160,8 @@
 }
 
 .amro-table-header-row-overview {
-  grid-template-columns: 1.8fr 0.9fr 0.9fr 0.9fr 0.9fr 1.1fr 0.9fr;
+  grid-template-columns: 1.7fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr 0.9fr;
+  min-width: 760px;
 }
 
 .amro-row {
@@ -67,7 +174,8 @@
 }
 
 .amro-row-overview {
-  grid-template-columns: 1.8fr 0.9fr 0.9fr 0.9fr 0.9fr 1.1fr 0.9fr;
+  grid-template-columns: 1.7fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr 0.9fr;
+  min-width: 760px;
 }
 
 .amro-row:last-child {
@@ -165,26 +273,24 @@
   background: rgba(183, 101, 74, 0.18);
 }
 
+/* Tablet — summary cards/filters stay aligned (reflow to a 3-column grid
+   rather than overflowing or squeezing six cards into too little width);
+   the overview table itself is untouched here and already scrolls
+   horizontally (.amro-table-scroll) at every width below its own 760px
+   min-width, not just below this breakpoint. */
 @media (max-width: 860px) {
-  .amro-table-header-row-overview {
-    display: none;
+  .amro-summary-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .amro-summary-row {
+    grid-template-columns: repeat(2, 1fr);
   }
 
-  .amro-row-overview {
-    grid-template-columns: 1fr;
-    gap: 4px;
-    padding: 14px 16px;
-  }
-
-  .amro-cell-count {
-    text-align: left;
-  }
-
-  .amro-cell-count::before {
-    content: attr(data-label) ': ';
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: var(--muted-gray);
+  .amro-search-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
