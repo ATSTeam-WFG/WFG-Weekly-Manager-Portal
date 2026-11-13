@@ -111,7 +111,7 @@ describe('MyReps.tsx — Phase 3 week selector, consistent with AdminDashboard\'
   test('reuses the shared, never-redefined .week-nav-btn/.week-selector-label/.week-current-badge classes from AdminDashboard.css, rather than inventing new ones', () => {
     assert.match(myRepsSrc, /className="week-selector-label"/)
     assert.match(myRepsSrc, /className="week-nav-btn"/)
-    assert.match(myRepsSrc, /\{isCurrentWeek && <span className="week-current-badge">Current<\/span>\}/)
+    assert.match(myRepsSrc, /className=\{`week-current-badge\$\{isCurrentWeek \? '' : ' myreps-week-current-badge-hidden'\}`\}/)
     const myRepsCss = readFileSync(path.join(dir, '..', 'components', 'MyReps.css'), 'utf8')
     assert.equal(/^\.week-current-badge\s*\{/m.test(myRepsCss), false, 'must reuse the existing shared .week-current-badge, never redefine it')
     assert.equal(/^\.week-nav-btn\s*\{/m.test(myRepsCss), false, 'must reuse the existing shared .week-nav-btn, never redefine it')
@@ -120,6 +120,36 @@ describe('MyReps.tsx — Phase 3 week selector, consistent with AdminDashboard\'
   test('the roster-loading effect depends on week.weekStartDate, so changing weeks refetches', () => {
     const effectMatch = myRepsSrc.match(/\}, \[managerId, week\.weekStartDate, reloadToken\]\)/)
     assert.ok(effectMatch, 'the load effect must depend on week.weekStartDate so a week change triggers a refetch')
+  })
+
+  // Regression test (2026-11-13) — Demo Manager found that Team Reports'
+  // header/week-selector/Back button row visibly reflowed to a different
+  // layout between the current week (badge present) and a past week (badge
+  // absent), because the badge was conditionally OMITTED from the tree
+  // rather than just hidden, changing the row's total rendered width enough
+  // to trigger a different flex-wrap outcome. Root cause: conditional
+  // rendering (`{isCurrentWeek && <span>...}`), not CSS. Fix: always render
+  // the badge element; only its visibility toggles via a new, MyReps-scoped
+  // class, so the row occupies identical width regardless of which week is
+  // selected.
+  describe('MyReps.tsx — Team Reports header/week-selector/Back button layout never reflows between weeks', () => {
+    test('the Current badge is always rendered (never conditionally omitted from the tree) — only a visibility-only class toggles', () => {
+      assert.doesNotMatch(myRepsSrc, /\{isCurrentWeek && <span className="week-current-badge">/)
+      assert.match(myRepsSrc, /<span className=\{`week-current-badge\$\{isCurrentWeek \? '' : ' myreps-week-current-badge-hidden'\}`\}>Current<\/span>/)
+    })
+
+    test('the hidden-state class uses visibility, never display:none — the element still occupies its layout space when not the current week', () => {
+      const myRepsCss = readFileSync(path.join(dir, '..', 'components', 'MyReps.css'), 'utf8')
+      const ruleMatch = myRepsCss.match(/\.myreps-week-current-badge-hidden\s*\{[\s\S]*?\}/)
+      assert.ok(ruleMatch, 'could not locate .myreps-week-current-badge-hidden')
+      assert.match(ruleMatch[0], /visibility:\s*hidden/)
+      assert.doesNotMatch(ruleMatch[0], /display:\s*none/)
+    })
+
+    test('the shared .week-current-badge rule itself (AdminDashboard.css, DO NOT MODIFY) is untouched', () => {
+      const adminDashboardCss = readFileSync(path.join(dir, '..', 'components', 'AdminDashboard.css'), 'utf8')
+      assert.match(adminDashboardCss, /\/\* SHARED — also used by Reports & Analytics\. DO NOT MODIFY\. \*\//)
+    })
   })
 })
 

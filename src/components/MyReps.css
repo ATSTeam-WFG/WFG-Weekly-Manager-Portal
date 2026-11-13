@@ -59,6 +59,16 @@
   gap: 12px;
 }
 
+/* Keeps the header/week-selector/Back button row the same width whether a
+   past week or the current week is selected (see MyReps.tsx's own comment
+   at the .week-current-badge usage) — visibility only, never display:none,
+   so the badge's space is still reserved and the row never reflows between
+   weeks. Never touches the shared .week-current-badge rule itself
+   (AdminDashboard.css, marked DO NOT MODIFY). */
+.myreps-week-current-badge-hidden {
+  visibility: hidden;
+}
+
 .myreps-week-label {
   display: inline-flex;
   align-items: center;

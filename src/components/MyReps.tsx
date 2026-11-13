@@ -254,7 +254,17 @@ export default function MyReps({ managerId, onBack, embedded = false }: MyRepsPr
               </button>
               <span className="myreps-week-label">
                 Week of {week.label}
-                {isCurrentWeek && <span className="week-current-badge">Current</span>}
+                {/* Always rendered (never conditionally omitted) so the
+                    header/week-selector/Back button layout occupies the
+                    exact same width whether the current week or a past week
+                    is selected — only visibility toggles, via a new,
+                    MyReps-scoped modifier class (myreps-week-current-badge-
+                    hidden, in MyReps.css), never the shared, DO-NOT-MODIFY
+                    .week-current-badge rule in AdminDashboard.css. Omitting
+                    this element entirely (the previous `isCurrentWeek &&`
+                    guard) was the root cause of Team Reports visibly
+                    reflowing to a different layout between weeks. */}
+                <span className={`week-current-badge${isCurrentWeek ? '' : ' myreps-week-current-badge-hidden'}`}>Current</span>
               </span>
               <button
                 type="button"
