@@ -54,7 +54,12 @@ describe('App.tsx — routing never lets a sales_admin profile fall through to a
   })
 
   test('the isSalesAdmin branch renders SalesAdminShell, and is checked before the isAdmin branch', () => {
-    const salesAdminBranchIndex = appSrc.indexOf('isSalesAdmin ? (')
+    // isSalesAdmin is additionally ANDed with !managerReportingViewOpen (a
+    // dual-role Sales-Admin-Manager-Reporting toggle, additive and opt-in —
+    // see managerReportingEnabledWiring.test.ts) — still the same isSalesAdmin
+    // check, still gating the same SalesAdminShell render, still checked
+    // before isAdmin.
+    const salesAdminBranchIndex = appSrc.indexOf('isSalesAdmin && !managerReportingViewOpen ? (')
     const salesAdminShellIndex = appSrc.indexOf('<SalesAdminShell')
     const isAdminBranchIndex = appSrc.indexOf('isAdmin && !myReportOpen ? (')
     assert.ok(salesAdminBranchIndex !== -1, 'isSalesAdmin branch must exist')

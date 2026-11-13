@@ -15,6 +15,12 @@ export interface Profile {
   // src/lib/adminUserManagement.ts and the submits_weekly_report column on
   // profiles/approved_employees.
   submitsWeeklyReport: boolean
+  // True for a dual-role Sales Admin who also completes their own Weekly
+  // Manager Report — never inferred from role, and independent of
+  // submitsWeeklyReport (that flag is the Admin-dual-role case; this is the
+  // Sales-Admin-dual-role case). See manager_reporting_enabled on
+  // profiles/approved_employees and public.is_manager_capable().
+  managerReportingEnabled: boolean
 }
 
 export interface ReportSections {

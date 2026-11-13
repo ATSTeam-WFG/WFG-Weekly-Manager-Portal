@@ -6,6 +6,19 @@ import './SalesAdminShell.css'
 
 type SalesAdminDestination = 'sales-reps' | 'reports' | 'by-manager'
 
+interface SalesAdminShellProps {
+  // Additive, optional — undefined for every Sales Admin except a
+  // dual-role one explicitly flagged manager_reporting_enabled = true (see
+  // src/App.tsx's hasManagerReporting). When provided, renders one extra
+  // nav item that hands control back up to App.tsx to switch the whole
+  // top-level view to that account's own Manager Reporting workspace —
+  // this component itself never fetches or renders anything
+  // Manager-related, keeping every existing Sales Admin destination
+  // (Sales Representatives, Sales Rep Reports, Reporting by Manager)
+  // completely untouched and still unavailable to every other Sales Admin.
+  onOpenManagerReporting?: () => void
+}
+
 // Sales Admin's entire experience — a small, dedicated shell, deliberately
 // NOT AdminShell/AdminSidebar (which has no per-item permission mechanism:
 // every one of its six destinations — Admin Dashboard, User Management,
@@ -19,7 +32,7 @@ type SalesAdminDestination = 'sales-reps' | 'reports' | 'by-manager'
 // SalesAdminReports and SalesAdminManagerOverview, which themselves only
 // reuse existing, already-authorized fetch functions — no new endpoint, no
 // new RLS policy, no new SECURITY DEFINER function for any of the three).
-export default function SalesAdminShell() {
+export default function SalesAdminShell({ onOpenManagerReporting }: SalesAdminShellProps) {
   const [destination, setDestination] = useState<SalesAdminDestination>('sales-reps')
 
   return (
@@ -46,6 +59,11 @@ export default function SalesAdminShell() {
         >
           Reporting by Manager
         </button>
+        {onOpenManagerReporting && (
+          <button type="button" className="sales-admin-shell-nav-item" onClick={onOpenManagerReporting}>
+            Manager Reporting
+          </button>
+        )}
       </nav>
 
       {destination === 'sales-reps' ? (
