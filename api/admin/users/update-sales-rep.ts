@@ -1,4 +1,5 @@
 import { authenticateAdminOrSalesAdmin } from '../../_lib/adminAuth.js'
+import { authenticateManager } from '../../_lib/managerAuth.js'
 import { updateSalesRepProfile } from '../../_lib/supabaseServiceClient.js'
 
 interface VercelRequest {
@@ -19,24 +20,47 @@ function sendError(res: VercelResponse, status: number, code: string, message: s
   res.status(status).json({ error: code, message })
 }
 
-// Admin or Sales Admin may correct Sales Rep name/email only. The caller's
-// role and active status are revalidated here, while updateSalesRepProfile
-// independently verifies the target's actual portal_role before using the
-// server-only service client. Role, activation, reporting flags, assignment,
-// and report data are not accepted by this endpoint.
+// Admin, Sales Admin, or a Manager who currently owns the target rep may
+// correct Sales Rep name/email. Admin/Sales Admin are tried first (an
+// unrelated failure, e.g. a misconfigured server, is reported as-is rather
+// than masked by a Manager-auth attempt); only a FORBIDDEN result falls
+// through to Manager auth, since any other failure (bad token, server
+// misconfiguration) is the same regardless of which role the caller meant
+// to use. The Manager-ownership check itself happens inside
+// updateSalesRepProfile, not here — this endpoint only decides WHICH role
+// authenticated, never whether that Manager owns this particular rep.
+// Role, activation, reporting flags, assignment, and report data are not
+// accepted by this endpoint for any caller.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'POST') {
       return sendError(res, 405, 'METHOD_NOT_ALLOWED', 'Only POST requests are supported.')
     }
 
-    const auth = await authenticateAdminOrSalesAdmin({
+    const adminAuth = await authenticateAdminOrSalesAdmin({
       supabaseUrl: SUPABASE_URL,
       supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY,
       authorizationHeader: req.headers.authorization,
     })
-    if (!auth.ok) {
-      return sendError(res, auth.status, auth.code, auth.message)
+
+    let userId: string
+    let callerRole: 'admin' | 'sales_admin' | 'manager'
+    if (adminAuth.ok) {
+      userId = adminAuth.userId
+      callerRole = adminAuth.role
+    } else if (adminAuth.code === 'FORBIDDEN') {
+      const managerAuth = await authenticateManager({
+        supabaseUrl: SUPABASE_URL,
+        supabasePublishableKey: SUPABASE_PUBLISHABLE_KEY,
+        authorizationHeader: req.headers.authorization,
+      })
+      if (!managerAuth.ok) {
+        return sendError(res, managerAuth.status, managerAuth.code, managerAuth.message)
+      }
+      userId = managerAuth.userId
+      callerRole = 'manager'
+    } else {
+      return sendError(res, adminAuth.status, adminAuth.code, adminAuth.message)
     }
 
     const body = (req.body ?? {}) as { id?: unknown; fullName?: unknown; email?: unknown }
@@ -47,10 +71,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return sendError(res, 400, 'INVALID_REQUEST', 'A Sales Rep id, a name up to 200 characters, and an email up to 254 characters are required.')
     }
 
-    const outcome = await updateSalesRepProfile(id, { fullName, email }, auth.userId)
+    const outcome = await updateSalesRepProfile(id, { fullName, email }, userId, callerRole)
     switch (outcome.status) {
       case 'ok':
         return res.status(200).json({ status: 'ok' })
+      case 'pending_verification':
+        return res.status(200).json({ status: 'pending_verification' })
       case 'not_found':
         return sendError(res, 404, 'NOT_FOUND', 'This Sales Rep could not be found.')
       case 'forbidden':

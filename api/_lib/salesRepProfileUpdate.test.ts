@@ -39,3 +39,22 @@ describe('decideSalesRepProfileUpdate — narrow Sales Rep target and input vali
     assert.deepEqual(decideSalesRepProfileUpdate(REP_TARGET, 'other@wfgtitle.com', true), { action: 'email_conflict' })
   })
 })
+
+describe('decideSalesRepProfileUpdate — isAuthorizedCaller (Manager ownership gate)', () => {
+  test('defaults to true when omitted — every existing Admin/Sales Admin call site is unaffected', () => {
+    assert.deepEqual(decideSalesRepProfileUpdate(REP_TARGET, 'new.rep@wfgtitle.com', false), { action: 'update' })
+  })
+
+  test('an authorized caller (Admin/Sales Admin always, or a Manager who owns this rep) may proceed', () => {
+    assert.deepEqual(decideSalesRepProfileUpdate(REP_TARGET, 'new.rep@wfgtitle.com', false, true), { action: 'update' })
+  })
+
+  test('an unauthorized caller (a Manager who does not own this rep) is forbidden, even for an otherwise-valid target/email', () => {
+    assert.deepEqual(decideSalesRepProfileUpdate(REP_TARGET, 'new.rep@wfgtitle.com', false, false), { action: 'forbidden' })
+  })
+
+  test('isAuthorizedCaller is checked before email validation/conflict — a Manager who does not own this rep never learns whether the email itself would have been valid', () => {
+    assert.deepEqual(decideSalesRepProfileUpdate(REP_TARGET, 'not-a-wfg-email', false, false), { action: 'forbidden' })
+    assert.deepEqual(decideSalesRepProfileUpdate(REP_TARGET, 'rep@wfgtitle.com', true, false), { action: 'forbidden' })
+  })
+})

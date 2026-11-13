@@ -178,20 +178,21 @@ describe('SalesRepManagement.tsx — restricted prop hides the one action Sales 
 })
 
 describe('Sales Admin Sales Rep edit — a dedicated, narrowly scoped path', () => {
-  test('the endpoint authenticates Admin or Sales Admin before calling the server-only update method', () => {
+  test('the endpoint authenticates Admin or Sales Admin first, falling through to Manager auth only on a FORBIDDEN result, before calling the server-only update method', () => {
     assert.match(updateSalesRepSrc, /authenticateAdminOrSalesAdmin\(/)
-    assert.match(updateSalesRepSrc, /if \(!auth\.ok\)/)
-    assert.match(updateSalesRepSrc, /updateSalesRepProfile\(id, \{ fullName, email \}, auth\.userId\)/)
+    assert.match(updateSalesRepSrc, /authenticateManager\(/)
+    assert.match(updateSalesRepSrc, /adminAuth\.code === 'FORBIDDEN'/)
+    assert.match(updateSalesRepSrc, /updateSalesRepProfile\(id, \{ fullName, email \}, userId, callerRole\)/)
     assert.doesNotMatch(updateSalesRepSrc, /body\.role|submitsWeeklyReport|isActive/)
   })
 
-  test('the privileged service targets a stable roster id, rejects non-sales_rep targets, and never writes role or activation fields', () => {
+  test('the privileged service targets a stable roster id (bridged from a profile id for a Manager caller), rejects non-sales_rep targets, and never writes role or activation fields', () => {
     const fnStart = supabaseServiceClientSrc.indexOf('export async function updateSalesRepProfile(')
     const fnEnd = supabaseServiceClientSrc.indexOf('\n}\n', fnStart)
     assert.ok(fnStart !== -1 && fnEnd > fnStart)
     const fn = supabaseServiceClientSrc.slice(fnStart, fnEnd)
     assert.match(fn, /\.eq\('id', id\)/)
-    assert.match(fn, /decideSalesRepProfileUpdate\(target, emailNormalized, emailConflictExists\)/)
+    assert.match(fn, /decideSalesRepProfileUpdate\(target, emailNormalized, emailConflictExists, isAuthorizedCaller\)/)
     assert.match(fn, /portalRole: targetRow\.portal_role/)
     assert.match(fn, /\.eq\('portal_role', 'sales_rep'\)/)
     assert.match(fn, /\.eq\('role', 'sales_rep'\)/)
@@ -199,16 +200,69 @@ describe('Sales Admin Sales Rep edit — a dedicated, narrowly scoped path', () 
     assert.doesNotMatch(fn, /portal_role:\s*['"]|role:\s*['"]|is_active|submits_weekly_report/)
   })
 
-  test('email changes reject duplicates, use auth_user_id, confirm immediately without sending email, and roll back every changed store', () => {
+  test('email changes reject duplicates, use auth_user_id, and roll back every changed store', () => {
     const fnStart = supabaseServiceClientSrc.indexOf('export async function updateSalesRepProfile(')
     const fnEnd = supabaseServiceClientSrc.indexOf('\n}\n', fnStart)
     const fn = supabaseServiceClientSrc.slice(fnStart, fnEnd)
-    assert.match(fn, /\.eq\('email_normalized', emailNormalized\)\s*\.neq\('id', id\)/)
-    assert.match(fn, /updateUserById\(authUserId!,\s*\{[\s\S]*?email_confirm: true/)
+    assert.match(fn, /\.eq\('email_normalized', emailNormalized\)\s*\.neq\('id', target\.id\)/)
     assert.match(fn, /auth_identity_unresolved/)
     assert.match(fn, /rollbackProfile\(\)[\s\S]*rollbackRoster\(\)[\s\S]*rollbackAuthEmail\(\)/)
-    assert.match(fn, /notificationEmailSent: false/)
-    assert.equal(/sendEmail|send.*notification/i.test(fn), false)
+  })
+
+  test('REVIEW FIX — email verification: a not-yet-onboarded rep (no existingProfile) still gets its Auth email confirmed immediately, exactly as before — there is no rightful owner already relying on it yet', () => {
+    const fnStart = supabaseServiceClientSrc.indexOf('export async function updateSalesRepProfile(')
+    const fnEnd = supabaseServiceClientSrc.indexOf('\n}\n', fnStart)
+    const fn = supabaseServiceClientSrc.slice(fnStart, fnEnd)
+    assert.match(fn, /const deferEmailVerification = emailChanging && accountCreated && !!existingProfile/)
+    assert.match(fn, /if \(emailChanging && accountCreated && !deferEmailVerification\) \{/)
+    assert.match(fn, /updateUserById\(authUserId!,\s*\{[\s\S]*?email_confirm: true/)
+  })
+
+  test('REVIEW FIX — email verification: an already-onboarded rep\'s email change is deferred, never applied to roster/profile/Auth until a link is confirmed', () => {
+    const fnStart = supabaseServiceClientSrc.indexOf('export async function updateSalesRepProfile(')
+    const fnEnd = supabaseServiceClientSrc.indexOf('\n}\n', fnStart)
+    const fn = supabaseServiceClientSrc.slice(fnStart, fnEnd)
+    assert.match(fn, /const effectiveEmail = deferEmailVerification \? originalRoster\.email : email/)
+    assert.match(fn, /const effectiveEmailNormalized = deferEmailVerification \? originalRoster\.emailNormalized : emailNormalized/)
+    assert.match(fn, /await requestEmailChangeVerification\(existingProfile!\.id, emailNormalized\)/)
+    assert.match(fn, /return verificationRequested \? \{ status: 'pending_verification' \} : \{ status: 'ok' \}/)
+  })
+
+  test('REVIEW FIX — email verification: the verification email is sent via the existing app-wide getEmailSender(), not a new ad hoc mechanism, and a send failure never fails the whole request', () => {
+    const fnMatch = supabaseServiceClientSrc.match(/async function requestEmailChangeVerification\([\s\S]*?\n\}/)
+    assert.ok(fnMatch)
+    const body = fnMatch[0]
+    assert.match(body, /getEmailSender\(\)\.send\(/)
+    assert.match(body, /subject: 'Confirm your new WFG OneReport Pulse email address'/)
+    // The DB write (pending fields) is the only thing allowed to fail the
+    // whole request — the function still returns true after a send failure.
+    const dbWriteIndex = body.indexOf("if (error) {")
+    const sendIndex = body.indexOf('getEmailSender().send(')
+    assert.ok(dbWriteIndex >= 0 && sendIndex > dbWriteIndex)
+  })
+
+  test('REVIEW FIX — email verification: the token is never stored in plaintext — only its hash — and is compared in constant time at finalize', () => {
+    assert.match(supabaseServiceClientSrc, /generateEmailChangeToken, hashEmailChangeToken, verifyEmailChangeToken/)
+    const fnMatch = supabaseServiceClientSrc.match(/async function requestEmailChangeVerification\([\s\S]*?\n\}/)
+    assert.ok(fnMatch)
+    assert.match(fnMatch[0], /token_hash: tokenHash/)
+    assert.doesNotMatch(fnMatch[0], /token_hash: token[,)]/)
+  })
+
+  test('REVIEW FIX 2 — email verification: pending-email data (address + token hash) lives in sales_rep_pending_email_changes, a dedicated table with NO grant to authenticated/anon at all — never a column on profiles, which RLS can only protect per-row, never per-column', () => {
+    const fnMatch = supabaseServiceClientSrc.match(/async function requestEmailChangeVerification\([\s\S]*?\n\}/)
+    assert.ok(fnMatch)
+    assert.match(fnMatch[0], /\.from\('sales_rep_pending_email_changes'\)\.upsert\(\{/)
+    assert.equal(fnMatch[0].includes(".from('profiles')\n    .update({\n      pending_email"), false)
+  })
+
+  test('REVIEW FIX — finalizeEmailChangeVerification re-checks expiry, token validity, and email conflicts fresh — never trusts anything computed at request time', () => {
+    const fnMatch = supabaseServiceClientSrc.match(/export async function finalizeEmailChangeVerification\([\s\S]*?\n\}\n\n/)
+    assert.ok(fnMatch)
+    const body = fnMatch[0]
+    assert.match(body, /verifyEmailChangeToken\(token, pendingRow\.token_hash as string\)/)
+    assert.match(body, /decideEmailChangeVerification\(/)
+    assert.match(body, /emailConflictExists/)
   })
 
   test('successful profile edits emit a server-side structured audit event with actor, target, changed fields, before/after, and timestamp', () => {
@@ -232,7 +286,7 @@ describe('Sales Admin Sales Rep edit — a dedicated, narrowly scoped path', () 
     assert.match(salesRepManagementSrc, /Edit Sales Rep/)
     assert.match(salesRepManagementSrc, /Full Name/)
     assert.match(salesRepManagementSrc, /WFG Email/)
-    assert.match(salesRepManagementSrc, /No notification or verification email is sent/)
+    assert.match(salesRepManagementSrc, /sends a verification link to the new address/)
   })
 })
 

@@ -240,6 +240,14 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
       loadReps()
       return
     }
+    if (outcome.status === 'pending_verification') {
+      setEditMessage({
+        text: 'Name saved. A verification link was sent to the new email address — the sign-in email will not change until it is confirmed.',
+        isError: false,
+      })
+      loadReps()
+      return
+    }
     const message =
       outcome.status === 'not_found'
         ? 'This Sales Rep could not be found. Refresh and try again.'
@@ -727,7 +735,7 @@ export default function SalesRepManagement({ onBack, restricted = false }: Sales
             </div>
             <form className="srm-modal-form" onSubmit={handleSaveRepEdit}>
               <p className="srm-modal-helper">
-                Changing the email updates the sign-in address immediately. No notification or verification email is sent; communicate the change to the Sales Rep through your approved internal channel.
+                Changing the email sends a verification link to the new address — the sign-in email does not change until that link is confirmed.
               </p>
               <div className="srm-modal-field">
                 <label className="srm-modal-label" htmlFor="edit-rep-full-name">Full Name</label>

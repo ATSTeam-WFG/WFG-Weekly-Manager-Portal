@@ -155,6 +155,10 @@ export async function setSalesRepActive(email: string, isActive: boolean): Promi
 
 export type UpdateSalesRepOutcome =
   | { status: 'ok' }
+  // The name (if changed) was saved; the email change is pending — a
+  // verification link was sent to the new address and the account keeps
+  // signing in with its current email until it's confirmed.
+  | { status: 'pending_verification' }
   | { status: 'not_found' | 'forbidden' | 'invalid_domain' | 'email_conflict' | 'auth_identity_unresolved' | 'partial_failure' | 'error' }
 
 const UPDATE_SALES_REP_ERROR_CODES: Record<string, Exclude<UpdateSalesRepOutcome['status'], 'ok'>> = {
@@ -190,6 +194,7 @@ export async function updateSalesRep(id: string, fullName: string, email: string
 
   const body = await response.json().catch(() => null)
   if (response.ok && body?.status === 'ok') return { status: 'ok' }
+  if (response.ok && body?.status === 'pending_verification') return { status: 'pending_verification' }
   if (body && typeof body === 'object' && typeof body.error === 'string' && UPDATE_SALES_REP_ERROR_CODES[body.error]) {
     return { status: UPDATE_SALES_REP_ERROR_CODES[body.error] }
   }
