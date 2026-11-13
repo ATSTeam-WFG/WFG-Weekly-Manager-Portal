@@ -80,11 +80,34 @@ describe('Manager roster reads — authenticated user identity and existing RLS-
     assert.match(assignedReportsSql, /public\.is_assigned_manager_of\(rep_id\)/)
   })
 
-  test('account actions are visible but disabled pending backend authorization approval', () => {
+  test('account actions are gated behind MANAGER_ACCOUNT_ACTIONS_UI_ENABLED, disabled by default pending backend authorization approval', () => {
+    assert.match(managerServiceSrc, /export const MANAGER_ACCOUNT_ACTIONS_UI_ENABLED =\s*\n\s*import\.meta\.env\.VITE_MANAGER_ACCOUNT_ACTIONS_ENABLED === 'true'/)
+    assert.match(rosterComponentSrc, /import \{[\s\S]*?MANAGER_ACCOUNT_ACTIONS_UI_ENABLED[\s\S]*?\} from '\.\.\/lib\/managerSalesRepService'/)
+
+    // The disabled, "pending approval" fallback (the only rendering reachable
+    // today, since no deployed environment sets the VITE_ env var) must still
+    // exist verbatim as the flag's false branch.
     assert.match(rosterComponentSrc, /\+ Add Sales Rep[\s\S]*?disabled/)
     for (const action of ['Edit', 'Deactivate', 'Reactivate', 'Remove Assignment']) {
       assert.match(rosterComponentSrc, new RegExp(`<button[^>]*disabled[^>]*>[\\s\\S]*?${action}`))
     }
+  })
+
+  test('when MANAGER_ACCOUNT_ACTIONS_UI_ENABLED is true, Add/Edit/Remove Assignment become live and call the existing self-service client wrappers', () => {
+    assert.match(rosterComponentSrc, /MANAGER_ACCOUNT_ACTIONS_UI_ENABLED \? \(\s*<button type="button" className="btn btn-primary" onClick=\{handleOpenAddModal\}/)
+    assert.match(rosterComponentSrc, /onClick=\{\(\) => handleOpenEdit\(rep\)\}/)
+    assert.match(rosterComponentSrc, /onClick=\{\(\) => setPendingRemoval\(rep\)\}/)
+    assert.match(rosterComponentSrc, /await inviteOwnSalesRep\(trimmedName, trimmedEmail\)/)
+    assert.match(rosterComponentSrc, /await editOwnSalesRep\(editingRep\.repId, fullNameValue, emailValue\)/)
+    assert.match(rosterComponentSrc, /await removeOwnAssignment\(rep\.repId\)/)
+  })
+
+  test('Deactivate/Reactivate stays disabled even when Manager account actions are otherwise enabled — it remains Admin-only, out of the approved Manager permission scope', () => {
+    const actionsCellMatch = rosterComponentSrc.match(
+      /manager-sales-actions[\s\S]*?onClick=\{\(\) => handleOpenEdit\(rep\)\}[\s\S]*?onClick=\{\(\) => setPendingRemoval\(rep\)\}/,
+    )
+    assert.ok(actionsCellMatch, 'expected the enabled-branch per-row actions cell (Edit through Remove Assignment)')
+    assert.match(actionsCellMatch[0], /disabled\s*\n\s*title="Deactivating or reactivating a Sales Rep's account remains an Admin-only action\."/)
   })
 })
 

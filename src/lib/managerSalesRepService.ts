@@ -3,6 +3,17 @@ import { fetchRepReportWithOutcome, type RepReport } from './repReportsService'
 import type { FetchRepReportOutcome } from './repReportsService'
 import { getValidAccessToken } from './sessionService'
 
+// Keep Manager self-service Add/Edit/Remove Assignment UI disabled until the
+// backend (Node endpoints, database kill switch, and allowlist) has actually
+// been activated for approved Preview test accounts — see
+// api/manager/sales-reps/assign.ts, unassign.ts, and the
+// app.manager_account_actions_enabled / app.manager_account_actions_allowed_ids
+// database GUCs, which independently re-check authorization regardless of
+// this flag. This client-side flag only controls whether the UI renders live
+// controls instead of the existing disabled "pending approval" buttons.
+export const MANAGER_ACCOUNT_ACTIONS_UI_ENABLED =
+  import.meta.env.VITE_MANAGER_ACCOUNT_ACTIONS_ENABLED === 'true'
+
 export interface ManagerAssignedSalesRep {
   repId: string
   fullName: string | null

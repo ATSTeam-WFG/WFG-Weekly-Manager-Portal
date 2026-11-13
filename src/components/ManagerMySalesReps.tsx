@@ -1,10 +1,67 @@
-import { useEffect, useMemo, useState } from 'react'
-import { fetchManagerAssignedSalesReps, type ManagerAssignedSalesRep } from '../lib/managerSalesRepService'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import {
+  fetchManagerAssignedSalesReps,
+  inviteOwnSalesRep,
+  editOwnSalesRep,
+  removeOwnAssignment,
+  MANAGER_ACCOUNT_ACTIONS_UI_ENABLED,
+  type ManagerAssignedSalesRep,
+} from '../lib/managerSalesRepService'
 import './ManagerPortalData.css'
+import './SalesRepManagement.css'
 
 interface ManagerMySalesRepsProps {
   managerName: string
   onReviewReports: () => void
+}
+
+function inviteOutcomeMessage(outcome: Awaited<ReturnType<typeof inviteOwnSalesRep>>): string {
+  switch (outcome.status) {
+    case 'ok':
+      return 'Invitation sent. Once they complete their first sign-in, they will automatically appear in your roster below — no further action is needed from you.'
+    case 'pending_conflict':
+      return outcome.message
+    case 'already_registered':
+      return 'This person already has a portal account.'
+    case 'invalid_domain':
+      return 'Only approved @wfgtitle.com email addresses can be added.'
+    case 'role_conflict':
+      return 'This email is already assigned a Manager or Admin role.'
+    case 'inactive':
+      return 'This employee is deactivated. Contact an Admin before inviting them.'
+    default:
+      return 'Something went wrong sending this invitation. Please try again.'
+  }
+}
+
+function editErrorMessage(status: Exclude<Awaited<ReturnType<typeof editOwnSalesRep>>['status'], 'ok' | 'pending_verification'>): string {
+  switch (status) {
+    case 'not_found':
+      return 'This Sales Rep could not be found. Refresh and try again.'
+    case 'forbidden':
+      return 'This Sales Rep is no longer assigned to you. Refresh your roster and try again.'
+    case 'invalid_domain':
+      return 'Only approved @wfgtitle.com email addresses can be used.'
+    case 'email_conflict':
+      return 'That email address is already in use by another portal account.'
+    case 'auth_identity_unresolved':
+      return 'This account’s sign-in identity could not be safely verified. The email was not changed; contact support.'
+    case 'partial_failure':
+      return 'This change may be incomplete. Do not retry; contact support for reconciliation.'
+    default:
+      return 'Could not save this Sales Rep. Please try again.'
+  }
+}
+
+function removeAssignmentErrorMessage(status: Exclude<Awaited<ReturnType<typeof removeOwnAssignment>>['status'], 'ok'>): string {
+  switch (status) {
+    case 'not_found':
+      return 'This Sales Rep is no longer assigned to you — your roster may already be out of date. Refresh and try again.'
+    case 'invalid_rep':
+      return 'This profile is not a Sales Rep.'
+    default:
+      return 'Could not remove this assignment. Please try again.'
+  }
 }
 
 type ManagerRosterStatus = 'all' | 'active' | 'inactive' | 'unavailable'
@@ -24,6 +81,24 @@ export default function ManagerMySalesReps({ managerName, onReviewReports }: Man
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<ManagerRosterStatus>('all')
 
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [addFullName, setAddFullName] = useState('')
+  const [addEmail, setAddEmail] = useState('')
+  const [inviting, setInviting] = useState(false)
+  const [inviteMessage, setInviteMessage] = useState<{ text: string; isError: boolean } | null>(null)
+  const addFullNameInputRef = useRef<HTMLInputElement>(null)
+
+  const [editingRep, setEditingRep] = useState<ManagerAssignedSalesRep | null>(null)
+  const [editFullName, setEditFullName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editMessage, setEditMessage] = useState<{ text: string; isError: boolean } | null>(null)
+
+  const [pendingRemoval, setPendingRemoval] = useState<ManagerAssignedSalesRep | null>(null)
+  const [removingAssignment, setRemovingAssignment] = useState(false)
+
+  const [rowMessage, setRowMessage] = useState<{ repId: string; text: string; isError: boolean } | null>(null)
+
   useEffect(() => {
     let active = true
     setLoading(true)
@@ -42,6 +117,98 @@ export default function ManagerMySalesReps({ managerName, onReviewReports }: Man
       active = false
     }
   }, [reloadToken])
+
+  useEffect(() => {
+    if (isAddModalOpen) addFullNameInputRef.current?.focus()
+  }, [isAddModalOpen])
+
+  const handleOpenAddModal = () => {
+    setAddFullName('')
+    setAddEmail('')
+    setInviteMessage(null)
+    setIsAddModalOpen(true)
+  }
+
+  const handleCloseAddModal = () => {
+    if (inviting) return
+    setIsAddModalOpen(false)
+  }
+
+  const handleInviteSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+    const trimmedName = addFullName.trim()
+    const trimmedEmail = addEmail.trim()
+    if (!trimmedName || !trimmedEmail) {
+      setInviteMessage({ text: 'A name and email are required.', isError: true })
+      return
+    }
+    setInviting(true)
+    setInviteMessage(null)
+    const outcome = await inviteOwnSalesRep(trimmedName, trimmedEmail)
+    setInviting(false)
+    setInviteMessage({ text: inviteOutcomeMessage(outcome), isError: outcome.status !== 'ok' })
+    if (outcome.status === 'ok') {
+      setAddFullName('')
+      setAddEmail('')
+    }
+  }
+
+  const handleOpenEdit = (rep: ManagerAssignedSalesRep) => {
+    setEditingRep(rep)
+    setEditFullName(rep.fullName ?? '')
+    setEditEmail(rep.email)
+    setEditMessage(null)
+  }
+
+  const handleCloseEdit = () => {
+    if (savingEdit) return
+    setEditingRep(null)
+    setEditMessage(null)
+  }
+
+  const handleSaveEdit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!editingRep) return
+    const fullNameValue = editFullName.trim()
+    const emailValue = editEmail.trim()
+    if (!fullNameValue || !emailValue) {
+      setEditMessage({ text: 'A name and email are required.', isError: true })
+      return
+    }
+    setSavingEdit(true)
+    const outcome = await editOwnSalesRep(editingRep.repId, fullNameValue, emailValue)
+    setSavingEdit(false)
+    if (outcome.status === 'ok') {
+      setEditingRep(null)
+      setEditMessage(null)
+      setReloadToken((token) => token + 1)
+      return
+    }
+    if (outcome.status === 'pending_verification') {
+      setEditMessage({
+        text: 'Name saved. A verification link was sent to the new email address — the sign-in email will not change until it is confirmed.',
+        isError: false,
+      })
+      setReloadToken((token) => token + 1)
+      return
+    }
+    setEditMessage({ text: editErrorMessage(outcome.status), isError: true })
+  }
+
+  const handleConfirmRemoveAssignment = async () => {
+    if (!pendingRemoval) return
+    const rep = pendingRemoval
+    setRemovingAssignment(true)
+    const outcome = await removeOwnAssignment(rep.repId)
+    setRemovingAssignment(false)
+    setPendingRemoval(null)
+    if (outcome.status === 'ok') {
+      setRowMessage({ repId: rep.repId, text: 'Manager assignment removed. The Sales Rep account and report history remain unchanged.', isError: false })
+      setReloadToken((token) => token + 1)
+    } else {
+      setRowMessage({ repId: rep.repId, text: removeAssignmentErrorMessage(outcome.status), isError: true })
+    }
+  }
 
   const filteredReps = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -67,19 +234,33 @@ export default function ManagerMySalesReps({ managerName, onReviewReports }: Man
           <button type="button" className="btn btn-secondary" onClick={onReviewReports}>
             Review Reports
           </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled
-            title="Manager-specific account provisioning is pending backend authorization approval."
-          >
-            + Add Sales Rep
-          </button>
+          {MANAGER_ACCOUNT_ACTIONS_UI_ENABLED ? (
+            <button type="button" className="btn btn-primary" onClick={handleOpenAddModal}>
+              + Add Sales Rep
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled
+              title="Manager-specific account provisioning is pending backend authorization approval."
+            >
+              + Add Sales Rep
+            </button>
+          )}
         </div>
       </div>
 
       <div className="manager-action-notice" role="note">
-        <strong>Account changes are not enabled yet.</strong> Add, Edit, Deactivate, Reactivate, and Remove Assignment remain disabled until Manager-scoped backend permissions and the onboarding assignment flow are reviewed and approved. Deactivate/Reactivate changes account access globally, not just this Manager relationship, and needs explicit product approval.
+        {MANAGER_ACCOUNT_ACTIONS_UI_ENABLED ? (
+          <>
+            <strong>Deactivate and Reactivate are not available here.</strong> Add, Edit, and Remove Assignment are enabled for your account. Deactivating or reactivating a Sales Rep's account changes their access globally, not just your Manager relationship — that remains an Admin-only action.
+          </>
+        ) : (
+          <>
+            <strong>Account changes are not enabled yet.</strong> Add, Edit, Deactivate, Reactivate, and Remove Assignment remain disabled until Manager-scoped backend permissions and the onboarding assignment flow are reviewed and approved. Deactivate/Reactivate changes account access globally, not just this Manager relationship, and needs explicit product approval.
+          </>
+        )}
       </div>
 
       {loading ? (
@@ -145,17 +326,180 @@ export default function ManagerMySalesReps({ managerName, onReviewReports }: Man
                     {rep.onboardingStatus === 'complete' ? 'Complete' : 'Unavailable'}
                   </div>
                   <div className="manager-sales-cell manager-sales-actions" role="cell" data-label="Actions">
-                    <button type="button" className="btn btn-secondary" disabled title="Manager-scoped profile editing is pending approval.">Edit</button>
-                    <button type="button" className="btn btn-secondary" disabled title="Manager-scoped account activation is pending approval.">
-                      {rep.isActive ? 'Deactivate' : 'Reactivate'}
-                    </button>
-                    <button type="button" className="btn btn-secondary" disabled title="Manager-scoped unassignment is pending approval.">Remove Assignment</button>
+                    {MANAGER_ACCOUNT_ACTIONS_UI_ENABLED ? (
+                      <>
+                        <button type="button" className="btn btn-secondary" onClick={() => handleOpenEdit(rep)}>Edit</button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled
+                          title="Deactivating or reactivating a Sales Rep's account remains an Admin-only action."
+                        >
+                          {rep.isActive ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                        <button type="button" className="btn btn-secondary" onClick={() => setPendingRemoval(rep)}>Remove Assignment</button>
+                      </>
+                    ) : (
+                      <>
+                        <button type="button" className="btn btn-secondary" disabled title="Manager-scoped profile editing is pending approval.">Edit</button>
+                        <button type="button" className="btn btn-secondary" disabled title="Manager-scoped account activation is pending approval.">
+                          {rep.isActive ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                        <button type="button" className="btn btn-secondary" disabled title="Manager-scoped unassignment is pending approval.">Remove Assignment</button>
+                      </>
+                    )}
                   </div>
+                  {rowMessage && rowMessage.repId === rep.repId && (
+                    <p
+                      className={rowMessage.isError ? 'sales-rep-management-message-error' : 'sales-rep-management-message-success'}
+                      role={rowMessage.isError ? 'alert' : 'status'}
+                    >
+                      {rowMessage.text}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </>
+      )}
+
+      {MANAGER_ACCOUNT_ACTIONS_UI_ENABLED && isAddModalOpen && (
+        <div className="srm-modal-overlay" onClick={handleCloseAddModal}>
+          <div
+            className="srm-modal-panel"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-own-sales-rep-modal-title"
+          >
+            <div className="srm-modal-header">
+              <h2 id="add-own-sales-rep-modal-title">Add Sales Rep</h2>
+              <button type="button" className="srm-modal-close-btn" onClick={handleCloseAddModal} disabled={inviting} aria-label="Close">
+                &times;
+              </button>
+            </div>
+            <form className="srm-modal-form" onSubmit={handleInviteSubmit}>
+              <p className="srm-modal-helper">
+                Enter the sales rep's name and WFG email. They'll be sent an invitation, and once they complete their first sign-in they will
+                automatically be assigned to you.
+              </p>
+              <div className="srm-modal-field">
+                <label className="srm-modal-label" htmlFor="manager-invite-rep-full-name">Full Name</label>
+                <input
+                  id="manager-invite-rep-full-name"
+                  ref={addFullNameInputRef}
+                  type="text"
+                  className="srm-modal-input"
+                  value={addFullName}
+                  onChange={(event) => setAddFullName(event.target.value)}
+                  placeholder="Jane Rep"
+                  required
+                />
+              </div>
+              <div className="srm-modal-field">
+                <label className="srm-modal-label" htmlFor="manager-invite-rep-email">WFG Email</label>
+                <input
+                  id="manager-invite-rep-email"
+                  type="email"
+                  className="srm-modal-input"
+                  value={addEmail}
+                  onChange={(event) => setAddEmail(event.target.value)}
+                  placeholder="jane.rep@wfgtitle.com"
+                  required
+                />
+              </div>
+              {inviteMessage && (
+                <p className={inviteMessage.isError ? 'sales-rep-management-message-error' : 'sales-rep-management-message-success'} role={inviteMessage.isError ? 'alert' : 'status'}>
+                  {inviteMessage.text}
+                </p>
+              )}
+              <div className="srm-modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={handleCloseAddModal} disabled={inviting}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={inviting}>{inviting ? 'Sending…' : 'Send Invitation'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {MANAGER_ACCOUNT_ACTIONS_UI_ENABLED && editingRep && (
+        <div className="srm-modal-overlay" onClick={handleCloseEdit}>
+          <div
+            className="srm-modal-panel"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-own-sales-rep-modal-title"
+          >
+            <div className="srm-modal-header">
+              <h2 id="edit-own-sales-rep-modal-title">Edit Sales Rep</h2>
+              <button type="button" className="srm-modal-close-btn" onClick={handleCloseEdit} disabled={savingEdit} aria-label="Close">
+                &times;
+              </button>
+            </div>
+            <form className="srm-modal-form" onSubmit={handleSaveEdit}>
+              <p className="srm-modal-helper">
+                Changing the email sends a verification link to the new address — the sign-in email does not change until that link is confirmed.
+              </p>
+              <div className="srm-modal-field">
+                <label className="srm-modal-label" htmlFor="manager-edit-rep-full-name">Full Name</label>
+                <input
+                  id="manager-edit-rep-full-name"
+                  type="text"
+                  className="srm-modal-input"
+                  value={editFullName}
+                  onChange={(event) => setEditFullName(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="srm-modal-field">
+                <label className="srm-modal-label" htmlFor="manager-edit-rep-email">WFG Email</label>
+                <input
+                  id="manager-edit-rep-email"
+                  type="email"
+                  className="srm-modal-input"
+                  value={editEmail}
+                  onChange={(event) => setEditEmail(event.target.value)}
+                  required
+                />
+              </div>
+              {editMessage && (
+                <p className={editMessage.isError ? 'sales-rep-management-message-error' : 'sales-rep-management-message-success'} role={editMessage.isError ? 'alert' : 'status'}>
+                  {editMessage.text}
+                </p>
+              )}
+              <div className="srm-modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={handleCloseEdit} disabled={savingEdit}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save Changes'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {MANAGER_ACCOUNT_ACTIONS_UI_ENABLED && pendingRemoval && (
+        <div className="srm-modal-overlay" role="presentation" onClick={() => !removingAssignment && setPendingRemoval(null)}>
+          <div
+            className="srm-confirm-panel"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="remove-assignment-title"
+            aria-describedby="remove-assignment-message"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="remove-assignment-title">Remove Manager Assignment</h2>
+            <p id="remove-assignment-message">
+              Remove {pendingRemoval.fullName ?? 'this Sales Rep'}'s assignment to you? Their account and historical reports will remain unchanged.
+            </p>
+            <div className="srm-modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setPendingRemoval(null)} disabled={removingAssignment}>Cancel</button>
+              <button type="button" className="btn btn-primary" onClick={handleConfirmRemoveAssignment} disabled={removingAssignment}>
+                {removingAssignment ? 'Removing…' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
