@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   fetchMyCurrentReps,
   fetchRepReport,
@@ -35,6 +35,15 @@ import './MyReps.css'
 interface MyRepsProps {
   managerId: string
   onBack: () => void
+  // Additive, optional (2026-11-13) — when true, renders only the
+  // search/filter row + table + review panel, for embedding inside the
+  // Manager Dashboard overview (which already shows its own heading/KPI
+  // summary above). onBack is still required and still wired by every
+  // caller (the Team Reports destination still needs it); it is simply
+  // never rendered/reachable in embedded mode. No fetch, review, or
+  // permission logic changes based on this flag — purely a presentation
+  // toggle.
+  embedded?: boolean
 }
 
 interface RepRow {
@@ -126,13 +135,15 @@ const SECTION_LIST_FIELDS: {
   { key: 'nextWeekPriorities', label: 'Next Week Priorities' },
 ]
 
-export default function MyReps({ managerId, onBack }: MyRepsProps) {
+export default function MyReps({ managerId, onBack, embedded = false }: MyRepsProps) {
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [loadErrorMessage, setLoadErrorMessage] = useState<string | null>(null)
   const [rows, setRows] = useState<RepRow[]>([])
   const [selectedRepId, setSelectedRepId] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
   const [weekOffset, setWeekOffset] = useState(0)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | RepReportBucket>('all')
 
   const week = getReportingWeekByOffset(weekOffset)
   const isCurrentWeek = weekOffset === 0
@@ -202,6 +213,18 @@ export default function MyReps({ managerId, onBack }: MyRepsProps) {
   )
   const submittedCount = summaryCounts.pending + summaryCounts.approved + summaryCounts.rejected
 
+  // Additive, client-side only — search/filter never change which rows were
+  // fetched (still every rep RLS already scoped to this Manager), only which
+  // of those already-loaded rows are displayed.
+  const filteredRows = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    return rows.filter((row) => {
+      if (statusFilter !== 'all' && deriveRepReportBucket(row.report) !== statusFilter) return false
+      if (!query) return true
+      return (row.fullName ?? '').toLowerCase().includes(query) || row.email.toLowerCase().includes(query)
+    })
+  }, [rows, searchQuery, statusFilter])
+
   const selectedRow = rows.find((r) => r.repId === selectedRepId) ?? null
 
   const handleReviewed = useCallback((updated: RepReport) => {
@@ -209,43 +232,57 @@ export default function MyReps({ managerId, onBack }: MyRepsProps) {
   }, [])
 
   return (
-    <div className="myreps-page">
-      <div className="myreps-top-row">
-        <div className="myreps-header-titles">
-          <h1>My Reps</h1>
-          <p className="myreps-header-subtitle">See this week's status for your assigned reps and review what they've submitted.</p>
-        </div>
-        <div className="myreps-top-row-right">
-          <button type="button" className="btn btn-secondary" onClick={onBack}>
-            &larr; Back
-          </button>
-          <span className="week-selector-label">
-            <button
-              type="button"
-              className="week-nav-btn"
-              onClick={() => setWeekOffset((o) => o - 1)}
-              aria-label="Previous reporting week"
-            >
-              &lsaquo;
+    <div className={embedded ? 'myreps-embedded' : 'myreps-page'}>
+      {!embedded && (
+        <div className="myreps-top-row">
+          <div className="myreps-header-titles">
+            <h1>My Reps</h1>
+            <p className="myreps-header-subtitle">See this week's status for your assigned reps and review what they've submitted.</p>
+          </div>
+          <div className="myreps-top-row-right">
+            <button type="button" className="btn btn-secondary" onClick={onBack}>
+              &larr; Back
             </button>
-            <span className="myreps-week-label">
-              Week of {week.label}
-              {isCurrentWeek && <span className="week-current-badge">Current</span>}
+            <span className="week-selector-label">
+              <button
+                type="button"
+                className="week-nav-btn"
+                onClick={() => setWeekOffset((o) => o - 1)}
+                aria-label="Previous reporting week"
+              >
+                &lsaquo;
+              </button>
+              <span className="myreps-week-label">
+                Week of {week.label}
+                {/* Always rendered (never conditionally omitted) so the
+                    header/week-selector/Back button layout occupies the
+                    exact same width whether the current week or a past week
+                    is selected — only visibility toggles, via a new,
+                    MyReps-scoped modifier class (myreps-week-current-badge-
+                    hidden, in MyReps.css), never the shared, DO-NOT-MODIFY
+                    .week-current-badge rule in AdminDashboard.css. Omitting
+                    this element entirely (the previous `isCurrentWeek &&`
+                    guard) was the root cause of Team Reports visibly
+                    reflowing to a different layout between weeks. */}
+                <span className={`week-current-badge${isCurrentWeek ? '' : ' myreps-week-current-badge-hidden'}`}>Current</span>
+              </span>
+              <button
+                type="button"
+                className="week-nav-btn"
+                onClick={() => setWeekOffset((o) => Math.min(0, o + 1))}
+                disabled={isCurrentWeek}
+                aria-label="Next reporting week"
+              >
+                &rsaquo;
+              </button>
             </span>
-            <button
-              type="button"
-              className="week-nav-btn"
-              onClick={() => setWeekOffset((o) => Math.min(0, o + 1))}
-              disabled={isCurrentWeek}
-              aria-label="Next reporting week"
-            >
-              &rsaquo;
-            </button>
-          </span>
+          </div>
         </div>
-      </div>
+      )}
 
-      {loadState === 'ready' && rows.length > 0 && (
+      {embedded && <h2 className="myreps-embedded-heading">Assigned Sales Reps</h2>}
+
+      {!embedded && loadState === 'ready' && rows.length > 0 && (
         <div className="myreps-summary-row">
           <div className="myreps-summary-card">
             <span className="myreps-summary-value">{rows.length}</span>
@@ -285,9 +322,44 @@ export default function MyReps({ managerId, onBack }: MyRepsProps) {
         </div>
       )}
 
+      {loadState === 'ready' && rows.length > 0 && (
+        <div className="myreps-search-row">
+          <input
+            type="search"
+            className="myreps-search-input"
+            placeholder="Search by name or email"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search assigned reps by name or email"
+          />
+          <div className="myreps-filter-row">
+            {(
+              [
+                { key: 'all', label: 'All' },
+                { key: 'missing', label: 'Missing' },
+                { key: 'pending', label: 'Pending Review' },
+                { key: 'approved', label: 'Approved' },
+                { key: 'rejected', label: 'Needs Correction' },
+              ] as { key: 'all' | RepReportBucket; label: string }[]
+            ).map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                className={`myreps-filter-btn ${statusFilter === f.key ? 'active' : ''}`}
+                onClick={() => setStatusFilter(f.key)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loadState === 'ready' &&
         (rows.length === 0 ? (
           <p className="myreps-empty-state">You have no reps currently assigned to you.</p>
+        ) : filteredRows.length === 0 ? (
+          <p className="myreps-empty-state">No reps match your search or filter.</p>
         ) : (
           <div className="myreps-table" role="table" aria-label="My Reps">
             <div className="myreps-table-header-row" role="row">
@@ -296,7 +368,7 @@ export default function MyReps({ managerId, onBack }: MyRepsProps) {
               <span role="columnheader">Submitted</span>
               <span role="columnheader">Review</span>
             </div>
-            {rows.map((row) => {
+            {filteredRows.map((row) => {
               const reviewable = isReviewable(row.report)
               return (
                 <div

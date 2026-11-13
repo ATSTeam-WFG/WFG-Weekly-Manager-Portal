@@ -10,13 +10,42 @@
   padding: 32px 24px 100px;
 }
 
+/* Embedded mode (2026-11-13) — rendered inside the Manager Dashboard
+   overview's own .mdo-page container, which already supplies page-level
+   max-width/margin/padding; redeclaring them here would double it (the same
+   double-page-chrome bug this app has already fixed once — see
+   SalesAdminManagerOverview.css's own .samo-page comment). */
+.myreps-embedded {
+  margin: 0;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 16px;
+  padding: 20px 24px;
+}
+
+.myreps-embedded-heading {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 12px;
+}
+
+/* Desktop (above the 860px tablet handoff below): never wraps, so the Back
+   button/week selector always sit on one row at the upper-right, beside the
+   heading — the layout Demo Manager preferred — and (combined with the
+   badge's reserved space above) stays identical across every reporting
+   week, not just the current one. */
 .myreps-top-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 16px;
   margin-bottom: 20px;
+}
+
+.myreps-header-titles {
+  min-width: 0;
 }
 
 .myreps-header-titles h1 {
@@ -35,8 +64,19 @@
 .myreps-top-row-right {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   gap: 12px;
+}
+
+/* Keeps the header/week-selector/Back button row the same width whether a
+   past week or the current week is selected (see MyReps.tsx's own comment
+   at the .week-current-badge usage) — visibility only, never display:none,
+   so the badge's space is still reserved and the row never reflows between
+   weeks. Never touches the shared .week-current-badge rule itself
+   (AdminDashboard.css, marked DO NOT MODIFY). */
+.myreps-week-current-badge-hidden {
+  visibility: hidden;
 }
 
 .myreps-week-label {
@@ -91,6 +131,74 @@
   color: var(--muted-gray);
   font-size: 14px;
   padding: 40px 0;
+}
+
+/* Search + status filter — added alongside Team Reports' "Assigned Sales
+   Reps" search/filter (2026-11-13). Mirrors SalesRepManagement.css's
+   .srm-search and AdminDashboard.css's .adp-filter-row/.adp-filter-btn
+   conventions exactly, under this file's own myreps- prefix (never sharing
+   a class with either file, per this file's own header comment). */
+.myreps-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.myreps-search-input {
+  flex: 1;
+  min-width: 220px;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 14px;
+  border: 1px solid var(--soft-sand);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--dark-charcoal);
+}
+
+.myreps-search-input:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+.myreps-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.myreps-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--soft-sand);
+  background: var(--white);
+  color: var(--muted-gray);
+  cursor: pointer;
+}
+
+.myreps-filter-btn:hover {
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+
+.myreps-filter-btn.active {
+  background: var(--terracotta);
+  border-color: var(--terracotta);
+  color: var(--white);
+}
+
+@media (max-width: 480px) {
+  .myreps-search-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 .myreps-error-state {
@@ -421,16 +529,26 @@
   margin-top: 12px;
 }
 
-@media (max-width: 640px) {
+/* Tablet handoff (860px) — the same breakpoint ManagerShell.css's own
+   sidebar already switches to a horizontal top bar at, so the whole page's
+   responsive story changes at one consistent width. Above this, the header
+   row never wraps (see .myreps-top-row/.myreps-top-row-right above); below
+   it, the Back button/week selector stack cleanly beneath the heading
+   instead of being forced to overflow. */
+@media (max-width: 860px) {
   .myreps-top-row {
     flex-direction: column;
     align-items: stretch;
+    flex-wrap: wrap;
   }
 
   .myreps-top-row-right {
+    flex-wrap: wrap;
     justify-content: space-between;
   }
+}
 
+@media (max-width: 640px) {
   /* The shared .week-selector-label (AdminDashboard.css, never redefined —
      see this file's own header comment) has no internal flex-wrap of its
      own, so at narrow widths its three children (prev/label/next) can

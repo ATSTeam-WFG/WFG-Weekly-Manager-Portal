@@ -1,0 +1,113 @@
+/* Manager Dashboard sidebar — matches AdminSidebar.css's own navy
+   background/active-state/icon treatment exactly (same --espresso
+   background, same electric-blue active highlight with terracotta left
+   accent), under its own manager-shell- prefix so neither file shares or
+   overrides the other's classes. */
+
+.manager-shell {
+  /* Approximates Header.css's own rendered height — same estimate
+     AdminShell.css already uses for the identical problem (a sidebar that
+     must reach the bottom of the viewport, even when the page itself is
+     short). Header.tsx/.css are untouched and shared by every role. */
+  --manager-shell-header-height: 61px;
+  display: flex;
+  align-items: stretch;
+  max-width: 1280px;
+  margin: 0 auto;
+  min-height: calc(100vh - var(--manager-shell-header-height));
+}
+
+.manager-shell-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+  width: 220px;
+  padding: 20px 12px;
+  background: var(--espresso);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  position: sticky;
+  top: var(--manager-shell-header-height);
+  height: calc(100vh - var(--manager-shell-header-height));
+  overflow-y: auto;
+}
+
+.manager-shell-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: none;
+  border-left: 3px solid transparent;
+  background: none;
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.manager-shell-nav-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--white);
+}
+
+.manager-shell-nav-item-active,
+.manager-shell-nav-item-active:hover {
+  background: rgba(8, 102, 232, 0.22);
+  border-left-color: var(--terracotta);
+  color: var(--white);
+  font-weight: 700;
+}
+
+.manager-shell-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.manager-shell-nav-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.manager-shell-nav-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.manager-shell-content {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .manager-shell {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .manager-shell-nav {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 16px;
+    position: static;
+    height: auto;
+    overflow-y: visible;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .manager-shell-nav-item {
+    flex: 1;
+    min-width: 120px;
+    justify-content: center;
+  }
+}

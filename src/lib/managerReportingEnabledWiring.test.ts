@@ -86,14 +86,23 @@ describe('App.tsx — hasManagerReporting is additive, never inferred from role,
     assert.match(appSrc, /isSalesAdmin && managerReportingViewOpen && \(/)
     assert.match(appSrc, /← Back to Sales Admin/)
     const backLinkIndex = appSrc.indexOf('← Back to Sales Admin')
-    const myRepsToggleIndex = appSrc.indexOf("profile?.role === 'manager' &&")
-    assert.ok(backLinkIndex >= 0 && myRepsToggleIndex >= 0 && backLinkIndex < myRepsToggleIndex)
+    const managerShellIndex = appSrc.indexOf("profile?.role === 'manager' &&")
+    assert.ok(backLinkIndex >= 0 && managerShellIndex >= 0 && backLinkIndex < managerShellIndex)
   })
 
-  test('the "My Reps" toggle stays gated on the real \'manager\' role only — never widened for a Sales Admin, dual-role or not', () => {
-    const myRepsBlockMatch = appSrc.match(/profile\?\.role === 'manager' &&\s*\n\s*\(myRepsOpen \? \([\s\S]*?\)\)\}/)
-    assert.ok(myRepsBlockMatch, 'expected the My Reps toggle block')
-    assert.doesNotMatch(myRepsBlockMatch[0], /isSalesAdmin|managerReportingEnabled|managerReportingViewOpen/)
+  // Manager Dashboard redesign (2026-11-13): the old myRepsOpen toggle +
+  // <MyReps> pairing was replaced by <ManagerShell> (its own sidebar nav,
+  // reusing Dashboard.tsx/MyReps.tsx unchanged for its My Reports/Team
+  // Reports destinations) — only ever rendered while view === 'dashboard',
+  // so starting/editing a report or opening a history entry still falls
+  // through to the same shared ReportForm/SubmittedReport/
+  // HistoricalReportView flow below, unchanged.
+  test('ManagerShell stays gated on the real \'manager\' role only — never widened for a Sales Admin, dual-role or not', () => {
+    const managerShellBlockMatch = appSrc.match(
+      /profile\?\.role === 'manager' && view === 'dashboard' \? \(\s*\n\s*<ManagerShell[\s\S]*?\/>\s*\n\s*\) : /,
+    )
+    assert.ok(managerShellBlockMatch, 'expected the ManagerShell conditional block')
+    assert.doesNotMatch(managerShellBlockMatch[0], /isSalesAdmin|managerReportingEnabled|managerReportingViewOpen/)
   })
 
   test('isSalesRep is still checked first — a sales_rep profile can never reach the Sales Admin or Manager Reporting branches', () => {

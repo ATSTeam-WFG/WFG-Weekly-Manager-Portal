@@ -75,9 +75,14 @@ describe('MyReps.tsx — goes through the service layer for the roster, never qu
 })
 
 describe('MyReps.tsx — other required wiring', () => {
-  test('is a self-contained, droppable component: managerId + onBack only, no other required props', () => {
-    assert.match(myRepsSrc, /interface MyRepsProps \{\s*\n\s*managerId: string\s*\n\s*onBack: \(\) => void\s*\n\s*\}/)
-    assert.match(myRepsSrc, /export default function MyReps\(\{ managerId, onBack \}: MyRepsProps\)/)
+  // Manager Dashboard redesign (2026-11-13) added one additive, optional
+  // prop (embedded) for reuse inside ManagerDashboardOverview — managerId
+  // and onBack remain the only REQUIRED props, and embedded defaults to
+  // false, so every existing caller (Team Reports) is unaffected.
+  test('is a self-contained, droppable component: managerId + onBack required, embedded optional and additive only', () => {
+    assert.match(myRepsSrc, /interface MyRepsProps \{\s*\n\s*managerId: string\s*\n\s*onBack: \(\) => void/)
+    assert.match(myRepsSrc, /embedded\?: boolean/)
+    assert.match(myRepsSrc, /export default function MyReps\(\{ managerId, onBack, embedded = false \}: MyRepsProps\)/)
   })
 
   test('a failed roster load surfaces an error state with a Retry control, never silently rendering blank', () => {
@@ -106,7 +111,7 @@ describe('MyReps.tsx — Phase 3 week selector, consistent with AdminDashboard\'
   test('reuses the shared, never-redefined .week-nav-btn/.week-selector-label/.week-current-badge classes from AdminDashboard.css, rather than inventing new ones', () => {
     assert.match(myRepsSrc, /className="week-selector-label"/)
     assert.match(myRepsSrc, /className="week-nav-btn"/)
-    assert.match(myRepsSrc, /\{isCurrentWeek && <span className="week-current-badge">Current<\/span>\}/)
+    assert.match(myRepsSrc, /className=\{`week-current-badge\$\{isCurrentWeek \? '' : ' myreps-week-current-badge-hidden'\}`\}/)
     const myRepsCss = readFileSync(path.join(dir, '..', 'components', 'MyReps.css'), 'utf8')
     assert.equal(/^\.week-current-badge\s*\{/m.test(myRepsCss), false, 'must reuse the existing shared .week-current-badge, never redefine it')
     assert.equal(/^\.week-nav-btn\s*\{/m.test(myRepsCss), false, 'must reuse the existing shared .week-nav-btn, never redefine it')
@@ -115,6 +120,36 @@ describe('MyReps.tsx — Phase 3 week selector, consistent with AdminDashboard\'
   test('the roster-loading effect depends on week.weekStartDate, so changing weeks refetches', () => {
     const effectMatch = myRepsSrc.match(/\}, \[managerId, week\.weekStartDate, reloadToken\]\)/)
     assert.ok(effectMatch, 'the load effect must depend on week.weekStartDate so a week change triggers a refetch')
+  })
+
+  // Regression test (2026-11-13) — Demo Manager found that Team Reports'
+  // header/week-selector/Back button row visibly reflowed to a different
+  // layout between the current week (badge present) and a past week (badge
+  // absent), because the badge was conditionally OMITTED from the tree
+  // rather than just hidden, changing the row's total rendered width enough
+  // to trigger a different flex-wrap outcome. Root cause: conditional
+  // rendering (`{isCurrentWeek && <span>...}`), not CSS. Fix: always render
+  // the badge element; only its visibility toggles via a new, MyReps-scoped
+  // class, so the row occupies identical width regardless of which week is
+  // selected.
+  describe('MyReps.tsx — Team Reports header/week-selector/Back button layout never reflows between weeks', () => {
+    test('the Current badge is always rendered (never conditionally omitted from the tree) — only a visibility-only class toggles', () => {
+      assert.doesNotMatch(myRepsSrc, /\{isCurrentWeek && <span className="week-current-badge">/)
+      assert.match(myRepsSrc, /<span className=\{`week-current-badge\$\{isCurrentWeek \? '' : ' myreps-week-current-badge-hidden'\}`\}>Current<\/span>/)
+    })
+
+    test('the hidden-state class uses visibility, never display:none — the element still occupies its layout space when not the current week', () => {
+      const myRepsCss = readFileSync(path.join(dir, '..', 'components', 'MyReps.css'), 'utf8')
+      const ruleMatch = myRepsCss.match(/\.myreps-week-current-badge-hidden\s*\{[\s\S]*?\}/)
+      assert.ok(ruleMatch, 'could not locate .myreps-week-current-badge-hidden')
+      assert.match(ruleMatch[0], /visibility:\s*hidden/)
+      assert.doesNotMatch(ruleMatch[0], /display:\s*none/)
+    })
+
+    test('the shared .week-current-badge rule itself (AdminDashboard.css, DO NOT MODIFY) is untouched', () => {
+      const adminDashboardCss = readFileSync(path.join(dir, '..', 'components', 'AdminDashboard.css'), 'utf8')
+      assert.match(adminDashboardCss, /\/\* SHARED — also used by Reports & Analytics\. DO NOT MODIFY\. \*\//)
+    })
   })
 })
 
@@ -149,7 +184,14 @@ describe('MyReps.tsx — weekly summary reuses deriveRepReportBucket from Phase 
   })
 
   test('the summary row only renders once data has loaded (loadState === \'ready\' && rows.length > 0), never with stale/zeroed counts while loading', () => {
-    assert.match(myRepsSrc, /\{loadState === 'ready' && rows\.length > 0 && \(\s*\n\s*<div className="myreps-summary-row">/)
+    assert.match(myRepsSrc, /loadState === 'ready' && rows\.length > 0 && \(\s*\n\s*<div className="myreps-summary-row">/)
+  })
+
+  // Manager Dashboard redesign (2026-11-13) — the summary row is additionally
+  // suppressed in embedded mode (the Dashboard overview already shows its
+  // own KPI cards above), never in Team Reports' own standalone page.
+  test('the summary row is also gated on !embedded, on top of the existing loadState/rows.length checks', () => {
+    assert.match(myRepsSrc, /\{!embedded && loadState === 'ready' && rows\.length > 0 && \(/)
   })
 })
 
@@ -165,6 +207,9 @@ describe('MyReps.tsx — Manager visibility is still scoped entirely by fetchMyC
   })
 
   test('the component never accepts or reads a different manager id from props, query params, or user input — managerId is the only id-shaped prop', () => {
-    assert.match(myRepsSrc, /interface MyRepsProps \{\s*\n\s*managerId: string\s*\n\s*onBack: \(\) => void\s*\n\s*\}/)
+    const ifaceMatch = myRepsSrc.match(/interface MyRepsProps \{[\s\S]*?\n\}/)
+    assert.ok(ifaceMatch, 'could not locate MyRepsProps')
+    assert.match(ifaceMatch[0], /managerId: string/)
+    assert.doesNotMatch(ifaceMatch[0], /\bid\b|repId|employeeId|assignedManagerId/)
   })
 })

@@ -1,0 +1,120 @@
+/* Manager Dashboard overview — styled to match AdminDashboard.css's own
+   .adp-kpi-row/.adp-kpi-card/.adp-kpi-icon conventions (page width, card
+   treatment, icon chip, color tokens) under its own mdo- prefix, same
+   approach as MyReps.css's own myreps- prefix. Self-contained; nothing here
+   is shared with or overrides another file's classes. */
+
+.mdo-page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 24px 100px;
+}
+
+.mdo-header-titles h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  margin: 0 0 4px;
+}
+
+.mdo-header-subtitle {
+  font-size: 14px;
+  color: var(--muted-gray);
+  margin: 0 0 24px;
+}
+
+.mdo-loading,
+.mdo-error-state {
+  text-align: center;
+  color: var(--muted-gray);
+  font-size: 14px;
+  padding: 40px 0;
+}
+
+.mdo-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.mdo-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--white);
+  border: 1px solid var(--soft-sand);
+  border-radius: 12px;
+  padding: 16px;
+  min-height: 64px;
+}
+
+.mdo-kpi-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.mdo-kpi-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.mdo-kpi-card-total .mdo-kpi-icon {
+  background: rgba(8, 102, 232, 0.14);
+  color: var(--terracotta);
+}
+
+.mdo-kpi-card-submitted .mdo-kpi-icon {
+  background: rgba(22, 131, 75, 0.16);
+  color: var(--green);
+}
+
+.mdo-kpi-card-pending .mdo-kpi-icon {
+  background: rgba(217, 119, 6, 0.16);
+  color: var(--amber);
+}
+
+.mdo-kpi-card-rejected .mdo-kpi-icon {
+  background: rgba(183, 101, 74, 0.14);
+  color: var(--status-error);
+}
+
+.mdo-kpi-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.mdo-kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dark-charcoal);
+  line-height: 1.1;
+}
+
+.mdo-kpi-label {
+  font-size: 12px;
+  color: var(--muted-gray);
+}
+
+@media (max-width: 860px) {
+  .mdo-kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .mdo-page {
+    padding: 24px 16px 80px;
+  }
+
+  .mdo-header-titles h1 {
+    font-size: 22px;
+  }
+}
