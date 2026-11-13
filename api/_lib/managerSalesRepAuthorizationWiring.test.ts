@@ -26,6 +26,10 @@ const unassignOwnDraftSrc = readFileSync(
   path.join(dir, '..', '..', 'supabase', 'drafts', '20261110_manager_owned_sales_rep_unassignment.sql'),
   'utf8',
 )
+const correctiveAllowlistMigrationSrc = readFileSync(
+  path.join(dir, '..', '..', 'supabase', 'drafts', '20261115_manager_account_actions_allowlist_fail_closed.sql'),
+  'utf8',
+)
 
 describe('Edit Sales Rep — a Manager may edit only a rep CURRENTLY assigned to them', () => {
   test('updateSalesRepProfile accepts a callerRole parameter, defaulting to admin (every pre-existing call site is unaffected)', () => {
@@ -105,13 +109,59 @@ describe('Add Sales Rep (self-assignment) — a Manager may claim only an UNASSI
     assert.match(assignOwnDraftSrc, /pg_advisory_xact_lock\(hashtext\(p_rep_id::text\)\)/)
   })
 
-  test('REVIEW FIX — both drafts support a narrow, optional per-Manager allowlist GUC for controlled Preview validation, checked AFTER the boolean kill switch but BEFORE any ownership logic', () => {
+  test('SECURITY FIX — both RPCs require a mandatory, fail-closed allowlist via the shared helper, checked AFTER the boolean kill switch but BEFORE any ownership logic (superseding the earlier "optional allowlist" design)', () => {
     for (const src of [assignOwnDraftSrc, unassignOwnDraftSrc]) {
       const killSwitchIndex = src.indexOf("current_setting('app.manager_account_actions_enabled', true)")
-      const allowlistIndex = src.indexOf("current_setting('app.manager_account_actions_allowed_ids', true)")
-      assert.ok(killSwitchIndex >= 0 && allowlistIndex >= 0 && killSwitchIndex < allowlistIndex)
-      assert.match(src, /string_to_array\(current_setting\('app\.manager_account_actions_allowed_ids', true\), ','\)::uuid\[\]/)
+      const allowlistIndex = src.indexOf('public.manager_account_action_allowlist_permits(v_caller) IS NOT TRUE')
+      assert.ok(killSwitchIndex >= 0, 'expected the boolean kill switch check')
+      assert.ok(allowlistIndex >= 0, 'expected a call to the shared allowlist helper')
+      assert.ok(killSwitchIndex < allowlistIndex, 'the kill switch must be checked before the allowlist')
+      // Neither draft re-implements the parsing inline any more — both
+      // delegate to the one shared helper so the fail-closed logic can
+      // never drift between them.
+      assert.doesNotMatch(src, /NOT \(v_caller = ANY \(string_to_array/)
     }
+  })
+
+  test('SECURITY FIX — the shared allowlist helper itself fails closed: no path returns anything other than an explicit boolean, and it has no EXECUTE grant to authenticated/anon/PUBLIC', () => {
+    // Defined once, in the unassignment draft (applied first); the
+    // self-assignment draft only calls it.
+    const fnMatch = unassignOwnDraftSrc.match(
+      /CREATE OR REPLACE FUNCTION public\.manager_account_action_allowlist_permits\(p_caller uuid\)[\s\S]*?\$\$;/,
+    )
+    assert.ok(fnMatch, 'expected manager_account_action_allowlist_permits to be defined in the unassignment draft')
+    const body = fnMatch[0]
+
+    assert.match(body, /IF p_caller IS NULL THEN[\s\S]{0,20}RETURN false;/)
+    assert.match(body, /IF v_raw IS NULL OR trim\(v_raw\) = '' THEN[\s\S]{0,20}RETURN false;/)
+    assert.match(body, /IF v_part = '' THEN[\s\S]{0,400}RETURN false;/)
+    assert.match(body, /EXCEPTION WHEN OTHERS THEN[\s\S]{0,400}RETURN false;/)
+    assert.match(body, /IF array_length\(v_ids, 1\) IS NULL THEN[\s\S]{0,20}RETURN false;/)
+    assert.match(body, /RETURN p_caller = ANY \(v_ids\);/)
+    // Exactly five RETURN false paths and one RETURN <boolean-expression>
+    // path — no sixth, silent "fall through to true" branch anywhere.
+    assert.equal((body.match(/RETURN false;/g) ?? []).length, 5)
+
+    assert.match(
+      unassignOwnDraftSrc,
+      /REVOKE ALL ON FUNCTION public\.manager_account_action_allowlist_permits\(uuid\) FROM PUBLIC, authenticated, anon;/,
+    )
+    assert.doesNotMatch(unassignOwnDraftSrc, /GRANT EXECUTE ON FUNCTION public\.manager_account_action_allowlist_permits/)
+
+    // Both RPCs call it with IS NOT TRUE (not bare NOT ...), so a NULL
+    // result (e.g. a NULL caller) is treated as a denial too, never as an
+    // implicit pass-through.
+    for (const src of [assignOwnDraftSrc, unassignOwnDraftSrc]) {
+      assert.match(src, /public\.manager_account_action_allowlist_permits\(v_caller\) IS NOT TRUE/)
+    }
+  })
+
+  test('the corrective migration patches both already-deployed RPCs plus the new helper, and does not touch Production', () => {
+    assert.match(correctiveAllowlistMigrationSrc, /CREATE OR REPLACE FUNCTION public\.manager_account_action_allowlist_permits\(p_caller uuid\)/)
+    assert.match(correctiveAllowlistMigrationSrc, /CREATE OR REPLACE FUNCTION public\.unassign_own_sales_rep\(p_rep_id uuid\)/)
+    assert.match(correctiveAllowlistMigrationSrc, /CREATE OR REPLACE FUNCTION public\.assign_own_sales_rep\(p_rep_id uuid\)/)
+    assert.doesNotMatch(correctiveAllowlistMigrationSrc, /sfkscotirqwlbdaeywii/)
+    assert.doesNotMatch(correctiveAllowlistMigrationSrc, /CREATE TABLE|DROP TABLE|DROP FUNCTION/)
   })
 })
 

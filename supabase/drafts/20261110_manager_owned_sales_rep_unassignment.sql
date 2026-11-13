@@ -63,6 +63,84 @@
 -- check that is NOT re-derived per-caller (it is a database-wide
 -- default), which is exactly why it needed its own explicit review and
 -- activation step, documented here.
+--
+-- SECURITY REVIEW (fail-closed allowlist, superseding the "optional
+-- allowlist" design originally below): this function and its companion
+-- assign_own_sales_rep used to treat app.manager_account_actions_allowed_ids
+-- as OPTIONAL — an unset or empty value meant "every active Manager is
+-- allowed," and the allowlist only NARROWED access when it was explicitly
+-- populated. For controlled Preview validation, that is too permissive: it
+-- means the single boolean switch alone (app.manager_account_actions_enabled
+-- = 'true') is sufficient to expose this capability to every active Manager
+-- in the database, with the allowlist only ever able to narrow, never
+-- required to. The allowlist is now MANDATORY whenever the boolean switch is
+-- 'true': a caller is authorized only if the allowlist is present, parses
+-- cleanly as a non-empty, comma-separated list of UUIDs, and explicitly
+-- contains that caller's auth.uid(). An unset, empty, whitespace-only, or
+-- malformed allowlist denies EVERY caller — there is no remaining code path
+-- that treats "no allowlist" as "allow all." This parsing lives in the
+-- helper function below (manager_account_action_allowlist_permits), shared
+-- by both RPCs so the same fail-closed logic can never drift between them.
+-- It has no GRANT to authenticated/anon/PUBLIC — it is only ever called
+-- from inside these two already-reviewed SECURITY DEFINER functions, never
+-- directly via supabase.rpc(...).
+CREATE OR REPLACE FUNCTION public.manager_account_action_allowlist_permits(p_caller uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+DECLARE
+  v_raw text := current_setting('app.manager_account_actions_allowed_ids', true);
+  v_parts text[];
+  v_part text;
+  v_ids uuid[] := ARRAY[]::uuid[];
+BEGIN
+  -- Fail closed on every ambiguous or absent input. There is no path in
+  -- this function that returns anything other than an explicit TRUE for a
+  -- caller explicitly present in a validly-parsed, non-empty allowlist —
+  -- every other outcome (including any unexpected error while parsing)
+  -- falls through to an explicit FALSE, never an uncaught exception that
+  -- could be misread as a different failure, and never an implicit "allow".
+  IF p_caller IS NULL THEN
+    RETURN false;
+  END IF;
+
+  IF v_raw IS NULL OR trim(v_raw) = '' THEN
+    RETURN false;
+  END IF;
+
+  v_parts := string_to_array(v_raw, ',');
+
+  BEGIN
+    FOREACH v_part IN ARRAY v_parts LOOP
+      v_part := trim(v_part);
+      IF v_part = '' THEN
+        -- A stray, doubled, or trailing comma makes the whole value
+        -- malformed — never silently skip the blank entry and keep
+        -- evaluating the rest, which could mask a typo as "fewer, but
+        -- still valid" entries.
+        RETURN false;
+      END IF;
+      v_ids := v_ids || v_part::uuid;
+    END LOOP;
+  EXCEPTION WHEN OTHERS THEN
+    -- Any entry that does not parse as a uuid (extra text, truncated
+    -- value, wrong format) makes the whole value malformed — deny
+    -- outright rather than letting entries before the bad one still
+    -- count, or letting a cast error propagate as an unrelated-looking
+    -- generic exception.
+    RETURN false;
+  END;
+
+  IF array_length(v_ids, 1) IS NULL THEN
+    RETURN false;
+  END IF;
+
+  RETURN p_caller = ANY (v_ids);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.manager_account_action_allowlist_permits(uuid) FROM PUBLIC, authenticated, anon;
 
 CREATE OR REPLACE FUNCTION public.unassign_own_sales_rep(p_rep_id uuid)
 RETURNS boolean
@@ -84,25 +162,22 @@ BEGIN
     RAISE EXCEPTION 'FEATURE_DISABLED: Manager-initiated sales rep unassignment is not yet enabled on this database.';
   END IF;
 
-  -- Optional narrow allowlist, for controlled Preview validation before a
-  -- broad rollout: when app.manager_account_actions_allowed_ids holds a
-  -- non-empty, comma-separated list of Manager profile ids, ONLY those
-  -- Managers may proceed, even though the boolean switch above is already
-  -- 'true' for the whole database. Left unset (the only state this ever
-  -- had before this check existed, and the intended Production steady
-  -- state once broadly approved), every active Manager is allowed, exactly
-  -- as before. A malformed value (not valid uuids) fails this cast with a
-  -- genuine Postgres error rather than silently granting or denying
-  -- access — never a fail-open on a typo.
-  IF current_setting('app.manager_account_actions_allowed_ids', true) IS NOT NULL
-     AND trim(current_setting('app.manager_account_actions_allowed_ids', true)) <> ''
-     AND NOT (v_caller = ANY (string_to_array(current_setting('app.manager_account_actions_allowed_ids', true), ',')::uuid[]))
-  THEN
+  -- Mandatory allowlist (see the SECURITY REVIEW comment above
+  -- manager_account_action_allowlist_permits for why this is no longer
+  -- optional). The boolean switch above only says the capability exists on
+  -- this database at all — it is never, by itself, sufficient to authorize
+  -- any Manager. Every caller must also be explicitly named in
+  -- app.manager_account_actions_allowed_ids; an unset, empty,
+  -- whitespace-only, malformed, or non-matching allowlist denies this call,
+  -- with no fallback to "allow all".
+  IF public.manager_account_action_allowlist_permits(v_caller) IS NOT TRUE THEN
     RAISE EXCEPTION 'FEATURE_DISABLED: Manager-initiated sales rep unassignment is not yet enabled for your account.';
   END IF;
-  -- This exact check (narrowed vs. unset behavior, malformed-value
-  -- handling) is exercised with a fully synthetic fixture in the
-  -- companion self-assignment draft's own self-test (Test 7) — this
+  -- The exhaustive fail-closed matrix (missing/empty/whitespace/malformed/
+  -- non-matching denies; explicitly-listed active Manager succeeds) is
+  -- exercised with fully synthetic fixtures in the companion
+  -- self-assignment draft's own self-test and in the corrective migration
+  -- 20261115_manager_account_actions_allowlist_fail_closed.sql — this
   -- file's self-test below reuses real existing assignment data by
   -- established convention and was not restructured to duplicate that
   -- coverage, since the underlying SQL is identical in both files.
@@ -199,6 +274,38 @@ BEGIN
   PERFORM set_config('app.manager_account_actions_enabled', 'true', true);
   SET ROLE authenticated;
 
+  -- Test 1b (REVIEW FIX — fail-closed allowlist): with the boolean switch
+  -- now on but the allowlist still unset, the actual assigned Manager must
+  -- STILL be denied — there is no "allowlist absent means allow all"
+  -- fallback left in this function. The exhaustive empty/whitespace/
+  -- malformed/non-matching matrix is covered synthetically elsewhere (see
+  -- the comment above the allowlist check); this one proves the single
+  -- most important regression this review exists to prevent.
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', test_manager_id)::text, true);
+  caught := false;
+  BEGIN
+    PERFORM public.unassign_own_sales_rep(test_rep_id);
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE 'FEATURE_DISABLED%' THEN caught := true; ELSE RAISE; END IF;
+  END;
+  IF NOT caught THEN
+    RESET ROLE;
+    RAISE EXCEPTION 'Test 1b FAILED: the actual assigned Manager was allowed to proceed with the boolean switch on but no allowlist set — the allowlist must be mandatory, not merely narrowing.';
+  END IF;
+  RAISE NOTICE 'Test 1b PASSED: an unset allowlist denies even the rep''s own actual Manager once the allowlist is mandatory.';
+
+  -- From here on, allowlist both real managers involved below so the
+  -- remaining tests exercise ownership/role logic specifically, not the
+  -- allowlist itself (already proven above and, exhaustively, in the
+  -- synthetic self-tests).
+  RESET ROLE;
+  PERFORM set_config(
+    'app.manager_account_actions_allowed_ids',
+    test_manager_id::text || coalesce(',' || test_other_manager_id::text, ''),
+    true
+  );
+  SET ROLE authenticated;
+
   -- Test 2: a DIFFERENT manager (not the one currently assigned) is refused.
   IF test_other_manager_id IS NOT NULL THEN
     PERFORM set_config('request.jwt.claims', json_build_object('sub', test_other_manager_id)::text, true);
@@ -253,6 +360,7 @@ BEGIN
   WHERE rep_id = test_rep_id AND manager_id = test_manager_id AND unassigned_at IS NOT NULL;
 
   PERFORM set_config('app.manager_account_actions_enabled', '', true);
+  PERFORM set_config('app.manager_account_actions_allowed_ids', '', true);
   RESET request.jwt.claims;
   RAISE NOTICE 'All tests PASSED. The borrowed assignment row was restored to its original (assigned) state.';
 END $$;

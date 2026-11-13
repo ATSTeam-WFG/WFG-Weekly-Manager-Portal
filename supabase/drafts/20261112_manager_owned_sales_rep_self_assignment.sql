@@ -32,6 +32,14 @@
 -- apply here identically, since this function shares the exact same
 -- kill-switch GUC and the exact same "every check derives from auth.uid(),
 -- never a Node-supplied parameter" design.
+--
+-- SECURITY REVIEW (fail-closed allowlist): also shares the companion
+-- draft's public.manager_account_action_allowlist_permits(uuid) helper
+-- (defined in 20261110_manager_owned_sales_rep_unassignment.sql, which is
+-- always applied first) — the allowlist is MANDATORY whenever the boolean
+-- switch is 'true', never merely narrowing. See that helper's own comment
+-- for the full fail-closed parsing rules (missing/empty/whitespace/
+-- malformed/non-matching all deny).
 
 CREATE OR REPLACE FUNCTION public.assign_own_sales_rep(p_rep_id uuid)
 RETURNS public.rep_manager_assignments
@@ -49,14 +57,12 @@ BEGIN
     RAISE EXCEPTION 'FEATURE_DISABLED: Manager-initiated sales rep assignment is not yet enabled on this database.';
   END IF;
 
-  -- Optional narrow allowlist — see the companion unassignment draft's own
-  -- header comment for the full rationale (controlled Preview validation
-  -- before a broad rollout; unset means every active Manager is allowed,
-  -- exactly as before this existed).
-  IF current_setting('app.manager_account_actions_allowed_ids', true) IS NOT NULL
-     AND trim(current_setting('app.manager_account_actions_allowed_ids', true)) <> ''
-     AND NOT (v_caller = ANY (string_to_array(current_setting('app.manager_account_actions_allowed_ids', true), ',')::uuid[]))
-  THEN
+  -- Mandatory allowlist — see the companion unassignment draft's own
+  -- header comment and the allowlist_permits helper for the full
+  -- fail-closed rationale. An unset, empty, whitespace-only, malformed, or
+  -- non-matching allowlist denies this call; there is no "allow all"
+  -- fallback.
+  IF public.manager_account_action_allowlist_permits(v_caller) IS NOT TRUE THEN
     RAISE EXCEPTION 'FEATURE_DISABLED: Manager-initiated sales rep assignment is not yet enabled for your account.';
   END IF;
 
@@ -104,9 +110,13 @@ GRANT EXECUTE ON FUNCTION public.assign_own_sales_rep(uuid) TO authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Self-verifying test. Creates throwaway synthetic profiles only, removed
--- before this block returns. Five tests: kill-switch-defaults-disabled,
--- successful-self-assignment, idempotent-re-call, cannot-claim-another-
--- managers-rep, non-manager-forbidden.
+-- before this block returns. Covers: kill-switch-defaults-disabled (1);
+-- the fail-closed allowlist matrix — unset, empty, whitespace-only,
+-- malformed, partially-malformed, non-matching (1b-1f); successful
+-- self-assignment (2); idempotent re-call (3); cannot-claim-another-
+-- managers-rep (4); non-manager-forbidden even if allowlisted (5);
+-- inactive-Manager-forbidden even if allowlisted (5b); real authenticated/
+-- anon grants (6); narrowly-scoped allowlist re-narrowing (7).
 -- ---------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -114,17 +124,19 @@ DECLARE
   fake_rep2_id uuid := gen_random_uuid();
   fake_manager_a_id uuid := gen_random_uuid();
   fake_manager_b_id uuid := gen_random_uuid();
+  fake_manager_inactive_id uuid := gen_random_uuid();
   v_assignment public.rep_manager_assignments;
   active_count integer;
   history_count integer;
 BEGIN
   BEGIN
-    INSERT INTO auth.users (id) VALUES (fake_rep_id), (fake_rep2_id), (fake_manager_a_id), (fake_manager_b_id);
+    INSERT INTO auth.users (id) VALUES (fake_rep_id), (fake_rep2_id), (fake_manager_a_id), (fake_manager_b_id), (fake_manager_inactive_id);
     INSERT INTO public.profiles (id, full_name, email, role, is_active) VALUES
       (fake_rep_id, 'Self-Assign Test Rep', 'self-assign-test-rep-' || fake_rep_id || '@example.invalid', 'sales_rep', true),
       (fake_rep2_id, 'Self-Assign Test Rep 2', 'self-assign-test-rep2-' || fake_rep2_id || '@example.invalid', 'sales_rep', true),
       (fake_manager_a_id, 'Self-Assign Test Manager A', 'self-assign-test-mgr-a-' || fake_manager_a_id || '@example.invalid', 'manager', true),
-      (fake_manager_b_id, 'Self-Assign Test Manager B', 'self-assign-test-mgr-b-' || fake_manager_b_id || '@example.invalid', 'manager', true);
+      (fake_manager_b_id, 'Self-Assign Test Manager B', 'self-assign-test-mgr-b-' || fake_manager_b_id || '@example.invalid', 'manager', true),
+      (fake_manager_inactive_id, 'Self-Assign Test Manager (Inactive)', 'self-assign-test-mgr-inactive-' || fake_manager_inactive_id || '@example.invalid', 'manager', false);
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'SKIPPED assign_own_sales_rep self-test: could not create throwaway profiles (%).', SQLERRM;
     RETURN;
@@ -147,6 +159,97 @@ BEGIN
   -- local via set_config's third arg = true — never persisted, never
   -- affects any other session or a real deployment).
   PERFORM set_config('app.manager_account_actions_enabled', 'true', true);
+
+  -- Test 1b (REVIEW FIX — fail-closed allowlist): switch on, allowlist
+  -- still UNSET — manager A, who would otherwise succeed, must still be
+  -- denied. There is no remaining "allowlist absent means allow all" path.
+  BEGIN
+    PERFORM public.assign_own_sales_rep(fake_rep_id);
+    RAISE EXCEPTION 'FAILED: an unset allowlist allowed a Manager through — the allowlist must be mandatory, not merely narrowing.';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE 'FEATURE_DISABLED%' THEN
+      RAISE NOTICE 'PASSED (Test 1b): an unset allowlist denies even an otherwise-eligible Manager.';
+    ELSE
+      RAISE;
+    END IF;
+  END;
+
+  -- Test 1c (REVIEW FIX): empty-string allowlist denies.
+  PERFORM set_config('app.manager_account_actions_allowed_ids', '', true);
+  BEGIN
+    PERFORM public.assign_own_sales_rep(fake_rep_id);
+    RAISE EXCEPTION 'FAILED: an empty-string allowlist allowed a Manager through.';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE 'FEATURE_DISABLED%' THEN
+      RAISE NOTICE 'PASSED (Test 1c): an empty-string allowlist denies.';
+    ELSE
+      RAISE;
+    END IF;
+  END;
+
+  -- Test 1d (REVIEW FIX): whitespace-only allowlist denies.
+  PERFORM set_config('app.manager_account_actions_allowed_ids', '   ', true);
+  BEGIN
+    PERFORM public.assign_own_sales_rep(fake_rep_id);
+    RAISE EXCEPTION 'FAILED: a whitespace-only allowlist allowed a Manager through.';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE 'FEATURE_DISABLED%' THEN
+      RAISE NOTICE 'PASSED (Test 1d): a whitespace-only allowlist denies.';
+    ELSE
+      RAISE;
+    END IF;
+  END;
+
+  -- Test 1e (REVIEW FIX): malformed allowlist (not a valid UUID list)
+  -- denies — including a value that mixes a real valid id with garbage,
+  -- proving the whole value is rejected rather than just the bad entry.
+  PERFORM set_config('app.manager_account_actions_allowed_ids', 'not-a-uuid', true);
+  BEGIN
+    PERFORM public.assign_own_sales_rep(fake_rep_id);
+    RAISE EXCEPTION 'FAILED: a malformed allowlist allowed a Manager through.';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE 'FEATURE_DISABLED%' THEN
+      RAISE NOTICE 'PASSED (Test 1e): a malformed allowlist denies.';
+    ELSE
+      RAISE;
+    END IF;
+  END;
+
+  PERFORM set_config('app.manager_account_actions_allowed_ids', fake_manager_a_id::text || ',not-a-uuid', true);
+  BEGIN
+    PERFORM public.assign_own_sales_rep(fake_rep_id);
+    RAISE EXCEPTION 'FAILED: an allowlist mixing a valid id with a malformed entry allowed a Manager through — the whole value must be rejected, not just the bad entry.';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE 'FEATURE_DISABLED%' THEN
+      RAISE NOTICE 'PASSED (Test 1e, continued): a partially-malformed allowlist (one valid id, one garbage entry) still denies the valid id''s own Manager.';
+    ELSE
+      RAISE;
+    END IF;
+  END;
+
+  -- Test 1f (REVIEW FIX): a well-formed but non-matching allowlist denies.
+  PERFORM set_config('app.manager_account_actions_allowed_ids', fake_manager_b_id::text, true);
+  BEGIN
+    PERFORM public.assign_own_sales_rep(fake_rep_id);
+    RAISE EXCEPTION 'FAILED: manager A was allowed through by an allowlist that names only manager B.';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE 'FEATURE_DISABLED%' THEN
+      RAISE NOTICE 'PASSED (Test 1f): a non-matching allowlist denies.';
+    ELSE
+      RAISE;
+    END IF;
+  END;
+
+  -- From here on, allowlist every account used by the remaining tests, so
+  -- each remaining test isolates the specific downstream check it names
+  -- (ownership, idempotency, active-Manager role) rather than being
+  -- short-circuited by the allowlist itself — already proven exhaustively
+  -- above.
+  PERFORM set_config(
+    'app.manager_account_actions_allowed_ids',
+    fake_manager_a_id::text || ',' || fake_manager_b_id::text || ',' || fake_manager_inactive_id::text || ',' || fake_rep_id::text,
+    true
+  );
 
   -- Test 2: successful self-assignment.
   PERFORM set_config('request.jwt.claims', json_build_object('sub', fake_manager_a_id)::text, true);
@@ -179,14 +282,33 @@ BEGIN
     END IF;
   END;
 
-  -- Test 5: a sales_rep (non-manager) cannot call this at all.
+  -- Test 5: a sales_rep (non-manager) cannot call this at all — even though
+  -- fake_rep_id is itself in the allowlist above, proving the allowlist and
+  -- the active-Manager-role check are independent gates, not substitutes
+  -- for one another.
   PERFORM set_config('request.jwt.claims', json_build_object('sub', fake_rep_id)::text, true);
   BEGIN
     PERFORM public.assign_own_sales_rep(fake_rep_id);
     RAISE EXCEPTION 'FAILED: a sales_rep was able to call assign_own_sales_rep.';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM LIKE 'FORBIDDEN%' THEN
-      RAISE NOTICE 'PASSED: a non-manager caller cannot call assign_own_sales_rep.';
+      RAISE NOTICE 'PASSED: a non-manager caller cannot call assign_own_sales_rep, even though it is named in the allowlist.';
+    ELSE
+      RAISE;
+    END IF;
+  END;
+
+  -- Test 5b (REVIEW FIX): an INACTIVE Manager cannot call this either, even
+  -- though they are also named in the allowlist — being allowlisted only
+  -- ever narrows who an active Manager may be, it never substitutes for
+  -- the active-Manager-role check.
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', fake_manager_inactive_id)::text, true);
+  BEGIN
+    PERFORM public.assign_own_sales_rep(fake_rep2_id);
+    RAISE EXCEPTION 'FAILED: an inactive Manager was able to call assign_own_sales_rep.';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE 'FORBIDDEN%' THEN
+      RAISE NOTICE 'PASSED (Test 5b): an inactive Manager cannot call assign_own_sales_rep, even though it is named in the allowlist.';
     ELSE
       RAISE;
     END IF;
@@ -260,7 +382,7 @@ BEGIN
   RESET request.jwt.claims;
   RESET app.manager_account_actions_enabled;
   DELETE FROM public.rep_manager_assignments WHERE rep_id IN (fake_rep_id, fake_rep2_id);
-  DELETE FROM public.profiles WHERE id IN (fake_rep_id, fake_rep2_id, fake_manager_a_id, fake_manager_b_id);
-  DELETE FROM auth.users WHERE id IN (fake_rep_id, fake_rep2_id, fake_manager_a_id, fake_manager_b_id);
+  DELETE FROM public.profiles WHERE id IN (fake_rep_id, fake_rep2_id, fake_manager_a_id, fake_manager_b_id, fake_manager_inactive_id);
+  DELETE FROM auth.users WHERE id IN (fake_rep_id, fake_rep2_id, fake_manager_a_id, fake_manager_b_id, fake_manager_inactive_id);
   RAISE NOTICE 'Cleanup PASSED: no residual synthetic rows remain.';
 END $$;
