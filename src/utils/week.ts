@@ -2,6 +2,14 @@ import { getEasternParts } from './easternTime.js'
 
 export interface ReportingWeek {
   label: string
+  // Beta feedback (2026-11-16): the weekly deadline moved from Friday
+  // 3:00 PM to Thursday 11:59 PM, so this now holds THURSDAY's calendar
+  // date, not Friday's — kept named `fridayDate` only to avoid a
+  // repo-wide rename of every existing consumer (getDaysUntilDeadline,
+  // reportPeriods.ts, SubmittedReport.tsx's "Week Ending" label,
+  // ReportForm.tsx's weekEndingLabel, etc.), all of which already just
+  // treat it as "the deadline's own calendar date" rather than assuming
+  // which weekday it falls on.
   fridayDate: Date
   deadlineLabel: string
   weekStartDate: string
@@ -39,11 +47,15 @@ export function parseDateOnly(iso: string): Date {
 // timezone, which is why none of this needs to change.
 function buildReportingWeekFromMonday(year: number, month: number, day: number): ReportingWeek {
   const monday = new Date(year, month - 1, day)
+  // Friday still anchors the displayed week RANGE ("Mon – Fri, Year") —
+  // only the deadline itself moved, to Thursday (Monday + 3).
   const friday = new Date(monday)
   friday.setDate(monday.getDate() + 4)
+  const deadlineDay = new Date(monday)
+  deadlineDay.setDate(monday.getDate() + 3)
 
   const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  const deadlineDate = friday.toLocaleDateString('en-US', {
+  const deadlineDateLabel = deadlineDay.toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -51,8 +63,8 @@ function buildReportingWeekFromMonday(year: number, month: number, day: number):
 
   return {
     label: `${fmt(monday)} – ${fmt(friday)}, ${friday.getFullYear()}`,
-    fridayDate: friday,
-    deadlineLabel: `${deadlineDate} at 3:00 PM ET`,
+    fridayDate: deadlineDay,
+    deadlineLabel: `${deadlineDateLabel} at 11:59 PM ET`,
     weekStartDate: toISODate(monday),
   }
 }
@@ -110,20 +122,21 @@ export function getReportingWeekFromStartDate(weekStartDate: string): ReportingW
 }
 
 // NOTE: this is a whole-calendar-day countdown for display only. It is NOT
-// the authoritative 3:00 PM Eastern cutoff check — that lives in
+// the authoritative 11:59 PM Eastern cutoff check — that lives in
 // isInEasternActionWindow / isPastEasternCutoff (easternTime.ts), which are
 // exact to the minute and are what actually gate the scheduled auto-submit
-// action and the Manager-editing lock. Do not use this function's return
-// value to decide whether the deadline has passed.
+// action and the Manager/Sales-Rep editing locks. Do not use this
+// function's return value to decide whether the deadline has passed.
 //
-// fridayDate is a "local calendar date" object (see buildReportingWeekFromMonday)
-// — read here via local getters, matching every other consumer of it.
-// `today` is a genuine instant (the actual current moment) and is resolved
-// to the real Eastern calendar date it corresponds to. Returns a whole
-// number of calendar days until the deadline's date: positive before it,
-// zero on the deadline's own Eastern calendar day (regardless of whether
-// it's currently before or after 3:00 PM — this function reports days, not
-// hours), negative after it.
+// fridayDate is a "local calendar date" object (see buildReportingWeekFromMonday;
+// despite the name, it is now the deadline's own date — Thursday) — read
+// here via local getters, matching every other consumer of it. `today` is a
+// genuine instant (the actual current moment) and is resolved to the real
+// Eastern calendar date it corresponds to. Returns a whole number of
+// calendar days until the deadline's date: positive before it, zero on the
+// deadline's own Eastern calendar day (regardless of whether it's currently
+// before or after 11:59 PM — this function reports days, not hours),
+// negative after it.
 export function getDaysUntilDeadline(fridayDate: Date, today: Date = new Date()): number {
   const deadlineAnchor = Date.UTC(fridayDate.getFullYear(), fridayDate.getMonth(), fridayDate.getDate())
   const nowParts = getEasternParts(today)

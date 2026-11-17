@@ -179,19 +179,9 @@
   background: rgba(217, 119, 6, 0.12);
 }
 
-.rep-status-pending {
-  color: var(--terracotta);
-  background: rgba(8, 102, 232, 0.12);
-}
-
-.rep-status-approved {
+.rep-status-submitted {
   color: var(--green);
   background: rgba(22, 131, 75, 0.12);
-}
-
-.rep-status-rejected {
-  color: var(--status-error);
-  background: rgba(183, 101, 74, 0.18);
 }
 
 .rep-hero-deadline-block {

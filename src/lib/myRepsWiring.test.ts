@@ -13,49 +13,49 @@ import path from 'node:path'
 const dir = path.dirname(fileURLToPath(import.meta.url))
 const myRepsSrc = readFileSync(path.join(dir, '..', 'components', 'MyReps.tsx'), 'utf8')
 
-describe('MyReps.tsx — a draft report never gets a review (Approve/Reject) action', () => {
-  test("the reviewability gate is explicitly status === 'submitted', not merely 'report exists'", () => {
-    assert.match(myRepsSrc, /function isReviewable\(report: RepReport \| null\): report is RepReport \{\s*\n\s*return report !== null && report\.status === 'submitted'\s*\n\s*\}/)
+// Beta feedback (2026-11-16): Approve/Reject is replaced by an optional,
+// non-blocking "Provide Feedback" action — ReportFeedbackPanel, not
+// ReportReviewPanel. Any row with a report (draft or submitted) can be
+// opened; there is no reviewability gate anymore since feedback never
+// changes the report's status.
+describe('MyReps.tsx — Approve/Reject is fully replaced by optional, non-blocking feedback', () => {
+  test('never references the old isReviewable gate, ReportReviewPanel, or reviewSalesRepReport', () => {
+    assert.doesNotMatch(myRepsSrc, /isReviewable/)
+    assert.doesNotMatch(myRepsSrc, /ReportReviewPanel/)
+    assert.doesNotMatch(myRepsSrc, /reviewSalesRepReport/)
+    assert.doesNotMatch(myRepsSrc, />Approve</)
+    assert.doesNotMatch(myRepsSrc, />Reject</)
   })
 
-  test('the row click / keyboard handlers that open the review panel are gated behind isReviewable, never unconditional', () => {
-    assert.match(myRepsSrc, /const reviewable = isReviewable\(row\.report\)/)
-    assert.match(myRepsSrc, /onClick=\{reviewable \? \(\) => setSelectedRepId\(row\.repId\) : undefined\}/)
+  test('any row with a report (draft or submitted) opens ReportFeedbackPanel — gated on hasReport, not on submission status', () => {
+    assert.match(myRepsSrc, /const hasReport = row\.report !== null/)
+    assert.match(myRepsSrc, /onClick=\{hasReport \? \(\) => setSelectedRepId\(row\.repId\) : undefined\}/)
+    assert.match(myRepsSrc, /\{selectedRow && selectedRow\.report && \(\s*\n\s*<ReportFeedbackPanel/)
   })
 
-  test('<ReportReviewPanel>, which renders the Approve/Reject controls, is only ever mounted when isReviewable(selectedRow.report) is true', () => {
-    assert.match(myRepsSrc, /\{selectedRow && isReviewable\(selectedRow\.report\) && \(\s*\n\s*<ReportReviewPanel/)
-  })
-
-  test('inside the panel, the Approve/Reject controls block itself is additionally conditioned on status === \'submitted\' (belt-and-suspenders with the outer isReviewable gate)', () => {
-    assert.match(myRepsSrc, /\{report\.status === 'submitted' && \(\s*\n\s*<div className="myreps-section myreps-review-action">/)
-  })
-
-  test('a \'draft\' report row renders the "Draft (not yet submitted)" label, never a review affordance', () => {
+  test('a \'draft\' report row still renders the "Draft (not yet submitted)" label', () => {
     assert.match(myRepsSrc, /if \(report\.status === 'draft'\) return 'Draft \(not yet submitted\)'/)
   })
 })
 
-describe('MyReps.tsx — reviewSalesRepReport is only ever called with a non-empty, validated reason', () => {
-  test('a trimmed, non-empty reason gates whether the Approve/Reject buttons are even enabled', () => {
-    assert.match(myRepsSrc, /const trimmedReason = reason\.trim\(\)/)
-    assert.match(myRepsSrc, /const canSubmit = trimmedReason\.length > 0 && submitting === null/)
+describe('MyReps.tsx — addRepReportFeedback is only ever called with non-empty feedback text, and is optional', () => {
+  test('a trimmed, non-empty feedback text gates whether Send Feedback is enabled — but closing without sending is always allowed', () => {
+    assert.match(myRepsSrc, /const trimmedFeedback = feedbackText\.trim\(\)/)
+    assert.match(myRepsSrc, /const canSend = trimmedFeedback\.length > 0 && !sending/)
+    assert.match(myRepsSrc, /onClick=\{onClose\}/)
   })
 
-  test('both the Approve and Reject buttons are disabled unless canSubmit is true', () => {
-    const rejectButtonMatch = myRepsSrc.match(/className="btn btn-secondary myreps-reject-btn"\s*\n\s*disabled=\{!canSubmit\}/)
-    const approveButtonMatch = myRepsSrc.match(/className="btn btn-primary myreps-approve-btn"\s*\n\s*disabled=\{!canSubmit\}/)
-    assert.ok(rejectButtonMatch, 'Reject button must be disabled={!canSubmit}')
-    assert.ok(approveButtonMatch, 'Approve button must be disabled={!canSubmit}')
+  test('Send Feedback is disabled unless canSend is true', () => {
+    assert.match(myRepsSrc, /className="btn btn-primary myreps-approve-btn" disabled=\{!canSend\}/)
   })
 
-  test('handleDecision bails out early (never calls the service) unless canSubmit, and otherwise calls reviewSalesRepReport with the trimmed reason', () => {
-    assert.match(myRepsSrc, /const handleDecision = async \(decision: 'approved' \| 'rejected'\) => \{\s*\n\s*if \(!canSubmit\) return/)
-    assert.match(myRepsSrc, /reviewSalesRepReport\(report\.id, decision, trimmedReason\)/)
+  test('handleSend bails out early (never calls the service) unless canSend, and otherwise calls addRepReportFeedback with the trimmed text', () => {
+    assert.match(myRepsSrc, /const handleSend = async \(\) => \{\s*\n\s*if \(!canSend\) return/)
+    assert.match(myRepsSrc, /addRepReportFeedback\(report\.id, trimmedFeedback\)/)
   })
 
-  test('REASON_REQUIRED from the server is still handled with a friendly message, as defense in depth beyond the client-side gate', () => {
-    assert.match(myRepsSrc, /case 'REASON_REQUIRED':/)
+  test('FEEDBACK_REQUIRED from the server is still handled with a friendly message, as defense in depth beyond the client-side gate', () => {
+    assert.match(myRepsSrc, /case 'FEEDBACK_REQUIRED':/)
   })
 })
 
@@ -160,27 +160,27 @@ describe('MyReps.tsx — weekly summary reuses deriveRepReportBucket from Phase 
     assert.match(myRepsSrc, /import \{ deriveRepReportBucket, type RepReportBucket \} from '\.\.\/lib\/repReportBucket'/)
   })
 
-  test('summaryCounts is built by folding every row through deriveRepReportBucket exactly once, into the 4 mutually exclusive buckets', () => {
+  // Beta feedback (2026-11-16): collapsed from the old 4-way
+  // missing/pending/approved/rejected buckets to a plain 3-way
+  // missing/draft/submitted split.
+  test('summaryCounts is built by folding every row through deriveRepReportBucket exactly once, into the 3 mutually exclusive buckets', () => {
     const match = myRepsSrc.match(/const summaryCounts = rows\.reduce\([\s\S]*?\n {2}\)/)
     assert.ok(match, 'could not locate summaryCounts')
     const body = match[0]
     assert.match(body, /const bucket = deriveRepReportBucket\(row\.report\)/)
     assert.match(body, /acc\[bucket\] \+= 1/)
-    assert.match(body, /\{ missing: 0, pending: 0, approved: 0, rejected: 0 \}/)
+    assert.match(body, /\{ missing: 0, draft: 0, submitted: 0 \}/)
   })
 
-  test('submittedCount is pending + approved + rejected, never an independent count (matches AdminManagerRepOverview\'s own identity)', () => {
-    assert.match(myRepsSrc, /const submittedCount = summaryCounts\.pending \+ summaryCounts\.approved \+ summaryCounts\.rejected/)
-  })
-
-  test('the summary row renders Total Assigned (rows.length), Submitted, Pending Review, Approved, Needs Correction, and Missing — all 6 required figures', () => {
+  test('the summary row renders Total Assigned (rows.length), Submitted, In Progress, and Missing — all 4 required figures', () => {
     assert.match(myRepsSrc, /<span className="myreps-summary-value">\{rows\.length\}<\/span>/)
     assert.match(myRepsSrc, />Total Assigned</)
     assert.match(myRepsSrc, />Submitted</)
-    assert.match(myRepsSrc, />Pending Review</)
-    assert.match(myRepsSrc, />Approved</)
-    assert.match(myRepsSrc, />Needs Correction</)
+    assert.match(myRepsSrc, />In Progress</)
     assert.match(myRepsSrc, />Missing</)
+    assert.doesNotMatch(myRepsSrc, />Pending Review</)
+    assert.doesNotMatch(myRepsSrc, />Approved</)
+    assert.doesNotMatch(myRepsSrc, />Needs Correction</)
   })
 
   test('the summary row only renders once data has loaded (loadState === \'ready\' && rows.length > 0), never with stale/zeroed counts while loading', () => {

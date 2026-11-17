@@ -59,21 +59,14 @@ const STATUS_BADGE_LABEL: Record<StatusBucket, string> = {
   submitted: 'Submitted',
 }
 
-// Same three-way split used for the KPI cards and filter pills. A report
-// that has moved past 'draft' (pending/approved/rejected review) is still
-// 'submitted' for this purpose — review outcome detail is shown as a
-// secondary line under the row's timestamp instead, never a new bucket.
+// Same three-way split used for the KPI cards and filter pills. Beta
+// feedback (2026-11-16): review_status no longer gates or labels anything
+// anywhere in this app, so there is no longer a secondary review-outcome
+// line to show under a submitted row's timestamp either.
 function bucketOf(report: RepReport | null): StatusBucket {
   if (!report) return 'not_started'
   if (report.status === 'draft') return 'draft'
   return 'submitted'
-}
-
-function reviewSubLabel(report: RepReport): string | null {
-  if (report.reviewStatus === 'pending') return 'Pending Review'
-  if (report.reviewStatus === 'approved') return 'Approved'
-  if (report.reviewStatus === 'rejected') return 'Needs Correction'
-  return null
 }
 
 function formatSubmittedAt(iso: string) {
@@ -236,7 +229,6 @@ export default function SalesAdminReports() {
               </div>
               {filteredRows.map(({ rep, report }) => {
                 const bucket = bucketOf(report)
-                const subLabel = report ? reviewSubLabel(report) : null
                 return (
                   <div className="adp-row" role="row" key={rep.id}>
                     <div className="adp-cell adp-cell-manager" role="cell">
@@ -254,10 +246,7 @@ export default function SalesAdminReports() {
                     </div>
                     <div className="adp-cell adp-cell-submitted" role="cell">
                       {report?.submittedAt ? (
-                        <>
-                          <span className="adp-submitted-at">{formatSubmittedAt(report.submittedAt)}</span>
-                          {subLabel && <span className="submission-source-tag">{subLabel}</span>}
-                        </>
+                        <span className="adp-submitted-at">{formatSubmittedAt(report.submittedAt)}</span>
                       ) : (
                         <span className="adp-dash">—</span>
                       )}

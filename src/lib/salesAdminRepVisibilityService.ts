@@ -29,12 +29,11 @@ export interface SalesAdminManagerOverviewRow {
   managerName: string | null
   managerEmail: string
   assignedCount: number
-  // Total ever submitted this week — pending + approved + rejected, not an
-  // independent count. Mirrors AdminManagerRepOverview's own identity.
+  // Beta feedback (2026-11-16): collapsed from the old pending/approved/
+  // rejected breakdown to a plain submitted/draft/missing split — mirrors
+  // AdminManagerRepOverview's own identity.
   submittedCount: number
-  pendingCount: number
-  approvedCount: number
-  rejectedCount: number
+  draftCount: number
   missingCount: number
 }
 
@@ -89,16 +88,14 @@ export async function fetchSalesAdminOverview(weekStartDate: string): Promise<Sa
 
   const overview: SalesAdminManagerOverviewRow[] = managers.map((manager) => {
     const managerReps = repsByManagerId.get(manager.id) ?? []
-    let pendingCount = 0
-    let approvedCount = 0
-    let rejectedCount = 0
+    let submittedCount = 0
+    let draftCount = 0
     let missingCount = 0
 
     for (const rep of managerReps) {
       const bucket = bucketForRep(rep, reportByRepId)
-      if (bucket === 'pending') pendingCount++
-      else if (bucket === 'approved') approvedCount++
-      else if (bucket === 'rejected') rejectedCount++
+      if (bucket === 'submitted') submittedCount++
+      else if (bucket === 'draft') draftCount++
       else missingCount++
     }
 
@@ -107,10 +104,8 @@ export async function fetchSalesAdminOverview(weekStartDate: string): Promise<Sa
       managerName: manager.fullName,
       managerEmail: manager.email,
       assignedCount: managerReps.length,
-      submittedCount: pendingCount + approvedCount + rejectedCount,
-      pendingCount,
-      approvedCount,
-      rejectedCount,
+      submittedCount,
+      draftCount,
       missingCount,
     }
   })

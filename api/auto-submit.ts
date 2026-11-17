@@ -4,10 +4,14 @@ import { runAutoSubmit, type AutoSubmitQuery } from './_lib/autoSubmit.js'
 import { authenticateRequest } from './_lib/adminAuth.js'
 import { resolveDryRun } from './_lib/requestHelpers.js'
 
-// Friday 3:00 PM through 3:14 PM America/New_York — see
+// Beta feedback (2026-11-16): the weekly deadline moved to Thursday
+// 11:59 PM America/New_York — the first moment "past" that instant is
+// 12:00 AM Friday, so this window moved from Friday 3:00-3:14 PM to
+// Friday 12:00-12:14 AM (immediately after the deadline passes). See
 // src/utils/easternTime.ts for why this is DST-safe without any manual
 // UTC-offset math.
-const AUTO_SUBMIT_WINDOW_HOUR = 15
+const AUTO_SUBMIT_WINDOW_WEEKDAY = 'Fri' as const
+const AUTO_SUBMIT_WINDOW_HOUR = 0
 const AUTO_SUBMIT_WINDOW_MINUTE = 0
 const AUTO_SUBMIT_WINDOW_MINUTES = 15
 
@@ -72,11 +76,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // still "action-related" for this purpose. Applies only to the
     // scheduler-bot path; a human Admin's own POST is never restricted by
     // this window, matching the existing dry-run-default behavior below.
-    if (scheduled && !isInEasternActionWindow(AUTO_SUBMIT_WINDOW_HOUR, AUTO_SUBMIT_WINDOW_MINUTE, AUTO_SUBMIT_WINDOW_MINUTES)) {
+    if (scheduled && !isInEasternActionWindow(AUTO_SUBMIT_WINDOW_WEEKDAY, AUTO_SUBMIT_WINDOW_HOUR, AUTO_SUBMIT_WINDOW_MINUTE, AUTO_SUBMIT_WINDOW_MINUTES)) {
       return res.status(200).json({
         skipped: true,
         reason: 'outside_action_window',
-        message: 'Scheduler invocation received outside the Friday 3:00–3:14 PM America/New_York auto-submit window; no action taken.',
+        message: 'Scheduler invocation received outside the Friday 12:00–12:14 AM America/New_York auto-submit window; no action taken.',
       })
     }
 

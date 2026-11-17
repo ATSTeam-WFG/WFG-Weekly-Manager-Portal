@@ -22,8 +22,8 @@ function manager(overrides: Partial<ManagerSummary> = {}): ManagerSummary {
 
 const WEEK: ReportingWeek = {
   label: 'Jan 5 – Jan 9, 2026',
-  fridayDate: new Date(2026, 0, 9),
-  deadlineLabel: 'Friday, January 9 at 3:00 PM ET',
+  fridayDate: new Date(2026, 0, 8),
+  deadlineLabel: 'Thursday, January 8 at 11:59 PM ET',
   weekStartDate: '2026-01-05',
 }
 
@@ -64,22 +64,20 @@ describe('getReminderTargets', () => {
 })
 
 describe('buildFridayReminderEmail', () => {
-  test('subject line reflects the 3:00 PM ET deadline', () => {
+  test('subject line reflects the 11:59 PM ET deadline', () => {
     const content = buildFridayReminderEmail(
       { id: 'a', fullName: 'Jane Manager', email: 'jane@example.com', status: 'not_started' },
       WEEK,
     )
-    assert.match(content.subject, /3:00 PM ET/)
-    assert.doesNotMatch(content.subject, /4:00 PM/)
+    assert.match(content.subject, /11:59 PM ET/)
   })
 
-  test('draft-status body mentions the 3:00 PM auto-submit and the 4:00 PM edit window', () => {
+  test('draft-status body mentions the 11:59 PM auto-submit deadline, never a separate edit-window time', () => {
     const content = buildFridayReminderEmail(
       { id: 'a', fullName: 'Jane Manager', email: 'jane@example.com', status: 'draft' },
       WEEK,
     )
-    assert.match(content.body, /3:00 PM ET/)
-    assert.match(content.body, /4:00 PM ET/)
+    assert.match(content.body, /11:59 PM ET/)
   })
 
   test('not_started-status body never claims the (nonexistent) report will be auto-submitted', () => {

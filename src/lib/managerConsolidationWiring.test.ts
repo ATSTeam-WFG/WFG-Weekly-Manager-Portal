@@ -95,7 +95,7 @@ describe('1b. duplicate-text prevention is checked against the CURRENT report co
   })
 })
 
-describe('2. consolidation never bypasses the existing save path — the Friday 4:00 PM manager cutoff is structurally unaffected', () => {
+describe('2. consolidation never bypasses the existing save path — the shared Thursday 11:59 PM manager cutoff is structurally unaffected', () => {
   test('ImportRepReportsPanel and managerConsolidationService never call saveReportV2, updateReportSectionsV2, or any direct write to the `reports` table — applying is a pure local state change in ReportForm, which still only persists through the existing Save Draft/Submit/Save Changes buttons and their existing lock checks', () => {
     for (const src of [panelSrc, serviceSrc]) {
       assert.doesNotMatch(src, /saveReportV2|updateReportSectionsV2/)
@@ -107,9 +107,14 @@ describe('2. consolidation never bypasses the existing save path — the Friday 
     assert.doesNotMatch(serviceSrc, /managerEditLock/)
   })
 
-  test('managerEditLock.ts itself is untouched by Phase 1C — still a single Friday 4:00 PM Eastern cutoff, EDIT_CUTOFF_HOUR = 16', () => {
-    assert.match(managerEditLockSrc, /export const EDIT_CUTOFF_HOUR = 16/)
-    assert.match(managerEditLockSrc, /export const EDIT_CUTOFF_MINUTE = 0/)
+  // Beta feedback (2026-11-16) moved the shared cutoff to Thursday 11:59 PM
+  // (via easternTime.ts's WEEKLY_DEADLINE_* constants) — this test now
+  // confirms managerEditLock.ts still aliases that single shared source,
+  // rather than pinning the old literal 16/0 values.
+  test('managerEditLock.ts still derives its cutoff from the single shared WEEKLY_DEADLINE_* constants, never its own independent values', () => {
+    assert.match(managerEditLockSrc, /export const EDIT_CUTOFF_WEEKDAY = WEEKLY_DEADLINE_WEEKDAY/)
+    assert.match(managerEditLockSrc, /export const EDIT_CUTOFF_HOUR = WEEKLY_DEADLINE_HOUR/)
+    assert.match(managerEditLockSrc, /export const EDIT_CUTOFF_MINUTE = WEEKLY_DEADLINE_MINUTE/)
   })
 
   test('the Import button is only ever rendered in the NOT-yet-submitted draft flow (!isEditingSubmitted) — never on an already-submitted report, which is a separate, later workflow concern out of scope for this integration', () => {

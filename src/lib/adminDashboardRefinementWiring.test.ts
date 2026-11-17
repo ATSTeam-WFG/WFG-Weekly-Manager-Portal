@@ -131,9 +131,9 @@ describe('AdminDashboard.tsx — week navigation and Friday deadline calculation
     assert.match(dashboardSrc, /\{isCurrentWeek && <span className="week-current-badge">Current<\/span>\}/)
   })
 
-  test('isPastEasternCutoff(15, 0) and getDaysUntilDeadline are still the only deadline calculations, unchanged', () => {
-    assert.match(dashboardSrc, /import \{ isPastEasternCutoff \} from '\.\.\/utils\/easternTime'/)
-    assert.match(dashboardSrc, /const isPastDeadline = isPastEasternCutoff\(15, 0\)/)
+  test('isPastEasternCutoff and getDaysUntilDeadline are still the only deadline calculations (beta feedback, 2026-11-16: now the shared Thursday 11:59 PM cutoff)', () => {
+    assert.match(dashboardSrc, /import \{ isPastEasternCutoff, WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE \} from '\.\.\/utils\/easternTime'/)
+    assert.match(dashboardSrc, /const isPastDeadline = isPastEasternCutoff\(WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE\)/)
     assert.match(dashboardSrc, /const daysLeft = getDaysUntilDeadline\(week\.fridayDate\)/)
     assert.match(dashboardSrc, /const isDueToday = !isPastDeadline && daysLeft <= 0/)
   })

@@ -27,16 +27,17 @@ export interface ReminderEmailContent {
 }
 
 // Draft and Not Started deliberately get different copy: only a saved Draft
-// is auto-submitted at the 3:00 PM Eastern Time (ET) deadline, so only Draft
-// managers are told that will happen. A manager who hasn't started must
-// never be told their (nonexistent) report will be auto-submitted.
+// is auto-submitted at the Thursday 11:59 PM Eastern Time (ET) deadline, so
+// only Draft managers are told that will happen. A manager who hasn't
+// started must never be told their (nonexistent) report will be
+// auto-submitted.
 export function buildFridayReminderEmail(target: ReminderTarget, week: ReportingWeek): ReminderEmailContent {
   const firstName = target.fullName.split(' ')[0] || target.fullName
-  const subject = 'OneReport Pulse Reminder: Your weekly report is due today at 3:00 PM ET'
+  const subject = 'OneReport Pulse Reminder: Your weekly report is due today at 11:59 PM ET'
 
   const statusParagraph =
     target.status === 'draft'
-      ? `You have a draft saved for the week of ${week.label}, but it hasn't been submitted yet. If it's still not submitted by 3:00 PM ET today, it will be automatically submitted for you using what you've saved so far — you'll still be able to edit it until 4:00 PM ET.`
+      ? `You have a draft saved for the week of ${week.label}, but it hasn't been submitted yet. If it's still not submitted by 11:59 PM ET today, it will be automatically submitted for you using what you've saved so far.`
       : `Your weekly report for the week of ${week.label} hasn't been started yet. Reports that haven't been started are not automatically submitted, so please start and submit yours manually before the deadline.`
 
   const body = [

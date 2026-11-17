@@ -17,12 +17,13 @@ export interface ManagerRepRow {
   bucket: RepReportBucket
 }
 
+// Beta feedback (2026-11-16): collapsed from the old
+// pending/approved/rejected breakdown to a plain submitted/draft/missing
+// split — review_status no longer gates or labels anything.
 export interface ManagerOverviewCounts {
   totalAssigned: number
   submitted: number
-  pending: number
-  approved: number
-  rejected: number
+  draft: number
   missing: number
 }
 
@@ -32,7 +33,7 @@ export interface ManagerOverviewData {
 }
 
 function emptyCounts(): ManagerOverviewCounts {
-  return { totalAssigned: 0, submitted: 0, pending: 0, approved: 0, rejected: 0, missing: 0 }
+  return { totalAssigned: 0, submitted: 0, draft: 0, missing: 0 }
 }
 
 export async function fetchManagerOverview(managerId: string, weekStartDate: string): Promise<ManagerOverviewData> {
@@ -64,14 +65,9 @@ export async function fetchManagerOverview(managerId: string, weekStartDate: str
 
   const counts = rows.reduce((acc, row) => {
     acc.totalAssigned += 1
-    if (row.bucket === 'missing') {
-      acc.missing += 1
-    } else {
-      acc.submitted += 1
-      if (row.bucket === 'pending') acc.pending += 1
-      else if (row.bucket === 'approved') acc.approved += 1
-      else if (row.bucket === 'rejected') acc.rejected += 1
-    }
+    if (row.bucket === 'missing') acc.missing += 1
+    else if (row.bucket === 'draft') acc.draft += 1
+    else acc.submitted += 1
     return acc
   }, emptyCounts())
 

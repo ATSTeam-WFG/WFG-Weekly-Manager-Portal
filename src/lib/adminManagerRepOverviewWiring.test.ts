@@ -22,29 +22,26 @@ const cssSrc = readFileSync(path.join(dir, '..', 'components', 'AdminManagerRepO
 const serviceSrc = readFileSync(path.join(dir, 'adminRepVisibilityService.ts'), 'utf8')
 
 describe('AdminManagerRepOverview.tsx — summary totals are folded from the already-fetched rows, never a second query or a hardcoded figure', () => {
+  // Beta feedback (2026-11-16): collapsed from the old
+  // pending/approved/rejected breakdown to a plain submitted/draft/missing
+  // split — review_status no longer gates or labels anything.
   test('totals is a reduce over `rows`, summing each row\'s existing per-manager counts', () => {
     const match = componentSrc.match(/const totals = rows\.reduce\([\s\S]*?\n {2}\)/)
     assert.ok(match, 'could not locate the totals reduce')
     const body = match[0]
     assert.match(body, /acc\.assigned \+= row\.assignedCount/)
     assert.match(body, /acc\.submitted \+= row\.submittedCount/)
-    assert.match(body, /acc\.pending \+= row\.pendingCount/)
-    assert.match(body, /acc\.approved \+= row\.approvedCount/)
-    assert.match(body, /acc\.rejected \+= row\.rejectedCount/)
+    assert.match(body, /acc\.draft \+= row\.draftCount/)
     assert.match(body, /acc\.missing \+= row\.missingCount/)
   })
 
-  test('the summary row renders all six required figures, each from `totals`, never a literal number', () => {
+  test('the summary row renders all four required figures, each from `totals`, never a literal number', () => {
     assert.match(componentSrc, /\{totals\.assigned\}/)
     assert.match(componentSrc, />Total Assigned</)
     assert.match(componentSrc, /\{totals\.submitted\}/)
     assert.match(componentSrc, />Submitted</)
-    assert.match(componentSrc, /\{totals\.pending\}/)
-    assert.match(componentSrc, />Pending Review</)
-    assert.match(componentSrc, /\{totals\.approved\}/)
-    assert.match(componentSrc, />Approved</)
-    assert.match(componentSrc, /\{totals\.rejected\}/)
-    assert.match(componentSrc, />Needs Correction</)
+    assert.match(componentSrc, /\{totals\.draft\}/)
+    assert.match(componentSrc, />In Progress</)
     assert.match(componentSrc, /\{totals\.missing\}/)
     assert.match(componentSrc, />Missing</)
   })
@@ -97,12 +94,12 @@ describe('AdminManagerRepOverview.tsx — Manager-level status filter and search
     assert.match(componentSrc, /\(row\.managerName \?\? ''\)\.toLowerCase\(\)\.includes\(query\) \|\| row\.managerEmail\.toLowerCase\(\)\.includes\(query\)/)
   })
 
-  test('exactly five filter pills: All, Pending Review, Approved, Needs Correction, Missing', () => {
+  test('exactly four filter pills: All, Submitted, In Progress, Missing', () => {
     const filtersMatch = componentSrc.match(/const FILTERS: \{ key: StatusFilter; label: string \}\[\] = (\[[\s\S]*?\])/)
     assert.ok(filtersMatch, 'could not locate FILTERS')
     const arrayBody = filtersMatch[1]
-    assert.equal((arrayBody.match(/\{ key:/g) ?? []).length, 5)
-    for (const label of ['All', 'Pending Review', 'Approved', 'Needs Correction', 'Missing']) {
+    assert.equal((arrayBody.match(/\{ key:/g) ?? []).length, 4)
+    for (const label of ['All', 'Submitted', 'In Progress', 'Missing']) {
       assert.match(arrayBody, new RegExp(`label: '${label}'`))
     }
   })

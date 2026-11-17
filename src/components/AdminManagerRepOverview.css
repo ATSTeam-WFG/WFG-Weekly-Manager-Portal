@@ -40,7 +40,7 @@
    AdminManagerRepOverview.tsx's own `totals` reduce. */
 .amro-summary-row {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -160,8 +160,8 @@
 }
 
 .amro-table-header-row-overview {
-  grid-template-columns: 1.7fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr 0.9fr;
-  min-width: 760px;
+  grid-template-columns: 1.8fr 1fr 1fr 1fr 1fr 1fr;
+  min-width: 640px;
 }
 
 .amro-row {
@@ -174,8 +174,8 @@
 }
 
 .amro-row-overview {
-  grid-template-columns: 1.7fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr 0.9fr;
-  min-width: 760px;
+  grid-template-columns: 1.8fr 1fr 1fr 1fr 1fr 1fr;
+  min-width: 640px;
 }
 
 .amro-row:last-child {
@@ -258,19 +258,14 @@
   background: var(--soft-sand);
 }
 
-.amro-status-pending {
-  color: var(--terracotta);
-  background: rgba(8, 102, 232, 0.12);
+.amro-status-draft {
+  color: var(--amber);
+  background: rgba(217, 119, 6, 0.12);
 }
 
-.amro-status-approved {
+.amro-status-submitted {
   color: var(--green);
   background: rgba(22, 131, 75, 0.12);
-}
-
-.amro-status-rejected {
-  color: var(--status-error);
-  background: rgba(183, 101, 74, 0.18);
 }
 
 /* Tablet — summary cards/filters stay aligned (reflow to a 3-column grid

@@ -37,18 +37,19 @@ interface AdminManagerRepOverviewProps {
 type LoadState = 'loading' | 'error' | 'ready'
 type StatusFilter = 'all' | RepReportBucket
 
+// Beta feedback (2026-11-16): collapsed from the old
+// missing/pending/approved/rejected labels to a plain 3-way split —
+// review_status no longer gates or labels anything.
 const BUCKET_LABELS: Record<ManagerRepDrillDownRow['bucket'], string> = {
-  missing: 'Missing',
-  pending: 'Pending Review',
-  approved: 'Approved',
-  rejected: 'Needs Correction',
+  missing: 'Not Started',
+  draft: 'In Progress',
+  submitted: 'Submitted',
 }
 
 const FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: 'All' },
-  { key: 'pending', label: 'Pending Review' },
-  { key: 'approved', label: 'Approved' },
-  { key: 'rejected', label: 'Needs Correction' },
+  { key: 'submitted', label: 'Submitted' },
+  { key: 'draft', label: 'In Progress' },
   { key: 'missing', label: 'Missing' },
 ]
 
@@ -118,13 +119,11 @@ export default function AdminManagerRepOverview({ weekStartDate, weekLabel }: Ad
     (acc, row) => {
       acc.assigned += row.assignedCount
       acc.submitted += row.submittedCount
-      acc.pending += row.pendingCount
-      acc.approved += row.approvedCount
-      acc.rejected += row.rejectedCount
+      acc.draft += row.draftCount
       acc.missing += row.missingCount
       return acc
     },
-    { assigned: 0, submitted: 0, pending: 0, approved: 0, rejected: 0, missing: 0 },
+    { assigned: 0, submitted: 0, draft: 0, missing: 0 },
   )
 
   // Manager-level filter: "show managers who currently have at least one
@@ -134,8 +133,7 @@ export default function AdminManagerRepOverview({ weekStartDate, weekLabel }: Ad
     const query = searchQuery.trim().toLowerCase()
     return rows.filter((row) => {
       if (statusFilter !== 'all') {
-        const bucketCount =
-          statusFilter === 'pending' ? row.pendingCount : statusFilter === 'approved' ? row.approvedCount : statusFilter === 'rejected' ? row.rejectedCount : row.missingCount
+        const bucketCount = statusFilter === 'submitted' ? row.submittedCount : statusFilter === 'draft' ? row.draftCount : row.missingCount
         if (bucketCount === 0) return false
       }
       if (!query) return true
@@ -215,16 +213,8 @@ export default function AdminManagerRepOverview({ weekStartDate, weekLabel }: Ad
               <span className="amro-summary-label">Submitted</span>
             </div>
             <div className="amro-summary-card">
-              <span className="amro-summary-value">{totals.pending}</span>
-              <span className="amro-summary-label">Pending Review</span>
-            </div>
-            <div className="amro-summary-card">
-              <span className="amro-summary-value">{totals.approved}</span>
-              <span className="amro-summary-label">Approved</span>
-            </div>
-            <div className="amro-summary-card">
-              <span className="amro-summary-value">{totals.rejected}</span>
-              <span className="amro-summary-label">Needs Correction</span>
+              <span className="amro-summary-value">{totals.draft}</span>
+              <span className="amro-summary-label">In Progress</span>
             </div>
             <div className="amro-summary-card">
               <span className="amro-summary-value">{totals.missing}</span>
@@ -264,9 +254,7 @@ export default function AdminManagerRepOverview({ weekStartDate, weekLabel }: Ad
                   <span role="columnheader">Manager</span>
                   <span role="columnheader">Assigned Reps</span>
                   <span role="columnheader">Submitted</span>
-                  <span role="columnheader">Pending</span>
-                  <span role="columnheader">Approved</span>
-                  <span role="columnheader">Needs Correction</span>
+                  <span role="columnheader">In Progress</span>
                   <span role="columnheader">Missing</span>
                   <span role="columnheader">Completion</span>
                 </div>
@@ -298,14 +286,8 @@ export default function AdminManagerRepOverview({ weekStartDate, weekLabel }: Ad
                       <div className="amro-cell amro-cell-count" role="cell" data-label="Submitted">
                         {row.submittedCount}
                       </div>
-                      <div className="amro-cell amro-cell-count" role="cell" data-label="Pending">
-                        {row.pendingCount}
-                      </div>
-                      <div className="amro-cell amro-cell-count" role="cell" data-label="Approved">
-                        {row.approvedCount}
-                      </div>
-                      <div className="amro-cell amro-cell-count" role="cell" data-label="Needs Correction">
-                        {row.rejectedCount}
+                      <div className="amro-cell amro-cell-count" role="cell" data-label="In Progress">
+                        {row.draftCount}
                       </div>
                       <div className="amro-cell amro-cell-count" role="cell" data-label="Missing">
                         {row.missingCount}
