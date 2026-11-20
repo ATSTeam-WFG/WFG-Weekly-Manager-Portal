@@ -90,16 +90,29 @@ export function isInEasternActionWindow(
   )
 }
 
-// True once `now` (interpreted in America/New_York) has reached or passed
-// {targetHour}:{targetMinute} on `targetWeekday` of the CURRENT reporting
-// week, and stays true for the rest of that week — unlike
-// isInEasternActionWindow above, this has no upper bound and does not
-// require the day to literally equal targetWeekday: any day LATER in the
-// week (per WEEKDAY_ORDER) is also past it. Earlier days are always false;
-// the cutoff naturally "resets" to false again once the following Monday's
-// new reporting week begins. Used for the single weekly deadline shared by
-// submission and editing across every role (managerEditLock.ts,
-// repReportLock.ts) — currently Thursday 11:59 PM ET.
+// True once `now` (interpreted in America/New_York) has moved PAST the end
+// of {targetHour}:{targetMinute} on `targetWeekday` of the CURRENT
+// reporting week — i.e. {targetHour}:{targetMinute} itself is the last
+// whole minute still allowed, and the lock begins only at the first
+// instant of the following minute — and stays true for the rest of that
+// week. Beta feedback (2026-11-16/18): for the shared deadline
+// (Thursday 11:59 PM ET), this means a user may submit/edit at any point
+// during 11:59:00–11:59:59 PM; the lock begins exactly at 12:00:00 AM
+// Friday, not at the start of the 11:59 PM minute. getEasternParts only
+// resolves to minute granularity (no seconds), so the same-weekday branch
+// below uses a strict `>` against the target minute — equal to the target
+// minute is still "not yet past it" for the entire 60 seconds of that
+// minute, and the very next minute (always a new EasternParts.minute
+// value, whether that rolls into a new hour/day or not) is what first
+// satisfies `>`.
+//
+// Unlike isInEasternActionWindow above, this has no upper bound and does
+// not require the day to literally equal targetWeekday: any day LATER in
+// the week (per WEEKDAY_ORDER) is also past it. Earlier days are always
+// false; the cutoff naturally "resets" to false again once the following
+// Monday's new reporting week begins. Used for the single weekly deadline
+// shared by submission and editing across every role (managerEditLock.ts,
+// repReportLock.ts).
 export function isPastEasternCutoff(targetWeekday: EasternWeekday, targetHour: number, targetMinute: number, now: Date = new Date()): boolean {
   const parts = getEasternParts(now)
 
@@ -110,5 +123,5 @@ export function isPastEasternCutoff(targetWeekday: EasternWeekday, targetHour: n
 
   const minutesSinceMidnight = parts.hour * 60 + parts.minute
   const targetMinutesSinceMidnight = targetHour * 60 + targetMinute
-  return minutesSinceMidnight >= targetMinutesSinceMidnight
+  return minutesSinceMidnight > targetMinutesSinceMidnight
 }

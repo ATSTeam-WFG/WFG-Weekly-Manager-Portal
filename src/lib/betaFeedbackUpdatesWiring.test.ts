@@ -15,6 +15,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { isInEasternActionWindow } from '../utils/easternTime.ts'
+import { getCurrentReportingWeek } from '../utils/week.ts'
 
 const dir = path.dirname(fileURLToPath(import.meta.url))
 const deadlineDraftSql = readFileSync(
@@ -24,21 +26,26 @@ const deadlineDraftSql = readFileSync(
 const feedbackDraftSql = readFileSync(path.join(dir, '..', '..', 'supabase', 'drafts', '20261117_rep_report_feedback.sql'), 'utf8')
 const repReportsServiceSrc = readFileSync(path.join(dir, 'repReportsService.ts'), 'utf8')
 
-describe('20261117_weekly_deadline_and_rep_report_editing.sql — the single Thursday 11:59 PM cutoff replaces every old Friday constant', () => {
-  test('reports_enforce_manager_edit_cutoff() now checks Monday+3 (Thursday) at 23:59, never the old Monday+4 (Friday) at 15:00/15:30/16:00', () => {
+describe('20261117_weekly_deadline_and_rep_report_editing.sql — the single Thursday 11:59 PM (inclusive) cutoff replaces every old Friday constant', () => {
+  // Fixed 2026-11-18: the lock is expressed as "now() >= Friday 00:00:00
+  // Eastern" (Monday+4, time '00:00'), never as "(Thursday, time '23:59')
+  // compared with >=" — the latter would lock starting at the FIRST
+  // instant of the 11:59 PM minute, one minute too early.
+  test('reports_enforce_manager_edit_cutoff() now checks Monday+4 (Friday) at 00:00, never the old Monday+4 (Friday) at 15:00/15:30/16:00 or a literal Thursday 23:59 instant', () => {
     const match = deadlineDraftSql.match(/CREATE OR REPLACE FUNCTION reports_enforce_manager_edit_cutoff\(\)[\s\S]*?\$\$;/)
     assert.ok(match, 'could not locate reports_enforce_manager_edit_cutoff')
     const body = match[0]
-    assert.match(body, /deadline_date := NEW\.week_start_date \+ 3;/)
-    assert.match(body, /edit_cutoff := \(deadline_date \+ time '23:59'\) AT TIME ZONE 'America\/New_York';/)
+    assert.match(body, /lock_start_date := NEW\.week_start_date \+ 4;/)
+    assert.match(body, /edit_cutoff := \(lock_start_date \+ time '00:00'\) AT TIME ZONE 'America\/New_York';/)
     assert.doesNotMatch(body, /time '1[56]:\d\d'/)
+    assert.doesNotMatch(body, /time '23:59'/)
   })
 
-  test('manager_report_edit_cutoff_passed() and rep_report_submission_cutoff_passed() both use the same Monday+3, 23:59 formula', () => {
+  test('manager_report_edit_cutoff_passed() and rep_report_submission_cutoff_passed() both use the same Monday+4, 00:00 (Friday midnight) formula', () => {
     for (const fnName of ['manager_report_edit_cutoff_passed', 'rep_report_submission_cutoff_passed']) {
       const match = deadlineDraftSql.match(new RegExp(`CREATE OR REPLACE FUNCTION public\\.${fnName}\\([\\s\\S]*?\\$\\$;`))
       assert.ok(match, `could not locate ${fnName}`)
-      assert.match(match[0], /SELECT p_now >= \(\(p_week_start_date \+ 3 \+ time '23:59'\) AT TIME ZONE 'America\/New_York'\);/)
+      assert.match(match[0], /SELECT p_now >= \(\(p_week_start_date \+ 4 \+ time '00:00'\) AT TIME ZONE 'America\/New_York'\);/)
     }
   })
 
@@ -175,4 +182,45 @@ describe('repReportsService.ts — addRepReportFeedback/fetchRepReportFeedback a
       assert.match(match[0], new RegExp(`'${code}'`))
     }
   })
+})
+
+// 2026-11-18 — Vercel Cron schedules run in UTC (vercel.json's existing
+// "*/5 * * * 5" means "every 5 minutes, every UTC Friday" — unchanged by
+// this work; NOT deployed/modified per the current local-only directive).
+// Eastern is always UTC-4 (EDT) or UTC-5 (EST) — strictly BEHIND UTC, never
+// ahead — so "Eastern Friday 00:00–00:14" (the auto-submit action window,
+// immediately after the Thursday 11:59 PM deadline passes) always falls a
+// few hours INTO the same UTC Friday, never spilling into UTC Thursday or
+// Saturday in either DST state. These are real, directly-callable
+// functions (isInEasternActionWindow, getCurrentReportingWeek have no
+// Supabase/runtime dependency) — executed here, not just source-inspected.
+describe('Auto-submit cron correctness across EST/EDT — the existing UTC-Friday cron schedule needs no change', () => {
+  for (const [label, weekStartDate, windowStartUtc] of [
+    // EST week: Monday 2026-01-05, Thursday deadline 2026-01-08, lock
+    // begins Friday 2026-01-09 00:00:00 EST = 2026-01-09T05:00:00.000Z.
+    ['EST (January)', '2026-01-05', '2026-01-09T05:00:00.000Z'],
+    // EDT week: Monday 2026-07-06, Thursday deadline 2026-07-09, lock
+    // begins Friday 2026-07-10 00:00:00 EDT = 2026-07-10T04:00:00.000Z.
+    ['EDT (July)', '2026-07-06', '2026-07-10T04:00:00.000Z'],
+  ] as const) {
+    describe(label, () => {
+      test('the auto-submit window\'s start AND end instants both fall on UTC Friday (day-of-week 5) — fully inside the existing cron schedule', () => {
+        const start = new Date(windowStartUtc)
+        const end = new Date(start.getTime() + 14 * 60_000) // last in-window minute
+        assert.equal(start.getUTCDay(), 5, 'window start must be UTC Friday')
+        assert.equal(end.getUTCDay(), 5, 'window end must still be UTC Friday (no midnight-UTC rollover)')
+      })
+
+      test('isInEasternActionWindow confirms this UTC instant is genuinely Eastern Friday 00:00–00:14', () => {
+        assert.equal(isInEasternActionWindow('Fri', 0, 0, 15, new Date(windowStartUtc)), true)
+        // One minute before the window must NOT match (still Thursday Eastern).
+        assert.equal(isInEasternActionWindow('Fri', 0, 0, 15, new Date(new Date(windowStartUtc).getTime() - 60_000)), false)
+      })
+
+      test('getCurrentReportingWeek(), called at the exact moment auto-submit runs, still resolves to the week that just closed — never the new Monday\'s week', () => {
+        const week = getCurrentReportingWeek(new Date(windowStartUtc))
+        assert.equal(week.weekStartDate, weekStartDate)
+      })
+    })
+  }
 })

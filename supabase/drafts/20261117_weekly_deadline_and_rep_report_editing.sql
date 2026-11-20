@@ -1,12 +1,19 @@
--- Beta feedback (2026-11-16), two related business-rule changes, bundled
--- together because they touch overlapping functions:
+-- Beta feedback (2026-11-16, boundary fix 2026-11-18), two related
+-- business-rule changes, bundled together because they touch overlapping
+-- functions:
 --
 -- 1. The weekly deadline moves from a Friday split (3:00 PM Manager
 --    submission-display / 4:00 PM Manager edit-lock / 2:00 PM Sales Rep
 --    submission) to a SINGLE Thursday 11:59 PM America/New_York cutoff,
---    shared by every role and by both submission and editing. This is a
---    DRAFT migration — review and apply explicitly; do not run against
---    Preview or Production without separate approval.
+--    shared by every role and by both submission and editing. "11:59 PM"
+--    is inclusive of the entire minute — users may submit/edit at any
+--    point during 11:59:00–11:59:59 PM Thursday; the lock begins at the
+--    very next instant, 12:00:00 AM Friday. Every cutoff check below is
+--    therefore expressed as "now() >= Friday 00:00:00 Eastern", never as
+--    "(Thursday + time '23:59') compared with >=" (that form would lock
+--    one minute too early). This is a DRAFT migration — review and apply
+--    explicitly; do not run against Preview or Production without
+--    separate approval.
 --
 -- 2. A Sales Rep may now edit their own already-submitted report's content
 --    (previously blocked unless review_status = 'rejected') up until that
@@ -23,9 +30,16 @@
 
 -- ---------------------------------------------------------------------------
 -- 1a. reports_enforce_manager_edit_cutoff() — Manager `reports` table
--- trigger. Only the day/time constant changes (Friday + 16:00 ->
--- Thursday + 23:59); the admin-exemption and status-regression logic are
--- byte-for-byte unchanged from 20260917_manager_edit_cutoff_4pm.sql.
+-- trigger. Day/time constant changes from Friday 16:00 to the "Thursday
+-- 11:59 PM, inclusive" deadline — expressed as "locked once now() reaches
+-- Friday 00:00:00 Eastern", NOT as "(Thursday + time '23:59') AT TIME ZONE
+-- ... compared with >=" — the latter would lock starting at the FIRST
+-- instant of the 23:59 minute (11:59:00 PM), one minute too early. Using
+-- the exact next-day-midnight instant instead needs no minute-granularity
+-- special-casing: any instant through 11:59:59.999... PM Thursday is
+-- strictly before Friday 00:00:00, and the lock begins there exactly.
+-- Admin-exemption and status-regression logic are byte-for-byte unchanged
+-- from 20260917_manager_edit_cutoff_4pm.sql.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION reports_enforce_manager_edit_cutoff()
 RETURNS trigger
@@ -36,7 +50,7 @@ AS $$
 DECLARE
   acting_role text;
   acting_submits boolean;
-  deadline_date date;
+  lock_start_date date;
   edit_cutoff timestamptz;
 BEGIN
   SELECT role, submits_weekly_report INTO acting_role, acting_submits
@@ -46,8 +60,10 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  deadline_date := NEW.week_start_date + 3;
-  edit_cutoff := (deadline_date + time '23:59') AT TIME ZONE 'America/New_York';
+  -- Monday + 4 = Friday; the lock begins at that Friday's midnight, i.e.
+  -- immediately after Thursday's (Monday + 3) 11:59 PM ends.
+  lock_start_date := NEW.week_start_date + 4;
+  edit_cutoff := (lock_start_date + time '00:00') AT TIME ZONE 'America/New_York';
 
   IF now() >= edit_cutoff THEN
     RAISE EXCEPTION 'MANAGER_EDIT_LOCKED: Editing is closed for this reporting week.';
@@ -63,7 +79,9 @@ $$;
 
 -- ---------------------------------------------------------------------------
 -- 1b. manager_report_edit_cutoff_passed() — standalone predicate used by
--- import_rep_report_for_consolidation. Same Thursday 23:59 constant as 1a.
+-- import_rep_report_for_consolidation. Same "locked at Friday 00:00:00
+-- Eastern" formula as 1a (see its comment for why this, not a literal
+-- "Thursday 23:59" instant compared with >=).
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.manager_report_edit_cutoff_passed(
   p_week_start_date date,
@@ -74,7 +92,7 @@ LANGUAGE sql
 STABLE
 SET search_path = public
 AS $$
-  SELECT p_now >= ((p_week_start_date + 3 + time '23:59') AT TIME ZONE 'America/New_York');
+  SELECT p_now >= ((p_week_start_date + 4 + time '00:00') AT TIME ZONE 'America/New_York');
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -82,7 +100,8 @@ $$;
 -- editing cutoff (see save_rep_report_draft below), not just submission's;
 -- renamed conceptually but not literally, to minimize call-site churn in
 -- submit_rep_report/resubmit_rejected_rep_report/save_rep_report_draft,
--- all of which already call it by this name. Same Thursday 23:59 constant.
+-- all of which already call it by this name. Same "locked at Friday
+-- 00:00:00 Eastern" formula as 1a/1b.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.rep_report_submission_cutoff_passed(
   p_week_start_date date,
@@ -93,7 +112,7 @@ LANGUAGE sql
 STABLE
 SET search_path = public
 AS $$
-  SELECT p_now >= ((p_week_start_date + 3 + time '23:59') AT TIME ZONE 'America/New_York');
+  SELECT p_now >= ((p_week_start_date + 4 + time '00:00') AT TIME ZONE 'America/New_York');
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -160,10 +179,10 @@ $$;
 
 -- ---------------------------------------------------------------------------
 -- 3. submit_rep_report() / resubmit_rejected_rep_report() — error message
--- text only (still "Friday 2:00 PM"); the deadline check itself already
--- goes through rep_report_submission_cutoff_passed (1c above), so no
--- behavioral change here beyond the new Thursday 23:59 timing that
--- function now returns.
+-- text updated to "Thursday 11:59 PM Eastern"; the deadline check itself
+-- already goes through rep_report_submission_cutoff_passed (1c above), so
+-- no behavioral change here beyond the corrected Friday-00:00:00 timing
+-- that function now returns.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.submit_rep_report(p_week_start_date date)
 RETURNS public.rep_reports
@@ -313,34 +332,59 @@ $$;
 -- Not exhaustive (the original migrations' own self-test blocks already
 -- cover DST/advisory-lock/exception edge cases for the surrounding
 -- machinery untouched here) — this focuses on what actually changed.
+--
+-- Beta feedback (2026-11-18): the boundary is "locked once now() reaches
+-- Friday 00:00:00 Eastern" — every instant through Thursday 11:59:59.999
+-- PM must still read as NOT passed, including the entire 11:59 PM minute
+-- itself (previously this incorrectly locked starting at 11:59:00 PM).
 -- ---------------------------------------------------------------------------
 DO $$
 DECLARE
-  v_week date := '2026-01-05'; -- Monday; deadline Thu 2026-01-08
-  v_before timestamptz := (v_week + 3 + time '23:58') AT TIME ZONE 'America/New_York';
-  v_after  timestamptz := (v_week + 3 + time '23:59') AT TIME ZONE 'America/New_York';
+  v_week date := '2026-01-05'; -- Monday; deadline Thu 2026-01-08, lock begins Fri 2026-01-09 00:00:00
+  v_at_1159_00 timestamptz := (v_week + 3 + time '23:59:00') AT TIME ZONE 'America/New_York';
+  v_at_1159_59 timestamptz := (v_week + 3 + time '23:59:59') AT TIME ZONE 'America/New_York';
+  v_at_midnight timestamptz := (v_week + 4 + time '00:00:00') AT TIME ZONE 'America/New_York';
 BEGIN
-  IF public.rep_report_submission_cutoff_passed(v_week, v_before) THEN
-    RAISE EXCEPTION 'SELF_TEST_FAILED: cutoff reported passed one minute before 23:59 Thursday (EST)';
+  IF public.rep_report_submission_cutoff_passed(v_week, v_at_1159_00) THEN
+    RAISE EXCEPTION 'SELF_TEST_FAILED: cutoff reported passed at the START of the 11:59 PM Thursday minute (EST) — must stay open through the whole minute';
   END IF;
-  IF NOT public.rep_report_submission_cutoff_passed(v_week, v_after) THEN
-    RAISE EXCEPTION 'SELF_TEST_FAILED: cutoff reported NOT passed exactly at 23:59 Thursday (EST)';
+  IF public.rep_report_submission_cutoff_passed(v_week, v_at_1159_59) THEN
+    RAISE EXCEPTION 'SELF_TEST_FAILED: cutoff reported passed at the END of the 11:59 PM Thursday minute (EST) — must stay open through the whole minute';
+  END IF;
+  IF NOT public.rep_report_submission_cutoff_passed(v_week, v_at_midnight) THEN
+    RAISE EXCEPTION 'SELF_TEST_FAILED: cutoff reported NOT passed exactly at Friday 00:00:00 (EST) — the lock must begin here';
   END IF;
 
-  -- EDT (summer) week: Monday 2026-07-06, deadline Thu 2026-07-09.
+  -- EDT (summer) week: Monday 2026-07-06, deadline Thu 2026-07-09, lock begins Fri 2026-07-10 00:00:00.
   IF public.rep_report_submission_cutoff_passed(
     '2026-07-06'::date,
-    ('2026-07-09'::date + time '23:58') AT TIME ZONE 'America/New_York'
+    ('2026-07-09'::date + time '23:59:00') AT TIME ZONE 'America/New_York'
   ) THEN
-    RAISE EXCEPTION 'SELF_TEST_FAILED: cutoff reported passed one minute before 23:59 Thursday (EDT)';
+    RAISE EXCEPTION 'SELF_TEST_FAILED: cutoff reported passed at the START of the 11:59 PM Thursday minute (EDT) — must stay open through the whole minute';
+  END IF;
+  IF public.rep_report_submission_cutoff_passed(
+    '2026-07-06'::date,
+    ('2026-07-09'::date + time '23:59:59') AT TIME ZONE 'America/New_York'
+  ) THEN
+    RAISE EXCEPTION 'SELF_TEST_FAILED: cutoff reported passed at the END of the 11:59 PM Thursday minute (EDT) — must stay open through the whole minute';
   END IF;
   IF NOT public.rep_report_submission_cutoff_passed(
     '2026-07-06'::date,
-    ('2026-07-09'::date + time '23:59') AT TIME ZONE 'America/New_York'
+    ('2026-07-10'::date + time '00:00:00') AT TIME ZONE 'America/New_York'
   ) THEN
-    RAISE EXCEPTION 'SELF_TEST_FAILED: cutoff reported NOT passed exactly at 23:59 Thursday (EDT)';
+    RAISE EXCEPTION 'SELF_TEST_FAILED: cutoff reported NOT passed exactly at Friday 00:00:00 (EDT) — the lock must begin here';
   END IF;
 
-  RAISE NOTICE 'SELF_TEST_PASSED: weekly_deadline_and_rep_report_editing cutoff boundary (EST + EDT)';
+  -- manager_report_edit_cutoff_passed() and reports_enforce_manager_edit_cutoff()
+  -- share the identical formula — spot-check the standalone predicate too,
+  -- so a future edit to only one of the two can never silently diverge.
+  IF public.manager_report_edit_cutoff_passed(v_week, v_at_1159_59) THEN
+    RAISE EXCEPTION 'SELF_TEST_FAILED: manager_report_edit_cutoff_passed reported passed during the 11:59 PM Thursday minute (EST)';
+  END IF;
+  IF NOT public.manager_report_edit_cutoff_passed(v_week, v_at_midnight) THEN
+    RAISE EXCEPTION 'SELF_TEST_FAILED: manager_report_edit_cutoff_passed reported NOT passed exactly at Friday 00:00:00 (EST)';
+  END IF;
+
+  RAISE NOTICE 'SELF_TEST_PASSED: weekly_deadline_and_rep_report_editing cutoff boundary (EST + EDT), inclusive of the full 11:59 PM Thursday minute';
 END;
 $$;

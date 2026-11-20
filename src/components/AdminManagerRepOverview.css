@@ -33,14 +33,15 @@
   margin: 0;
 }
 
-/* Summary cards (2026-11-13) — mirrors AdminDashboard.css's own
-   .adp-kpi-row/.adp-kpi-card conventions under this file's own amro-
-   prefix, never sharing or overriding that file's classes. Folded from the
-   same rows already fetched for the table below — see
-   AdminManagerRepOverview.tsx's own `totals` reduce. */
+/* Summary cards (2026-11-13; reduced to 3 cards in the 2026-11-18
+   redesign) — mirrors AdminDashboard.css's own .adp-kpi-row/.adp-kpi-card
+   conventions under this file's own amro- prefix, never sharing or
+   overriding that file's classes. Folded from the same rows already
+   fetched for the list below — see AdminManagerRepOverview.tsx's own
+   `totals` reduce. */
 .amro-summary-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -129,68 +130,49 @@
   color: var(--white);
 }
 
-/* Mobile (below), the overview table scrolls horizontally inside this
-   wrapper rather than reflowing/stacking — the table gained an 8th
-   (Completion) column, and a single-column stacked-card layout would make
-   each row very tall. overflow-x is scoped to this wrapper only, so it
-   can never cause page- or sidebar-level horizontal scrolling. */
-.amro-table-scroll {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+/* Compact manager list (2026-11-18 redesign) — replaces the former wide
+   six-column table. Each Manager is a single flex row that wraps naturally
+   at narrow widths (no horizontal scrolling, no fixed min-width), with a
+   thin progress bar + caption beneath it and an inline-expanding panel of
+   that Manager's Sales Reps below that. */
+.amro-manager-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.amro-table {
+.amro-manager-item {
   border: 1px solid var(--soft-sand);
-  border-radius: 12px;
-  overflow: hidden;
+  border-radius: 10px;
+  padding: 10px 14px 12px;
 }
 
-.amro-table-header-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--warm-cream);
-  border-bottom: 1px solid var(--soft-sand);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted-gray);
-}
-
-.amro-table-header-row-overview {
-  grid-template-columns: 1.8fr 1fr 1fr 1fr 1fr 1fr;
-  min-width: 640px;
-}
-
-.amro-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 12px;
+.amro-manager-toggle {
+  width: 100%;
+  display: flex;
   align-items: center;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--soft-sand);
-}
-
-.amro-row-overview {
-  grid-template-columns: 1.8fr 1fr 1fr 1fr 1fr 1fr;
-  min-width: 640px;
-}
-
-.amro-row:last-child {
-  border-bottom: none;
-}
-
-.amro-row-clickable {
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  font-family: inherit;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  margin: 0;
   cursor: pointer;
-  transition: background 0.15s ease;
+  text-align: left;
+  border-radius: 6px;
 }
 
-.amro-row-clickable:hover,
-.amro-row-clickable:focus-visible {
+.amro-manager-toggle:hover {
   background: var(--warm-cream);
-  outline: none;
+}
+
+.amro-manager-toggle:focus-visible {
+  outline: 2px solid var(--terracotta);
+  outline-offset: 2px;
 }
 
 .amro-cell-person {
@@ -198,6 +180,7 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+  flex: 1 1 200px;
 }
 
 .amro-avatar {
@@ -214,6 +197,12 @@
   flex-shrink: 0;
 }
 
+.amro-avatar-sm {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+
 .amro-person-info {
   display: flex;
   flex-direction: column;
@@ -225,22 +214,117 @@
   font-size: 14px;
   font-weight: 600;
   color: var(--espresso);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .amro-person-email {
   font-size: 12px;
   color: var(--muted-gray);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .amro-person-email-missing {
   font-style: italic;
 }
 
-.amro-cell-count {
-  font-size: 14px;
-  font-weight: 600;
+.amro-manager-stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.amro-stat {
+  font-size: 12px;
+  color: var(--muted-gray);
+  white-space: nowrap;
+}
+
+.amro-stat strong {
   color: var(--espresso);
-  text-align: center;
+  font-weight: 700;
+}
+
+.amro-stat-pct {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--terracotta);
+  min-width: 34px;
+  text-align: right;
+}
+
+.amro-chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--muted-gray);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.amro-chevron-expanded {
+  transform: rotate(180deg);
+}
+
+/* Segmented progress bar — submitted (green) then in-progress (amber),
+   left to right; the remaining, unfilled track width IS the missing
+   portion, so no separate "missing" segment is needed. The caption below
+   it restates all three counts in text, so status is never conveyed by
+   color alone. */
+.amro-progress-track {
+  display: flex;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--soft-sand);
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.amro-progress-segment {
+  height: 100%;
+  flex-shrink: 0;
+}
+
+.amro-progress-submitted {
+  background: var(--green);
+}
+
+.amro-progress-draft {
+  background: var(--amber);
+}
+
+.amro-progress-caption {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--muted-gray);
+}
+
+.amro-expanded {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--soft-sand);
+}
+
+.amro-rep-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.amro-rep-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 4px;
 }
 
 .amro-status-badge {
@@ -268,24 +352,26 @@
   background: rgba(22, 131, 75, 0.12);
 }
 
-/* Tablet — summary cards/filters stay aligned (reflow to a 3-column grid
-   rather than overflowing or squeezing six cards into too little width);
-   the overview table itself is untouched here and already scrolls
-   horizontally (.amro-table-scroll) at every width below its own 760px
-   min-width, not just below this breakpoint. */
-@media (max-width: 860px) {
-  .amro-summary-row {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
+/* Responsive — checked at 1440/1024/768/375. The manager list itself needs
+   no breakpoint of its own: .amro-manager-toggle is a wrapping flex row by
+   default, so the stats cluster naturally drops beneath the name/email at
+   narrow widths with no JS and no horizontal scrolling anywhere on this
+   page. Only the summary cards and search/filter row need adjusting. */
 @media (max-width: 640px) {
-  .amro-summary-row {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
   .amro-search-row {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (max-width: 480px) {
+  .amro-summary-row {
+    grid-template-columns: 1fr;
+  }
+
+  .amro-manager-stats {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
   }
 }

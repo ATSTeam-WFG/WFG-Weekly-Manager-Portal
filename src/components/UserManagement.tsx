@@ -343,7 +343,7 @@ export default function UserManagement({ onBack, currentUserEmail }: UserManagem
 
       <div className="um-header">
         <div className="um-header-titles">
-          <h1>User Management</h1>
+          <h1>Managers</h1>
           <p className="um-header-subtitle">Manage employee access, roles, and weekly reporting permissions.</p>
         </div>
         <button type="button" className="btn btn-primary" onClick={handleOpenAddModal}>

@@ -4,12 +4,23 @@ import { runAutoSubmit, type AutoSubmitQuery } from './_lib/autoSubmit.js'
 import { authenticateRequest } from './_lib/adminAuth.js'
 import { resolveDryRun } from './_lib/requestHelpers.js'
 
-// Beta feedback (2026-11-16): the weekly deadline moved to Thursday
-// 11:59 PM America/New_York — the first moment "past" that instant is
-// 12:00 AM Friday, so this window moved from Friday 3:00-3:14 PM to
-// Friday 12:00-12:14 AM (immediately after the deadline passes). See
-// src/utils/easternTime.ts for why this is DST-safe without any manual
-// UTC-offset math.
+// Beta feedback (2026-11-16, verified 2026-11-18): the weekly deadline
+// moved to Thursday 11:59 PM America/New_York (inclusive of the whole
+// minute — the lock begins at the very next instant), so this window
+// moved from Friday 3:00-3:14 PM to Friday 12:00-12:14 AM (immediately
+// after the lock begins). See src/utils/easternTime.ts for why the
+// Eastern-side check is DST-safe without any manual UTC-offset math.
+//
+// vercel.json's existing cron ("*/5 * * * 5") runs every 5 minutes on
+// UTC FRIDAY — unchanged by this update. Eastern is always UTC-4 (EDT) or
+// UTC-5 (EST), strictly behind UTC, so Eastern Friday 00:00-00:14 always
+// falls a few hours INTO that same UTC Friday (04:00-04:14 EDT, or
+// 05:00-05:14 EST) — never spilling into UTC Thursday or Saturday in
+// either DST state. The cron schedule itself needs no change for this;
+// see src/lib/betaFeedbackUpdatesWiring.test.ts's own dynamically-executed
+// proof of this for both EST and EDT reference weeks, including that
+// getCurrentReportingWeek() still resolves to the week that just closed
+// (not the new Monday's week) when called at this exact instant.
 const AUTO_SUBMIT_WINDOW_WEEKDAY = 'Fri' as const
 const AUTO_SUBMIT_WINDOW_HOUR = 0
 const AUTO_SUBMIT_WINDOW_MINUTE = 0

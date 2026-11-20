@@ -20,9 +20,14 @@ import {
 } from './managerEditLock.ts'
 
 // Same reference instants as easternTime.test.ts / week.test.ts:
-// 2026-01-08 Thursday / EST, 2026-07-09 Thursday / EDT, at 11:59 PM.
+// 2026-01-08 Thursday / EST, 2026-07-09 Thursday / EDT. The lock begins at
+// the FOLLOWING Friday's midnight, not at the start of the 11:59 PM minute
+// (fixed 2026-11-18) — both instants are kept here so tests can assert the
+// whole minute stays open.
 const EST_THU_1159PM_UTC = '2026-01-09T04:59:00.000Z'
+const EST_FRI_MIDNIGHT_UTC = '2026-01-09T05:00:00.000Z'
 const EDT_THU_1159PM_UTC = '2026-07-10T03:59:00.000Z'
+const EDT_FRI_MIDNIGHT_UTC = '2026-07-10T04:00:00.000Z'
 
 function minutesFrom(iso: string, offsetMinutes: number): Date {
   return new Date(new Date(iso).getTime() + offsetMinutes * 60_000)
@@ -40,49 +45,57 @@ describe('cutoff constant matches the approved business rule', () => {
   })
 })
 
-for (const [label, base] of [
-  ['EST (January)', EST_THU_1159PM_UTC],
-  ['EDT (July)', EDT_THU_1159PM_UTC],
+for (const [label, elevenFiftyNine, midnight] of [
+  ['EST (January)', EST_THU_1159PM_UTC, EST_FRI_MIDNIGHT_UTC],
+  ['EDT (July)', EDT_THU_1159PM_UTC, EDT_FRI_MIDNIGHT_UTC],
 ] as const) {
   describe(`getManagerWriteLockReason — ${label}`, () => {
     test('Thursday 11:59 AM: neither a new nor an existing report is locked', () => {
-      const t = minutesFrom(base, -12 * 60 - 1)
+      const t = minutesFrom(elevenFiftyNine, -12 * 60 - 1)
       assert.equal(getManagerWriteLockReason(true, t), null)
       assert.equal(getManagerWriteLockReason(false, t), null)
     })
 
-    test('Thursday 11:58:59 PM: still editable, one second before the cutoff', () => {
-      const t = secondsFrom(base, -1)
+    test('Thursday 11:58:59 PM: still editable, one second before the deadline minute', () => {
+      const t = secondsFrom(elevenFiftyNine, -1)
       assert.equal(getManagerWriteLockReason(true, t), null)
       assert.equal(getManagerWriteLockReason(false, t), null)
     })
 
-    test('Thursday exactly 11:59:00 PM: BOTH a brand-new report and an existing report are edit_locked — one single cutoff', () => {
-      const t = new Date(base)
+    test('Thursday 11:59:00 PM through 11:59:59 PM (the whole deadline minute): still editable, not yet locked', () => {
+      for (const offset of [0, 30, 59]) {
+        const t = secondsFrom(elevenFiftyNine, offset)
+        assert.equal(getManagerWriteLockReason(true, t), null, `isNewReport=true at +${offset}s`)
+        assert.equal(getManagerWriteLockReason(false, t), null, `isNewReport=false at +${offset}s`)
+      }
+    })
+
+    test('Friday exactly 12:00:00 AM: BOTH a brand-new report and an existing report are edit_locked — the lock begins here, one single cutoff', () => {
+      const t = new Date(midnight)
       assert.equal(getManagerWriteLockReason(true, t), 'edit_locked')
       assert.equal(getManagerWriteLockReason(false, t), 'edit_locked')
     })
 
-    test('Friday: both remain edit_locked', () => {
-      const t = minutesFrom(base, 60)
+    test('Friday after midnight: both remain edit_locked', () => {
+      const t = minutesFrom(midnight, 60)
       assert.equal(getManagerWriteLockReason(true, t), 'edit_locked')
       assert.equal(getManagerWriteLockReason(false, t), 'edit_locked')
     })
 
     test('Saturday: both remain edit_locked — the weekend lock is unaffected by this change', () => {
-      const t = minutesFrom(base, 24 * 60)
+      const t = minutesFrom(midnight, 24 * 60)
       assert.equal(getManagerWriteLockReason(true, t), 'edit_locked')
       assert.equal(getManagerWriteLockReason(false, t), 'edit_locked')
     })
 
     test('Sunday: both remain edit_locked — the weekend lock is unaffected by this change', () => {
-      const t = minutesFrom(base, 2 * 24 * 60)
+      const t = minutesFrom(midnight, 2 * 24 * 60)
       assert.equal(getManagerWriteLockReason(true, t), 'edit_locked')
       assert.equal(getManagerWriteLockReason(false, t), 'edit_locked')
     })
 
     test('Monday (new reporting week): neither is locked — the lock does not carry into the next week', () => {
-      const t = minutesFrom(base, 4 * 24 * 60)
+      const t = minutesFrom(midnight, 3 * 24 * 60)
       assert.equal(getManagerWriteLockReason(true, t), null)
       assert.equal(getManagerWriteLockReason(false, t), null)
     })
