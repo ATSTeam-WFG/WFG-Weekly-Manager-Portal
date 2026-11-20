@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   fetchMyCurrentReps,
   fetchRepReport,
   fetchRepReportReviewHistory,
-  reviewSalesRepReport,
+  fetchRepReportFeedback,
+  addRepReportFeedback,
   RepReportError,
   type RepReport,
   type RepReportReviewHistoryEntry,
+  type RepReportFeedbackEntry,
 } from '../lib/repReportsService'
 import { fetchProfilesByIds, type RepProfileSummary } from '../lib/repRosterService'
 import { getReportingWeekByOffset } from '../utils/week'
@@ -15,7 +17,7 @@ import type { SalesRepReportSections } from '../types'
 import './MyReps.css'
 
 // Phase 1B's small, additive Manager-facing screen: see assigned reps'
-// weekly status and review (approve/reject) a submitted report. This is
+// weekly status and leave optional feedback on a submitted report. This is
 // deliberately NOT a replacement for Dashboard/AdminDashboard — it's a
 // self-contained, droppable component (managerId + onBack only) that a
 // caller navigates to alongside a manager's own report dashboard; wiring it
@@ -25,22 +27,26 @@ import './MyReps.css'
 // summary counts below — both self-contained (weekOffset is local state,
 // exactly like every other week-nav screen in this app — AdminDashboard,
 // WeeklySummary, LeadershipReportCurrent/History all do the same), so
-// nothing about this component's props or its caller changed. The summary
-// counts reuse deriveRepReportBucket from repReportBucket.ts (the exact
-// same function src/components/AdminManagerRepOverview.tsx's Leadership
-// Dashboard rollup uses), so a given Manager's numbers here and on the
-// Leadership Dashboard's drill-down always agree — never two independent
-// calculations of the same thing.
+// nothing about this component's props or its caller changed.
+//
+// Beta feedback (2026-11-16): the Approve/Reject decision workflow is
+// replaced by an optional, non-blocking "Provide Feedback" action (see
+// ReportFeedbackPanel below). Status is now a plain 3-way
+// not_started/draft/submitted split (deriveRepReportBucket,
+// repReportBucket.ts) — review_status no longer gates or labels anything
+// here. Existing historical review decisions are still visible (read-only,
+// see ReportFeedbackPanel's "Past Decisions" section) — nothing was
+// deleted, only the active decision UI.
 
 interface MyRepsProps {
   managerId: string
   onBack: () => void
   // Additive, optional (2026-11-13) — when true, renders only the
-  // search/filter row + table + review panel, for embedding inside the
+  // search/filter row + table + feedback panel, for embedding inside the
   // Manager Dashboard overview (which already shows its own heading/KPI
   // summary above). onBack is still required and still wired by every
   // caller (the Team Reports destination still needs it); it is simply
-  // never rendered/reachable in embedded mode. No fetch, review, or
+  // never rendered/reachable in embedded mode. No fetch, feedback, or
   // permission logic changes based on this flag — purely a presentation
   // toggle.
   embedded?: boolean
@@ -66,36 +72,16 @@ function getInitials(name: string | null): string {
   return initials || '?'
 }
 
-// A rep with no report yet this week (fetchRepReport returned null) shows
-// "Not Started" and is never clickable — nothing exists to review. A
-// 'draft' report is shown (a manager CAN see a draft per
-// rep_reports_select_assigned_manager) but is also never clickable for
-// review: review_rep_report itself rejects a non-submitted report with
-// INVALID_STATE, so no review action is ever offered for one here.
 function rowStatusLabel(report: RepReport | null): string {
   if (!report) return 'Not Started'
   if (report.status === 'draft') return 'Draft (not yet submitted)'
-  if (report.reviewStatus === 'approved') return 'Approved'
-  if (report.reviewStatus === 'rejected') return 'Rejected'
-  return 'Submitted — Pending Review'
+  return 'Submitted'
 }
 
 function rowStatusClass(report: RepReport | null): string {
   if (!report) return 'myreps-status-not-started'
   if (report.status === 'draft') return 'myreps-status-draft'
-  if (report.reviewStatus === 'approved') return 'myreps-status-approved'
-  if (report.reviewStatus === 'rejected') return 'myreps-status-rejected'
-  return 'myreps-status-pending'
-}
-
-// The single gate for "can this row be opened for review" — a report must
-// exist AND currently be submitted. Re-reviewing/revising an
-// already-approved or already-rejected decision is explicitly supported
-// (reviewSalesRepReport appends to history rather than erroring) and is
-// still allowed here, since the report's status stays 'submitted' through
-// every review/re-review; only a 'draft' report is excluded.
-function isReviewable(report: RepReport | null): report is RepReport {
-  return report !== null && report.status === 'submitted'
+  return 'myreps-status-approved'
 }
 
 function formatDateTime(iso: string | null): string {
@@ -108,20 +94,18 @@ function formatDateTime(iso: string | null): string {
   })
 }
 
-function reviewErrorMessage(err: unknown): string {
+function feedbackErrorMessage(err: unknown): string {
   if (err instanceof RepReportError) {
     switch (err.code) {
-      case 'REASON_REQUIRED':
-        return 'Please provide a reason before submitting your decision.'
-      case 'INVALID_STATE':
-        return "This report is no longer submitted, so it can't be reviewed right now."
+      case 'FEEDBACK_REQUIRED':
+        return 'Please enter some feedback before sending.'
       case 'FORBIDDEN':
-        return "You don't currently have permission to review this rep's reports."
+        return "You don't currently have permission to leave feedback on this rep's report."
       default:
-        return err.message || 'Something went wrong while recording your decision. Please try again.'
+        return err.message || 'Something went wrong while sending your feedback. Please try again.'
     }
   }
-  return err instanceof Error ? err.message : 'Something went wrong while recording your decision. Please try again.'
+  return err instanceof Error ? err.message : 'Something went wrong while sending your feedback. Please try again.'
 }
 
 const SECTION_LIST_FIELDS: {
@@ -198,20 +182,16 @@ export default function MyReps({ managerId, onBack, embedded = false }: MyRepsPr
   const handleRetry = () => setReloadToken((t) => t + 1)
 
   // Summary counts for the selected week — reuses deriveRepReportBucket
-  // (see this file's header comment) rather than rowStatusLabel/
-  // rowStatusClass below: those two intentionally stay more granular
-  // (distinguishing "not started" from "draft, never submitted") for the
-  // per-row display, while the summary only needs the 4-bucket rollup that
-  // matches the Leadership Dashboard's own counts for this same Manager.
+  // (see this file's header comment), now a plain 3-way
+  // missing/draft/submitted rollup.
   const summaryCounts = rows.reduce(
     (acc, row) => {
       const bucket = deriveRepReportBucket(row.report)
       acc[bucket] += 1
       return acc
     },
-    { missing: 0, pending: 0, approved: 0, rejected: 0 } as Record<RepReportBucket, number>,
+    { missing: 0, draft: 0, submitted: 0 } as Record<RepReportBucket, number>,
   )
-  const submittedCount = summaryCounts.pending + summaryCounts.approved + summaryCounts.rejected
 
   // Additive, client-side only — search/filter never change which rows were
   // fetched (still every rep RLS already scoped to this Manager), only which
@@ -227,17 +207,13 @@ export default function MyReps({ managerId, onBack, embedded = false }: MyRepsPr
 
   const selectedRow = rows.find((r) => r.repId === selectedRepId) ?? null
 
-  const handleReviewed = useCallback((updated: RepReport) => {
-    setRows((prev) => prev.map((r) => (r.repId === updated.repId ? { ...r, report: updated } : r)))
-  }, [])
-
   return (
     <div className={embedded ? 'myreps-embedded' : 'myreps-page'}>
       {!embedded && (
         <div className="myreps-top-row">
           <div className="myreps-header-titles">
             <h1>My Reps</h1>
-            <p className="myreps-header-subtitle">See this week's status for your assigned reps and review what they've submitted.</p>
+            <p className="myreps-header-subtitle">See this week's status for your assigned reps and leave feedback on what they've submitted.</p>
           </div>
           <div className="myreps-top-row-right">
             <button type="button" className="btn btn-secondary" onClick={onBack}>
@@ -260,10 +236,7 @@ export default function MyReps({ managerId, onBack, embedded = false }: MyRepsPr
                     is selected — only visibility toggles, via a new,
                     MyReps-scoped modifier class (myreps-week-current-badge-
                     hidden, in MyReps.css), never the shared, DO-NOT-MODIFY
-                    .week-current-badge rule in AdminDashboard.css. Omitting
-                    this element entirely (the previous `isCurrentWeek &&`
-                    guard) was the root cause of Team Reports visibly
-                    reflowing to a different layout between weeks. */}
+                    .week-current-badge rule in AdminDashboard.css. */}
                 <span className={`week-current-badge${isCurrentWeek ? '' : ' myreps-week-current-badge-hidden'}`}>Current</span>
               </span>
               <button
@@ -289,20 +262,12 @@ export default function MyReps({ managerId, onBack, embedded = false }: MyRepsPr
             <span className="myreps-summary-label">Total Assigned</span>
           </div>
           <div className="myreps-summary-card">
-            <span className="myreps-summary-value">{submittedCount}</span>
+            <span className="myreps-summary-value">{summaryCounts.submitted}</span>
             <span className="myreps-summary-label">Submitted</span>
           </div>
           <div className="myreps-summary-card">
-            <span className="myreps-summary-value">{summaryCounts.pending}</span>
-            <span className="myreps-summary-label">Pending Review</span>
-          </div>
-          <div className="myreps-summary-card">
-            <span className="myreps-summary-value">{summaryCounts.approved}</span>
-            <span className="myreps-summary-label">Approved</span>
-          </div>
-          <div className="myreps-summary-card">
-            <span className="myreps-summary-value">{summaryCounts.rejected}</span>
-            <span className="myreps-summary-label">Needs Correction</span>
+            <span className="myreps-summary-value">{summaryCounts.draft}</span>
+            <span className="myreps-summary-label">In Progress</span>
           </div>
           <div className="myreps-summary-card">
             <span className="myreps-summary-value">{summaryCounts.missing}</span>
@@ -336,10 +301,9 @@ export default function MyReps({ managerId, onBack, embedded = false }: MyRepsPr
             {(
               [
                 { key: 'all', label: 'All' },
+                { key: 'submitted', label: 'Submitted' },
+                { key: 'draft', label: 'In Progress' },
                 { key: 'missing', label: 'Missing' },
-                { key: 'pending', label: 'Pending Review' },
-                { key: 'approved', label: 'Approved' },
-                { key: 'rejected', label: 'Needs Correction' },
               ] as { key: 'all' | RepReportBucket; label: string }[]
             ).map((f) => (
               <button
@@ -366,19 +330,19 @@ export default function MyReps({ managerId, onBack, embedded = false }: MyRepsPr
               <span role="columnheader">Rep</span>
               <span role="columnheader">This Week's Status</span>
               <span role="columnheader">Submitted</span>
-              <span role="columnheader">Review</span>
+              <span role="columnheader">Feedback</span>
             </div>
             {filteredRows.map((row) => {
-              const reviewable = isReviewable(row.report)
+              const hasReport = row.report !== null
               return (
                 <div
                   key={row.repId}
-                  className={`myreps-row ${reviewable ? 'myreps-row-reviewable' : ''}`}
-                  role={reviewable ? 'button' : undefined}
-                  tabIndex={reviewable ? 0 : undefined}
-                  onClick={reviewable ? () => setSelectedRepId(row.repId) : undefined}
+                  className={`myreps-row ${hasReport ? 'myreps-row-reviewable' : ''}`}
+                  role={hasReport ? 'button' : undefined}
+                  tabIndex={hasReport ? 0 : undefined}
+                  onClick={hasReport ? () => setSelectedRepId(row.repId) : undefined}
                   onKeyDown={
-                    reviewable
+                    hasReport
                       ? (e) => {
                           if (e.key === 'Enter' || e.key === ' ') setSelectedRepId(row.repId)
                         }
@@ -403,7 +367,7 @@ export default function MyReps({ managerId, onBack, embedded = false }: MyRepsPr
                     {row.report?.submittedAt ? formatDateTime(row.report.submittedAt) : <span className="myreps-dash">—</span>}
                   </div>
                   <div className="myreps-cell" role="cell">
-                    {reviewable ? <span className="myreps-view-link">Review &rarr;</span> : <span className="myreps-dash">—</span>}
+                    {hasReport ? <span className="myreps-view-link">View &amp; Feedback &rarr;</span> : <span className="myreps-dash">—</span>}
                   </div>
                 </div>
               )
@@ -411,34 +375,60 @@ export default function MyReps({ managerId, onBack, embedded = false }: MyRepsPr
           </div>
         ))}
 
-      {selectedRow && isReviewable(selectedRow.report) && (
-        <ReportReviewPanel
+      {selectedRow && selectedRow.report && (
+        <ReportFeedbackPanel
           repName={selectedRow.fullName || 'Unnamed Rep'}
           report={selectedRow.report}
           onClose={() => setSelectedRepId(null)}
-          onReviewed={handleReviewed}
         />
       )}
     </div>
   )
 }
 
-interface ReportReviewPanelProps {
+interface ReportFeedbackPanelProps {
   repName: string
   report: RepReport
   onClose: () => void
-  onReviewed: (updated: RepReport) => void
 }
 
-type HistoryState = 'loading' | 'error' | 'ready'
+type PanelListState = 'loading' | 'error' | 'ready'
 
-function ReportReviewPanel({ repName, report, onClose, onReviewed }: ReportReviewPanelProps) {
-  const [historyState, setHistoryState] = useState<HistoryState>('loading')
+// Replaces the old Approve/Reject review panel. Feedback is optional
+// and non-blocking — closing without sending anything is always allowed,
+// and sending feedback never changes the report's status in any way (see
+// add_rep_report_feedback's own SQL comment). Past approve/reject
+// decisions, if any exist on this report from before this change, remain
+// visible read-only below the feedback section — nothing historical was
+// deleted.
+function ReportFeedbackPanel({ repName, report, onClose }: ReportFeedbackPanelProps) {
+  const [feedbackState, setFeedbackState] = useState<PanelListState>('loading')
+  const [feedbackEntries, setFeedbackEntries] = useState<RepReportFeedbackEntry[]>([])
+  const [historyState, setHistoryState] = useState<PanelListState>('loading')
   const [history, setHistory] = useState<RepReportReviewHistoryEntry[]>([])
-  const [historyReloadToken, setHistoryReloadToken] = useState(0)
-  const [reason, setReason] = useState('')
-  const [submitting, setSubmitting] = useState<'approved' | 'rejected' | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
+  const [feedbackText, setFeedbackText] = useState('')
+  const [sending, setSending] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [sentNotice, setSentNotice] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    setFeedbackState('loading')
+    fetchRepReportFeedback(report.id)
+      .then((entries) => {
+        if (!active) return
+        setFeedbackEntries(entries)
+        setFeedbackState('ready')
+      })
+      .catch(() => {
+        if (!active) return
+        setFeedbackState('error')
+      })
+    return () => {
+      active = false
+    }
+  }, [report.id, reloadToken])
 
   useEffect(() => {
     let active = true
@@ -456,34 +446,32 @@ function ReportReviewPanel({ repName, report, onClose, onReviewed }: ReportRevie
     return () => {
       active = false
     }
-  }, [report.id, historyReloadToken])
+  }, [report.id])
 
-  // Client-side convenience only — a mandatory, non-empty reason before the
-  // button is even enabled. The server independently enforces
-  // REASON_REQUIRED regardless, so this never substitutes for that check.
-  const trimmedReason = reason.trim()
-  const canSubmit = trimmedReason.length > 0 && submitting === null
+  const trimmedFeedback = feedbackText.trim()
+  const canSend = trimmedFeedback.length > 0 && !sending
 
-  const handleDecision = async (decision: 'approved' | 'rejected') => {
-    if (!canSubmit) return
-    setSubmitting(decision)
+  const handleSend = async () => {
+    if (!canSend) return
+    setSending(true)
     setActionError(null)
+    setSentNotice(false)
     try {
-      const updated = await reviewSalesRepReport(report.id, decision, trimmedReason)
-      onReviewed(updated)
-      setReason('')
-      setHistoryReloadToken((t) => t + 1)
+      await addRepReportFeedback(report.id, trimmedFeedback)
+      setFeedbackText('')
+      setSentNotice(true)
+      setReloadToken((t) => t + 1)
     } catch (err) {
-      setActionError(reviewErrorMessage(err))
+      setActionError(feedbackErrorMessage(err))
     } finally {
-      setSubmitting(null)
+      setSending(false)
     }
   }
 
   const content: SalesRepReportSections = report.content
 
   return (
-    <div className="myreps-overlay" role="dialog" aria-modal="true" aria-label={`Review ${repName}'s report`}>
+    <div className="myreps-overlay" role="dialog" aria-modal="true" aria-label={`${repName}'s report`}>
       <div className="myreps-panel">
         <div className="myreps-panel-header">
           <h2>{repName}'s Report</h2>
@@ -514,20 +502,63 @@ function ReportReviewPanel({ repName, report, onClose, onReviewed }: ReportRevie
           </div>
 
           <div className="myreps-section myreps-review-history">
-            <h3>Review History</h3>
-            {historyState === 'loading' && <p className="myreps-section-empty">Loading review history…</p>}
-            {historyState === 'error' && (
+            <h3>Feedback</h3>
+            {feedbackState === 'loading' && <p className="myreps-section-empty">Loading feedback…</p>}
+            {feedbackState === 'error' && (
               <p className="myreps-section-empty">
-                Could not load review history.{' '}
-                <button type="button" className="myreps-inline-retry" onClick={() => setHistoryReloadToken((t) => t + 1)}>
+                Could not load feedback.{' '}
+                <button type="button" className="myreps-inline-retry" onClick={() => setReloadToken((t) => t + 1)}>
                   Retry
                 </button>
               </p>
             )}
-            {historyState === 'ready' &&
-              (history.length === 0 ? (
-                <p className="myreps-section-empty">No review decisions recorded yet.</p>
+            {feedbackState === 'ready' &&
+              (feedbackEntries.length === 0 ? (
+                <p className="myreps-section-empty">No feedback left yet.</p>
               ) : (
+                <ul className="myreps-history-list">
+                  {feedbackEntries.map((entry) => (
+                    <li key={entry.id} className="myreps-history-entry">
+                      <span className="myreps-history-reason">{entry.feedback}</span>
+                      <span className="myreps-history-date">{formatDateTime(entry.createdAt)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ))}
+          </div>
+
+          {/* Optional, never blocking — closing this panel without sending
+              anything is always allowed, and this never changes
+              report.status/reviewStatus. Available for a draft or a
+              submitted report alike. */}
+          <div className="myreps-section myreps-review-action">
+            <h3>Provide Feedback (optional)</h3>
+            <textarea
+              className="myreps-reason-input"
+              placeholder="Leave feedback for this rep (optional)"
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+              rows={3}
+              disabled={sending}
+            />
+            {actionError && <p className="myreps-action-error">{actionError}</p>}
+            {sentNotice && !actionError && <p className="myreps-section-empty">Feedback sent.</p>}
+            <div className="myreps-review-buttons">
+              <button type="button" className="btn btn-primary myreps-approve-btn" disabled={!canSend} onClick={handleSend}>
+                {sending ? 'Sending…' : 'Send Feedback'}
+              </button>
+            </div>
+          </div>
+
+          {history.length > 0 && (
+            <div className="myreps-section myreps-review-history">
+              <h3>Review History (Past Decisions)</h3>
+              <p className="myreps-section-empty">
+                These decisions were recorded before the approval workflow was replaced with feedback. They're kept here for reference only.
+              </p>
+              {historyState === 'loading' && <p className="myreps-section-empty">Loading…</p>}
+              {historyState === 'error' && <p className="myreps-section-empty">Could not load past decisions.</p>}
+              {historyState === 'ready' && (
                 <ul className="myreps-history-list">
                   {history.map((entry) => (
                     <li key={entry.id} className={`myreps-history-entry myreps-history-${entry.reviewStatus}`}>
@@ -537,46 +568,7 @@ function ReportReviewPanel({ repName, report, onClose, onReviewed }: ReportRevie
                     </li>
                   ))}
                 </ul>
-              ))}
-          </div>
-
-          {/* Review controls (Approve/Reject) only ever render here, inside
-              ReportReviewPanel — and ReportReviewPanel itself is only ever
-              mounted by MyReps when status === 'submitted' (see
-              isReviewable above and its use gating <ReportReviewPanel>), so
-              a 'draft' report can never reach this block. Re-reviewing an
-              already-approved/rejected decision is intentionally still
-              allowed (status stays 'submitted' through every revision). */}
-          {report.status === 'submitted' && (
-            <div className="myreps-section myreps-review-action">
-              <h3>Your Decision</h3>
-              <textarea
-                className="myreps-reason-input"
-                placeholder="Reason for your decision (required)"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                rows={3}
-                disabled={submitting !== null}
-              />
-              {actionError && <p className="myreps-action-error">{actionError}</p>}
-              <div className="myreps-review-buttons">
-                <button
-                  type="button"
-                  className="btn btn-secondary myreps-reject-btn"
-                  disabled={!canSubmit}
-                  onClick={() => handleDecision('rejected')}
-                >
-                  {submitting === 'rejected' ? 'Rejecting…' : 'Reject'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary myreps-approve-btn"
-                  disabled={!canSubmit}
-                  onClick={() => handleDecision('approved')}
-                >
-                  {submitting === 'approved' ? 'Approving…' : 'Approve'}
-                </button>
-              </div>
+              )}
             </div>
           )}
         </div>

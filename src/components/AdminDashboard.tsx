@@ -6,7 +6,7 @@ import AdminManagerRepOverview from './AdminManagerRepOverview'
 import { getReminderTargets, type ReminderTarget } from '../lib/reminderService'
 import { supabase } from '../lib/supabaseClient'
 import { getDaysUntilDeadline, type ReportingWeek } from '../utils/week'
-import { isPastEasternCutoff } from '../utils/easternTime'
+import { isPastEasternCutoff, WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE } from '../utils/easternTime'
 import { getInitials } from '../utils/initials'
 import './AdminDashboard.css'
 
@@ -72,12 +72,12 @@ export default function AdminDashboard({
 
   const daysLeft = getDaysUntilDeadline(week.fridayDate)
   // getDaysUntilDeadline is calendar-day granularity only (it returns 0 for
-  // all of Friday, from 12:00 AM through 11:59 PM) — it was never meant to
-  // answer "has the 3:00 PM deadline itself passed". That real, time-of-day
-  // question is answered by isPastEasternCutoff, the same DST-safe check
-  // the 4:00 PM manager write lock and the "late edit window" notice
-  // already use elsewhere in this app.
-  const isPastDeadline = isPastEasternCutoff(15, 0)
+  // all of the deadline's own day, from 12:00 AM through 11:59 PM) — it was
+  // never meant to answer "has the 11:59 PM deadline itself passed". That
+  // real, time-of-day question is answered by isPastEasternCutoff, the
+  // same DST-safe check the Manager/Sales-Rep write locks use elsewhere in
+  // this app.
+  const isPastDeadline = isPastEasternCutoff(WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE)
   const isDueToday = !isPastDeadline && daysLeft <= 0
 
   useEffect(() => {
@@ -223,7 +223,7 @@ export default function AdminDashboard({
                 <path d="M16 3v4M8 3v4M3 10h18" />
               </svg>
             </span>
-            <span className="adp-deadline-label">Friday Deadline</span>
+            <span className="adp-deadline-label">Weekly Deadline</span>
             <span className="adp-deadline-divider" aria-hidden="true" />
             <span className="adp-deadline-value">Due {week.deadlineLabel}</span>
             <span className={`adp-deadline-status${isPastDeadline ? ' adp-deadline-status-passed' : ''}`}>

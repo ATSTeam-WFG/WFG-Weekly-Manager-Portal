@@ -129,7 +129,13 @@ describe('adminRepVisibilityService.ts — overview reuses fetchActiveManagers (
     assert.doesNotMatch(match[0], /\.from\('profiles'\)/)
   })
 
-  test('submittedCount is computed as pending + approved + rejected, never an independent count', () => {
-    assert.match(serviceSrc, /submittedCount: pendingCount \+ approvedCount \+ rejectedCount,/)
+  // Beta feedback (2026-11-16): collapsed from the old
+  // pending/approved/rejected breakdown to a plain submitted/draft/missing
+  // split — review_status no longer gates or labels anything.
+  test('submittedCount/draftCount/missingCount are mutually exclusive buckets, folded from deriveRepReportBucket', () => {
+    assert.match(serviceSrc, /if \(bucket === 'submitted'\) submittedCount\+\+/)
+    assert.match(serviceSrc, /else if \(bucket === 'draft'\) draftCount\+\+/)
+    assert.match(serviceSrc, /else missingCount\+\+/)
+    assert.doesNotMatch(serviceSrc, /pendingCount|approvedCount|rejectedCount/)
   })
 })

@@ -91,8 +91,10 @@ const REP_REPORT_COLUMNS =
 
 // The RPC layer raises 'CODE: message' (FORBIDDEN, NOT_FOUND,
 // REP_STATUS_REGRESSION_BLOCKED, SUBMISSION_DEADLINE_PASSED,
-// INVALID_STATE, INVALID_REVIEW_STATUS, REASON_REQUIRED) — the same
-// convention as every other RPC in this project (see
+// INVALID_STATE, INVALID_REVIEW_STATUS, REASON_REQUIRED, and — beta
+// feedback, 2026-11-16 — EDIT_LOCKED from save_rep_report_draft's new
+// deadline gate, FEEDBACK_REQUIRED from add_rep_report_feedback) — the
+// same convention as every other RPC in this project (see
 // leadershipReportDraftService.ts's own parseRpcError, mirrored here rather
 // than imported, so this module has zero dependency on that one).
 export type RepReportErrorCode =
@@ -103,6 +105,8 @@ export type RepReportErrorCode =
   | 'INVALID_STATE'
   | 'INVALID_REVIEW_STATUS'
   | 'REASON_REQUIRED'
+  | 'EDIT_LOCKED'
+  | 'FEEDBACK_REQUIRED'
   | 'UNKNOWN'
 
 export class RepReportError extends Error {
@@ -158,9 +162,15 @@ export async function fetchRepReportHistory(repId: string): Promise<RepReport[]>
   return (data ?? []).map((row) => fromRow(row as RepReportRow))
 }
 
-// The only write path for a draft (new or edited, including the
-// post-rejection correction case). Caller identity/role/ownership are all
-// re-derived server-side from auth.uid() — repId is never sent.
+// The only write path for a report's content — a brand-new draft, an
+// edit to an existing draft, OR (beta feedback, 2026-11-16) an edit to an
+// already-submitted report, up until the same Thursday 11:59 PM Eastern
+// deadline that gates everything else. Editing a submitted report is a
+// content-only update server-side: status/submitted_at/first_submitted_at/
+// review_status are never touched, and it can never create a duplicate
+// weekly report (still keyed by the same (rep_id, week_start_date)
+// uniqueness). Caller identity/role/ownership are all re-derived
+// server-side from auth.uid() — repId is never sent.
 export async function saveSalesRepReportDraft(weekStartDate: string, content: SalesRepReportSections): Promise<RepReport> {
   const { data, error } = await supabase.rpc('save_rep_report_draft', {
     p_week_start_date: weekStartDate,
@@ -170,8 +180,8 @@ export async function saveSalesRepReportDraft(weekStartDate: string, content: Sa
   return fromRow(data as RepReportRow)
 }
 
-// First submission of a draft (draft -> submitted). Subject to the Friday
-// 2:00 PM Eastern cutoff server-side — see repReportLock.ts for the
+// First submission of a draft (draft -> submitted). Subject to the Thursday
+// 11:59 PM Eastern cutoff server-side — see repReportLock.ts for the
 // client-side UX mirror of the same cutoff.
 export async function submitSalesRepReport(weekStartDate: string): Promise<RepReport> {
   const { data, error } = await supabase.rpc('submit_rep_report', { p_week_start_date: weekStartDate })
@@ -179,20 +189,28 @@ export async function submitSalesRepReport(weekStartDate: string): Promise<RepRe
   return fromRow(data as RepReportRow)
 }
 
-// The correction path: moves a REJECTED, submitted report back to pending
-// review. Edit the content via saveSalesRepReportDraft FIRST — this RPC
-// takes no content, only transitions lifecycle state. Subject to the same
-// Friday 2:00 PM Eastern cutoff + single-use admin exception as a first
-// submission.
+// A legacy correction path from the pre-feedback review workflow: moves a
+// REJECTED, submitted report back to pending review. Kept, unused by any
+// current UI (editing an already-submitted report now goes through
+// saveSalesRepReportDraft directly, regardless of review_status) — never
+// deleted, since historical rejected/resubmitted reports and their audit
+// trail remain exactly as they were. Edit the content via
+// saveSalesRepReportDraft FIRST — this RPC takes no content, only
+// transitions lifecycle state. Subject to the same Thursday 11:59 PM
+// Eastern cutoff + single-use admin exception as a first submission.
 export async function resubmitRejectedSalesRepReport(weekStartDate: string): Promise<RepReport> {
   const { data, error } = await supabase.rpc('resubmit_rejected_rep_report', { p_week_start_date: weekStartDate })
   if (error) throw parseRpcError(error.message)
   return fromRow(data as RepReportRow)
 }
 
-// Manager (current assignment only) or admin: approve/reject, and every
-// later revision of that decision. p_reason is mandatory and non-empty,
-// enforced server-side.
+// A legacy approve/reject decision path from the pre-feedback review
+// workflow. Kept, unused by any current UI (replaced by
+// addRepReportFeedback, an optional/non-blocking action) — never deleted,
+// since every historical approval/rejection and its audit trail remain
+// exactly as they were. Manager (current assignment only) or admin:
+// approve/reject, and every later revision of that decision. p_reason is
+// mandatory and non-empty, enforced server-side.
 export async function reviewSalesRepReport(
   reportId: string,
   reviewStatus: Extract<RepReportReviewStatus, 'approved' | 'rejected'>,
@@ -382,6 +400,60 @@ export async function fetchRepReportReviewHistory(reportId: string): Promise<Rep
       reviewedBy: r.reviewed_by,
       reviewedAt: r.reviewed_at,
     }
+  })
+}
+
+// Beta feedback (2026-11-16) — the optional, non-blocking replacement for
+// Approve/Reject. Never touches rep_reports.status/review_status at all
+// (see add_rep_report_feedback's own SQL comment); a rep_report_feedback
+// row is purely informational and never gates submission, editing, or
+// viewing a report.
+export interface RepReportFeedbackEntry {
+  id: string
+  reportId: string
+  feedback: string
+  authorId: string
+  createdAt: string
+}
+
+interface RepReportFeedbackRow {
+  id: string
+  report_id: string
+  feedback: string
+  author_id: string
+  created_at: string
+}
+
+// The sole write path — Manager (currently assigned) or Admin, mirroring
+// review_rep_report's own authorization gate exactly, but with no status
+// requirement: feedback may be left on a draft or a submitted report
+// alike.
+export async function addRepReportFeedback(reportId: string, feedback: string): Promise<RepReportFeedbackEntry> {
+  const { data, error } = await supabase.rpc('add_rep_report_feedback', {
+    p_report_id: reportId,
+    p_feedback: feedback,
+  })
+  if (error) throw parseRpcError(error.message)
+  const r = data as RepReportFeedbackRow
+  return { id: r.id, reportId: r.report_id, feedback: r.feedback, authorId: r.author_id, createdAt: r.created_at }
+}
+
+// Read-only, append-only — every feedback entry ever left on one report,
+// oldest first.
+export async function fetchRepReportFeedback(reportId: string): Promise<RepReportFeedbackEntry[]> {
+  const { data, error } = await supabase
+    .from('rep_report_feedback')
+    .select('id, report_id, feedback, author_id, created_at')
+    .eq('report_id', reportId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('Failed to fetch rep report feedback:', error.message)
+    return []
+  }
+  return (data ?? []).map((row) => {
+    const r = row as RepReportFeedbackRow
+    return { id: r.id, reportId: r.report_id, feedback: r.feedback, authorId: r.author_id, createdAt: r.created_at }
   })
 }
 

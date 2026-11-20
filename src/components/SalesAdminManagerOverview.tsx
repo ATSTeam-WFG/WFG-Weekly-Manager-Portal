@@ -16,11 +16,13 @@ import './SalesAdminManagerOverview.css'
 // anywhere on this screen, matching SalesAdminReports.tsx's own established
 // design principle. Week selection is local state, same pattern as
 // AdminDashboard/MyReps/LeadershipReportCurrent/WeeklySummary all use.
+// Beta feedback (2026-11-16): collapsed from the old
+// missing/pending/approved/rejected labels to a plain 3-way split —
+// review_status no longer gates or labels anything.
 const BUCKET_LABELS: Record<SalesAdminRepDrillDownRow['bucket'], string> = {
-  missing: 'Missing',
-  pending: 'Pending Review',
-  approved: 'Approved',
-  rejected: 'Needs Correction',
+  missing: 'Not Started',
+  draft: 'In Progress',
+  submitted: 'Submitted',
 }
 
 type LoadState = 'loading' | 'error' | 'ready'
@@ -70,13 +72,11 @@ export default function SalesAdminManagerOverview() {
     (acc, row) => {
       acc.assigned += row.assignedCount
       acc.submitted += row.submittedCount
-      acc.pending += row.pendingCount
-      acc.approved += row.approvedCount
-      acc.rejected += row.rejectedCount
+      acc.draft += row.draftCount
       acc.missing += row.missingCount
       return acc
     },
-    { assigned: 0, submitted: 0, pending: 0, approved: 0, rejected: 0, missing: 0 },
+    { assigned: 0, submitted: 0, draft: 0, missing: 0 },
   )
 
   return (
@@ -134,16 +134,8 @@ export default function SalesAdminManagerOverview() {
               <span className="samo-summary-label">Submitted</span>
             </div>
             <div className="samo-summary-card">
-              <span className="samo-summary-value">{totals.pending}</span>
-              <span className="samo-summary-label">Pending Review</span>
-            </div>
-            <div className="samo-summary-card">
-              <span className="samo-summary-value">{totals.approved}</span>
-              <span className="samo-summary-label">Approved</span>
-            </div>
-            <div className="samo-summary-card">
-              <span className="samo-summary-value">{totals.rejected}</span>
-              <span className="samo-summary-label">Needs Correction</span>
+              <span className="samo-summary-value">{totals.draft}</span>
+              <span className="samo-summary-label">In Progress</span>
             </div>
             <div className="samo-summary-card">
               <span className="samo-summary-value">{totals.missing}</span>
@@ -159,9 +151,7 @@ export default function SalesAdminManagerOverview() {
                 <span role="columnheader">Manager</span>
                 <span role="columnheader">Assigned Reps</span>
                 <span role="columnheader">Submitted</span>
-                <span role="columnheader">Pending</span>
-                <span role="columnheader">Approved</span>
-                <span role="columnheader">Needs Correction</span>
+                <span role="columnheader">In Progress</span>
                 <span role="columnheader">Missing</span>
               </div>
               {data.overview.map((row) => {
@@ -192,14 +182,8 @@ export default function SalesAdminManagerOverview() {
                     <div className="samo-cell samo-cell-count" role="cell" data-label="Submitted">
                       {row.submittedCount}
                     </div>
-                    <div className="samo-cell samo-cell-count" role="cell" data-label="Pending">
-                      {row.pendingCount}
-                    </div>
-                    <div className="samo-cell samo-cell-count" role="cell" data-label="Approved">
-                      {row.approvedCount}
-                    </div>
-                    <div className="samo-cell samo-cell-count" role="cell" data-label="Needs Correction">
-                      {row.rejectedCount}
+                    <div className="samo-cell samo-cell-count" role="cell" data-label="In Progress">
+                      {row.draftCount}
                     </div>
                     <div className="samo-cell samo-cell-count" role="cell" data-label="Missing">
                       {row.missingCount}

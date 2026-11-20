@@ -256,7 +256,7 @@ describe('AdminDashboard.tsx — top row restructure preserves week navigation e
     assert.match(dashboardSrc, /onClick=\{onNextWeek\}/)
     assert.match(dashboardSrc, /disabled=\{isCurrentWeek\}/)
     assert.match(dashboardSrc, /const daysLeft = getDaysUntilDeadline\(week\.fridayDate\)/)
-    assert.match(dashboardSrc, /const isPastDeadline = isPastEasternCutoff\(15, 0\)/)
+    assert.match(dashboardSrc, /const isPastDeadline = isPastEasternCutoff\(WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE\)/)
   })
 
   test('the week-navigation control and My Weekly Report (when present) are grouped together on the right of the same top row as the title', () => {

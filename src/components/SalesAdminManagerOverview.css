@@ -74,7 +74,7 @@
 
 .samo-summary-row {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin-bottom: 20px;
 }
@@ -141,7 +141,7 @@
 }
 
 .samo-table-header-row-overview {
-  grid-template-columns: 1.8fr 0.9fr 0.9fr 0.9fr 0.9fr 1.1fr 0.9fr;
+  grid-template-columns: 1.8fr 1fr 1fr 1fr 1fr;
 }
 
 .samo-row {
@@ -154,7 +154,7 @@
 }
 
 .samo-row-overview {
-  grid-template-columns: 1.8fr 0.9fr 0.9fr 0.9fr 0.9fr 1.1fr 0.9fr;
+  grid-template-columns: 1.8fr 1fr 1fr 1fr 1fr;
 }
 
 .samo-row:last-child {
@@ -237,19 +237,14 @@
   background: var(--soft-sand);
 }
 
-.samo-status-pending {
-  color: var(--terracotta);
-  background: rgba(8, 102, 232, 0.12);
+.samo-status-draft {
+  color: var(--amber);
+  background: rgba(217, 119, 6, 0.12);
 }
 
-.samo-status-approved {
+.samo-status-submitted {
   color: var(--green);
   background: rgba(22, 131, 75, 0.12);
-}
-
-.samo-status-rejected {
-  color: var(--status-error);
-  background: rgba(183, 101, 74, 0.18);
 }
 
 /* Tablet */

@@ -3,7 +3,7 @@ import StatusBadge from './StatusBadge'
 import { fetchReportHistory, type ManagerReportHistoryEntry } from '../lib/reportsService'
 import { getCurrentReportingWeek, getDaysUntilDeadline } from '../utils/week'
 import { getManagerWriteLockReason, MANAGER_WRITE_LOCK_MESSAGES } from '../lib/managerEditLock'
-import { isPastEasternCutoff } from '../utils/easternTime'
+import { isPastEasternCutoff, WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE } from '../utils/easternTime'
 import type { ReportStatus } from '../types'
 import './Dashboard.css'
 
@@ -41,12 +41,12 @@ export default function Dashboard({
   const week = getCurrentReportingWeek()
   const daysLeft = getDaysUntilDeadline(week.fridayDate)
   // getDaysUntilDeadline is calendar-day granularity only (it returns 0 for
-  // all of Friday, from 12:00 AM through 11:59 PM) — it was never meant to
-  // answer "has the 3:00 PM deadline itself passed". That real, time-of-day
-  // question is answered by isPastEasternCutoff, the same DST-safe check
-  // the 4:00 PM manager write lock and the "late edit window" notice below
-  // already use.
-  const isPastDeadline = isPastEasternCutoff(15, 0)
+  // all of the deadline's own day, from 12:00 AM through 11:59 PM) — it was
+  // never meant to answer "has the 11:59 PM deadline itself passed". That
+  // real, time-of-day question is answered by isPastEasternCutoff, the
+  // same DST-safe check the write lock below uses — now the exact same
+  // single cutoff, so there is no longer a separate "display" threshold.
+  const isPastDeadline = isPastEasternCutoff(WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE)
   const isDueToday = !isPastDeadline && daysLeft <= 0
 
   const [history, setHistory] = useState<ManagerReportHistoryEntry[]>([])
@@ -73,19 +73,14 @@ export default function Dashboard({
   // stability, even though a new vs. existing report no longer changes the
   // lock decision itself — see managerEditLock.ts.
   const isNewReport = status === 'not_started'
-  // null = fully open; 'edit_locked' = past 4:00 PM, nothing can be written
-  // regardless of status (new or existing). See src/lib/managerEditLock.ts
-  // for the shared decision logic — the same function the service-layer
-  // guard and (independently) the database trigger use, so all three layers
-  // agree on the same instant.
+  // null = fully open; 'edit_locked' = past the Thursday 11:59 PM cutoff,
+  // nothing can be written regardless of status (new or existing). See
+  // src/lib/managerEditLock.ts for the shared decision logic — the same
+  // function the service-layer guard and (independently) the database
+  // trigger use, so all three layers agree on the same instant. Submission
+  // and editing now share this exact cutoff, so there is no separate
+  // "late edit window" between a display threshold and the actual lock.
   const lockReason = getManagerWriteLockReason(isNewReport)
-  // Shown for EVERY status, including Not Started — a manager who starts
-  // their report during the 3:00-3:59 PM grace period needs the same
-  // "until 4:00 PM ET" notice an existing draft already gets, since the
-  // same single cutoff now applies to both. The 3:00 PM threshold here is
-  // the START of that window (unchanged) — only the final lock at the end
-  // of the window moved from 3:30 PM to 4:00 PM.
-  const inLateEditWindow = lockReason === null && isPastEasternCutoff(15, 0)
 
   const actionLabel =
     status === 'not_started' ? 'Start Report' : status === 'draft' ? 'Continue Draft' : 'Edit Submitted Report'
@@ -116,7 +111,7 @@ export default function Dashboard({
               {status === 'draft'
                 ? 'You have a draft saved, but it hasn’t been submitted yet'
                 : 'This week’s report hasn’t been started yet'}{' '}
-              &mdash; it&apos;s due Friday at 3:00 PM ET.
+              &mdash; it&apos;s due Thursday at 11:59 PM ET.
             </p>
           </div>
           <div className="reminder-banner-actions">
@@ -167,7 +162,6 @@ export default function Dashboard({
             <button className="btn btn-primary btn-large" onClick={onAction}>
               {actionLabel}
             </button>
-            {inLateEditWindow && <p className="hero-late-window-notice">You can still edit this report until 4:00 PM ET.</p>}
           </div>
         )}
 

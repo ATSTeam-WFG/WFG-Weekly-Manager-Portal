@@ -7,38 +7,23 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { deriveRepReportBucket, type BucketableRepReport } from './repReportBucket.ts'
 
-function report(status: BucketableRepReport['status'], reviewStatus: BucketableRepReport['reviewStatus']): BucketableRepReport {
-  return { status, reviewStatus }
+function report(status: BucketableRepReport['status']): BucketableRepReport {
+  return { status }
 }
 
+// Beta feedback (2026-11-16): collapsed from the old 4-way
+// missing/pending/approved/rejected split (keyed off review_status) to a
+// plain 3-way missing/draft/submitted split (keyed off status alone).
 describe('deriveRepReportBucket — status calculations', () => {
   test('null (no report row at all) is "missing"', () => {
     assert.equal(deriveRepReportBucket(null), 'missing')
   })
 
-  test('a draft report (never submitted) is "missing", regardless of its reviewStatus field', () => {
-    assert.equal(deriveRepReportBucket(report('draft', 'pending')), 'missing')
-    assert.equal(deriveRepReportBucket(report('draft', 'approved')), 'missing')
-    assert.equal(deriveRepReportBucket(report('draft', 'rejected')), 'missing')
+  test('a draft report is "draft"', () => {
+    assert.equal(deriveRepReportBucket(report('draft')), 'draft')
   })
 
-  test('a submitted report with reviewStatus "pending" is "pending"', () => {
-    assert.equal(deriveRepReportBucket(report('submitted', 'pending')), 'pending')
-  })
-
-  test('a submitted report with reviewStatus "approved" is "approved"', () => {
-    assert.equal(deriveRepReportBucket(report('submitted', 'approved')), 'approved')
-  })
-
-  test('a submitted report with reviewStatus "rejected" is "rejected"', () => {
-    assert.equal(deriveRepReportBucket(report('submitted', 'rejected')), 'rejected')
-  })
-
-  test('reviewStatus is checked in a fixed order — approved before rejected — but the two states are mutually exclusive in practice, so this just documents the precedence', () => {
-    // A real row never has reviewStatus simultaneously meaning two things;
-    // this asserts the function reads reviewStatus directly rather than
-    // falling through to a default for any status==='submitted' input.
-    assert.equal(deriveRepReportBucket(report('submitted', 'approved')), 'approved')
-    assert.equal(deriveRepReportBucket(report('submitted', 'rejected')), 'rejected')
+  test('a submitted report is "submitted", regardless of review_status (no longer part of this type at all)', () => {
+    assert.equal(deriveRepReportBucket(report('submitted')), 'submitted')
   })
 })

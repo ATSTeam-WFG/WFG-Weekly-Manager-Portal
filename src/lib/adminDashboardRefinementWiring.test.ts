@@ -131,9 +131,9 @@ describe('AdminDashboard.tsx — week navigation and Friday deadline calculation
     assert.match(dashboardSrc, /\{isCurrentWeek && <span className="week-current-badge">Current<\/span>\}/)
   })
 
-  test('isPastEasternCutoff(15, 0) and getDaysUntilDeadline are still the only deadline calculations, unchanged', () => {
-    assert.match(dashboardSrc, /import \{ isPastEasternCutoff \} from '\.\.\/utils\/easternTime'/)
-    assert.match(dashboardSrc, /const isPastDeadline = isPastEasternCutoff\(15, 0\)/)
+  test('isPastEasternCutoff and getDaysUntilDeadline are still the only deadline calculations (beta feedback, 2026-11-16: now the shared Thursday 11:59 PM cutoff)', () => {
+    assert.match(dashboardSrc, /import \{ isPastEasternCutoff, WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE \} from '\.\.\/utils\/easternTime'/)
+    assert.match(dashboardSrc, /const isPastDeadline = isPastEasternCutoff\(WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE\)/)
     assert.match(dashboardSrc, /const daysLeft = getDaysUntilDeadline\(week\.fridayDate\)/)
     assert.match(dashboardSrc, /const isDueToday = !isPastDeadline && daysLeft <= 0/)
   })
@@ -178,9 +178,9 @@ describe('AdminDashboard.tsx — the three redundant navigation buttons are remo
     assert.match(usageMatch[1], /onOpenMyReport=\{isSubmitter \? \(\) => setMyReportOpen\(true\) : undefined\}/)
   })
 
-  test('the sidebar itself (AdminSidebar.tsx, from Step 1) is untouched and still offers exactly these four destinations — removing the Dashboard buttons does not remove the actual navigation capability', () => {
+  test('the sidebar itself (AdminSidebar.tsx, from Step 1) is untouched and still offers navigation to the same destinations (label text updated 2026-11-18: "User Management" -> "Managers") — removing the Dashboard buttons does not remove the actual navigation capability', () => {
     const sidebarSrc = readFileSync(path.join(dir, '..', 'components', 'AdminSidebar.tsx'), 'utf8')
-    assert.match(sidebarSrc, /key: 'user-management', label: 'User Management'/)
+    assert.match(sidebarSrc, /key: 'user-management', label: 'Managers'/)
     assert.match(sidebarSrc, /key: 'reports-analytics', label: 'Reports & Analytics'/)
     assert.match(sidebarSrc, /key: 'weekly-summary', label: 'Present Week Summary'/)
   })

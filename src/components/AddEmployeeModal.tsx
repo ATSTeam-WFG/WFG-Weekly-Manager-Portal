@@ -101,7 +101,7 @@ export default function AddEmployeeModal({
               className="um-modal-input"
               value={fullName}
               onChange={(e) => onFullNameChange(e.target.value)}
-              placeholder="Jane Manager"
+              placeholder="Jane Doe"
               required
             />
           </div>
@@ -116,7 +116,7 @@ export default function AddEmployeeModal({
               className="um-modal-input"
               value={email}
               onChange={(e) => onEmailChange(e.target.value)}
-              placeholder="jane.manager@wfgtitle.com"
+              placeholder="jane.doe@wfgtitle.com"
               required
             />
           </div>

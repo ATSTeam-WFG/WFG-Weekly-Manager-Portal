@@ -99,19 +99,18 @@ describe('salesAdminRepVisibilityService.ts — bucket calculations', () => {
     assert.match(match[0], /if \(!rep\.profileId\) return 'missing'/)
   })
 
-  test('submittedCount is pending + approved + rejected, never an independent count (matches Phase 2\'s AdminManagerRepOverview identity)', () => {
-    assert.match(serviceSrc, /submittedCount: pendingCount \+ approvedCount \+ rejectedCount,/)
-  })
-
-  test('each rep contributes to exactly one of the 4 mutually exclusive buckets per Manager (pending/approved/rejected/missing), summed from the same bucketForRep call', () => {
+  // Beta feedback (2026-11-16): collapsed from the old
+  // pending/approved/rejected breakdown to a plain submitted/draft/missing
+  // split — review_status no longer gates or labels anything.
+  test('each rep contributes to exactly one of the 3 mutually exclusive buckets per Manager (submitted/draft/missing), summed from the same bucketForRep call', () => {
     const match = serviceSrc.match(/for \(const rep of managerReps\) \{[\s\S]*?\n {4}\}/)
     assert.ok(match, 'could not locate the per-Manager bucket-tallying loop')
     const body = match[0]
     assert.match(body, /const bucket = bucketForRep\(rep, reportByRepId\)/)
-    assert.match(body, /if \(bucket === 'pending'\) pendingCount\+\+/)
-    assert.match(body, /else if \(bucket === 'approved'\) approvedCount\+\+/)
-    assert.match(body, /else if \(bucket === 'rejected'\) rejectedCount\+\+/)
+    assert.match(body, /if \(bucket === 'submitted'\) submittedCount\+\+/)
+    assert.match(body, /else if \(bucket === 'draft'\) draftCount\+\+/)
     assert.match(body, /else missingCount\+\+/)
+    assert.doesNotMatch(serviceSrc, /pendingCount|approvedCount|rejectedCount/)
   })
 })
 

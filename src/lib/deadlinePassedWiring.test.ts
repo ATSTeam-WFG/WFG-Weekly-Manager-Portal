@@ -9,13 +9,15 @@
 //
 // The bug: both dashboards derived isPastDeadline from
 // getDaysUntilDeadline(week.fridayDate) <= 0 (or > 0), a CALENDAR-DAY
-// granularity function that returns 0 for all of Friday — from 12:00 AM
-// through 11:59 PM — not just after 3:00 PM. That made "Deadline passed"
-// render from midnight Friday instead of the real 3:00 PM ET deadline. The
-// fix uses isPastEasternCutoff(15, 0) directly (the same DST-safe function
-// already backing the 4:00 PM manager write lock and the "late edit
-// window" notice), and getDaysUntilDeadline is kept, unmodified, for the
-// "N days remaining" / "Due today" display copy only.
+// granularity function that returns 0 for all of the deadline's own day —
+// from 12:00 AM through 11:59 PM — not just after the actual cutoff. That
+// made "Deadline passed" render from midnight instead of the real cutoff
+// instant. The fix uses isPastEasternCutoff directly (the same DST-safe
+// function backing the Manager/Sales-Rep write locks), and
+// getDaysUntilDeadline is kept, unmodified, for the "N days remaining" /
+// "Due today" display copy only. Beta feedback (2026-11-16): the cutoff
+// itself moved to Thursday 11:59 PM, shared by submission and editing —
+// only the WEEKLY_DEADLINE_* arguments changed, not this wiring.
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -32,12 +34,12 @@ for (const [label, src] of [
   ['Dashboard.tsx', dashboardSrc],
 ] as const) {
   describe(`${label} — isPastDeadline wiring`, () => {
-    test('imports isPastEasternCutoff from the shared Eastern-time utility', () => {
-      assert.match(src, /import \{ isPastEasternCutoff \} from '\.\.\/utils\/easternTime'/)
+    test('imports isPastEasternCutoff (and the shared WEEKLY_DEADLINE_* constants) from the shared Eastern-time utility', () => {
+      assert.match(src, /import \{ isPastEasternCutoff, WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE \} from '\.\.\/utils\/easternTime'/)
     })
 
-    test('isPastDeadline is derived from isPastEasternCutoff(15, 0) — never from getDaysUntilDeadline/daysLeft', () => {
-      assert.match(src, /const isPastDeadline = isPastEasternCutoff\(15, 0\)/)
+    test('isPastDeadline is derived from isPastEasternCutoff(WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE) — never from getDaysUntilDeadline/daysLeft', () => {
+      assert.match(src, /const isPastDeadline = isPastEasternCutoff\(WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE\)/)
       // The historical bug pattern must not reappear: isPastDeadline itself
       // must never be a direct comparison against daysLeft.
       assert.equal(/isPastDeadline = daysLeft/.test(src), false, 'isPastDeadline must never be derived from daysLeft again')

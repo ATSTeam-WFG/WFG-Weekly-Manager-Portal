@@ -38,7 +38,7 @@ function SubmittedIcon() {
   )
 }
 
-function PendingIcon() {
+function InProgressIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="9" />
@@ -47,12 +47,11 @@ function PendingIcon() {
   )
 }
 
-function NeedsCorrectionIcon() {
+function MissingIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 9v4" />
-      <path d="M12 16.5h.01" />
-      <path d="M10.3 3.9L2.5 17.5c-.6 1 .1 2.3 1.3 2.3h16.4c1.2 0 1.9-1.3 1.3-2.3L13.7 3.9c-.6-1-2-1-2.6 0z" />
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 12h7" />
     </svg>
   )
 }
@@ -132,20 +131,20 @@ export default function ManagerDashboardOverview({
             </div>
             <div className="mdo-kpi-card mdo-kpi-card-pending">
               <span className="mdo-kpi-icon" aria-hidden="true">
-                <PendingIcon />
+                <InProgressIcon />
               </span>
               <div className="mdo-kpi-text">
-                <span className="mdo-kpi-value">{counts.pending}</span>
-                <span className="mdo-kpi-label">Pending</span>
+                <span className="mdo-kpi-value">{counts.draft}</span>
+                <span className="mdo-kpi-label">In Progress</span>
               </div>
             </div>
             <div className="mdo-kpi-card mdo-kpi-card-rejected">
               <span className="mdo-kpi-icon" aria-hidden="true">
-                <NeedsCorrectionIcon />
+                <MissingIcon />
               </span>
               <div className="mdo-kpi-text">
-                <span className="mdo-kpi-value">{counts.rejected}</span>
-                <span className="mdo-kpi-label">Needs Correction</span>
+                <span className="mdo-kpi-value">{counts.missing}</span>
+                <span className="mdo-kpi-label">Missing</span>
               </div>
             </div>
           </div>

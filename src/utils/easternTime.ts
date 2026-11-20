@@ -51,20 +51,35 @@ export function getEasternParts(now: Date = new Date()): EasternParts {
   }
 }
 
-// True when `now`, interpreted in America/New_York, falls on a Friday within
-// [targetHour:targetMinute, targetHour:targetMinute + windowMinutes). Pure
-// same-day minute-of-day comparison — the two business windows this backs
-// (Friday noon, Friday 4pm) never cross midnight, so no day-rollover math is
-// needed. Hardcoded to Friday since both current scheduled actions are
-// Friday-only; revisit if a future action needs a different day.
+// The single weekly reporting deadline, shared by every role and every
+// enforcement layer (Manager submission+editing via managerEditLock.ts,
+// Sales Rep submission+editing via repReportLock.ts, both server-side
+// Postgres functions, and every frontend label/countdown/banner) — defined
+// exactly once here so none of those can ever drift apart again. Beta
+// feedback (2026-11-16): moved from the old Friday 3:00 PM
+// submission / 4:00 PM editing split to one Thursday 11:59 PM cutoff for
+// both.
+export const WEEKLY_DEADLINE_WEEKDAY: EasternWeekday = 'Thu'
+export const WEEKLY_DEADLINE_HOUR = 23
+export const WEEKLY_DEADLINE_MINUTE = 59
+
+// Mon=0 .. Sun=6, so later-in-the-week days compare as "greater than" earlier
+// ones — the ordering both functions below rely on.
+const WEEKDAY_ORDER: EasternWeekday[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+// True when `now`, interpreted in America/New_York, falls on `targetWeekday`
+// within [targetHour:targetMinute, targetHour:targetMinute + windowMinutes).
+// Pure same-day minute-of-day comparison — every window this backs is well
+// short of midnight, so no day-rollover math is needed.
 export function isInEasternActionWindow(
+  targetWeekday: EasternWeekday,
   targetHour: number,
   targetMinute: number,
   windowMinutes: number,
   now: Date = new Date(),
 ): boolean {
   const parts = getEasternParts(now)
-  if (parts.weekday !== 'Fri') return false
+  if (parts.weekday !== targetWeekday) return false
 
   const minutesSinceMidnight = parts.hour * 60 + parts.minute
   const targetMinutesSinceMidnight = targetHour * 60 + targetMinute
@@ -75,25 +90,38 @@ export function isInEasternActionWindow(
   )
 }
 
-// True once `now` (interpreted in America/New_York) has reached or passed
-// {targetHour}:{targetMinute} on the Friday of the CURRENT reporting week,
-// and stays true for the rest of that week (Saturday, Sunday) — unlike
-// isInEasternActionWindow above, this has no upper bound and does not
-// require the day to literally be Friday. Monday through Thursday are
-// always false (well before this week's own Friday cutoff); the cutoff
-// naturally "resets" to false again once the following Monday's new
-// reporting week begins, since that's a different week's Friday entirely.
-// Used for the Manager-editing lock (single cutoff, currently 4:00 PM ET —
-// see managerEditLock.ts's EDIT_CUTOFF_HOUR/MINUTE) and for the Dashboard's
-// 3:00 PM "late edit window" notice threshold — both must stay in effect
-// through the weekend rather than only during a narrow window.
-export function isPastEasternCutoff(targetHour: number, targetMinute: number, now: Date = new Date()): boolean {
+// True once `now` (interpreted in America/New_York) has moved PAST the end
+// of {targetHour}:{targetMinute} on `targetWeekday` of the CURRENT
+// reporting week — i.e. {targetHour}:{targetMinute} itself is the last
+// whole minute still allowed, and the lock begins only at the first
+// instant of the following minute — and stays true for the rest of that
+// week. Beta feedback (2026-11-16/18): for the shared deadline
+// (Thursday 11:59 PM ET), this means a user may submit/edit at any point
+// during 11:59:00–11:59:59 PM; the lock begins exactly at 12:00:00 AM
+// Friday, not at the start of the 11:59 PM minute. getEasternParts only
+// resolves to minute granularity (no seconds), so the same-weekday branch
+// below uses a strict `>` against the target minute — equal to the target
+// minute is still "not yet past it" for the entire 60 seconds of that
+// minute, and the very next minute (always a new EasternParts.minute
+// value, whether that rolls into a new hour/day or not) is what first
+// satisfies `>`.
+//
+// Unlike isInEasternActionWindow above, this has no upper bound and does
+// not require the day to literally equal targetWeekday: any day LATER in
+// the week (per WEEKDAY_ORDER) is also past it. Earlier days are always
+// false; the cutoff naturally "resets" to false again once the following
+// Monday's new reporting week begins. Used for the single weekly deadline
+// shared by submission and editing across every role (managerEditLock.ts,
+// repReportLock.ts).
+export function isPastEasternCutoff(targetWeekday: EasternWeekday, targetHour: number, targetMinute: number, now: Date = new Date()): boolean {
   const parts = getEasternParts(now)
 
-  if (parts.weekday === 'Sat' || parts.weekday === 'Sun') return true
-  if (parts.weekday !== 'Fri') return false
+  const currentIndex = WEEKDAY_ORDER.indexOf(parts.weekday)
+  const targetIndex = WEEKDAY_ORDER.indexOf(targetWeekday)
+  if (currentIndex > targetIndex) return true
+  if (currentIndex < targetIndex) return false
 
   const minutesSinceMidnight = parts.hour * 60 + parts.minute
   const targetMinutesSinceMidnight = targetHour * 60 + targetMinute
-  return minutesSinceMidnight >= targetMinutesSinceMidnight
+  return minutesSinceMidnight > targetMinutesSinceMidnight
 }

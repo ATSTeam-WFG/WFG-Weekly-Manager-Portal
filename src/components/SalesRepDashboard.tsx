@@ -3,14 +3,13 @@ import SalesRepReportForm from './SalesRepReportForm'
 import {
   fetchRepReport,
   fetchRepReportHistory,
-  fetchRepReportReviewHistory,
+  fetchRepReportFeedback,
   fetchMyCurrentManagerAssignment,
   saveSalesRepReportDraft,
   submitSalesRepReport,
-  resubmitRejectedSalesRepReport,
   RepReportError,
   type RepReport,
-  type RepReportReviewHistoryEntry,
+  type RepReportFeedbackEntry,
 } from '../lib/repReportsService'
 import { fetchProfilesByIds, type RepProfileSummary } from '../lib/repRosterService'
 import { isRepSubmissionPastCutoff } from '../lib/repReportLock'
@@ -28,32 +27,28 @@ interface SalesRepDashboardProps {
   onSignOut?: () => void
 }
 
-type RepReportState = 'not_started' | 'draft' | 'pending' | 'approved' | 'rejected'
+// Beta feedback (2026-11-16): collapsed from the old
+// not_started/draft/pending/approved/rejected 5-state machine (gated by
+// review_status) to a plain 3-way split (gated by status alone) —
+// review_status no longer gates anything. A submitted report is editable
+// the same way a draft is, up until the shared deadline lock (see
+// isEditableState below).
+type RepReportState = 'not_started' | 'draft' | 'submitted'
 
 function deriveReportState(report: RepReport | null): RepReportState {
   if (!report) return 'not_started'
   if (report.status === 'draft') return 'draft'
-  if (report.reviewStatus === 'approved') return 'approved'
-  if (report.reviewStatus === 'rejected') return 'rejected'
-  return 'pending'
+  return 'submitted'
 }
 
-// Mirrors ReportForm.tsx's own `isSubmitting`-gated pattern — a report is
-// editable via saveSalesRepReportDraft in exactly two states (see
-// repReportsService.ts's own state-machine comments): a fresh 'not_started'
-// (the draft row doesn't exist yet) / 'draft' report, or a 'rejected'
-// submitted report being corrected. 'pending' and 'approved' are never
-// editable.
-function isEditableState(state: RepReportState): boolean {
-  return state === 'not_started' || state === 'draft' || state === 'rejected'
-}
-
+// Every state is editable now — the only real gate is the deadline lock
+// (isPastDeadline, checked separately at each call site below), exactly
+// mirroring Dashboard.tsx's Manager-side model (state never changes
+// editability, only the cutoff does).
 const STATE_LABELS: Record<RepReportState, string> = {
   not_started: 'Not Started',
   draft: 'Draft Saved',
-  pending: 'Submitted — Pending Review',
-  approved: 'Approved',
-  rejected: 'Needs Correction',
+  submitted: 'Submitted',
 }
 
 export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboardProps) {
@@ -64,20 +59,15 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
 
-  const [rejectionReason, setRejectionReason] = useState<string | null>(null)
+  const [feedbackEntries, setFeedbackEntries] = useState<RepReportFeedbackEntry[]>([])
 
   const [history, setHistory] = useState<RepReport[]>([])
   const [historyLoading, setHistoryLoading] = useState(true)
   const [historyLoadError, setHistoryLoadError] = useState(false)
 
   // Explicit, not purely derived from status — lets a rep step back out of
-  // the correction form (via the form's own Back link) to the compact
-  // Rejected summary card without losing track of the underlying status.
-  // Defaults to true for a freshly-loaded Rejected report, per the product
-  // requirement that a rejected report should land the rep directly in the
-  // correction form rather than behind an extra click (see this file's
-  // header comment / the task's "Rejected (banner + SalesRepReportForm in
-  // correction mode)" state description).
+  // the edit form (via the form's own Back link) to the summary card
+  // without losing track of the underlying status.
   const [editing, setEditing] = useState(false)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -129,21 +119,12 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
       .then(async (result) => {
         if (!active) return
         setReport(result)
-        const state = deriveReportState(result)
-        if (state === 'rejected') {
-          // The rejection reason is NOT stored directly on the rejected
-          // report row's own current-reason field once resubmitted — it
-          // lives in the append-only review history. The last entry with
-          // reviewStatus 'rejected' is the current, still-unresolved reason
-          // (see repReportsService.ts's fetchRepReportReviewHistory doc
-          // comment: oldest first, so this is the LAST 'rejected' entry).
-          const entries = await fetchRepReportReviewHistory(result!.id)
+        if (result) {
+          const entries = await fetchRepReportFeedback(result.id)
           if (!active) return
-          const lastRejected = [...entries].reverse().find((e: RepReportReviewHistoryEntry) => e.reviewStatus === 'rejected')
-          setRejectionReason(lastRejected?.reason ?? null)
-          setEditing(true)
+          setFeedbackEntries(entries)
         } else {
-          setRejectionReason(null)
+          setFeedbackEntries([])
         }
       })
       .catch(() => {
@@ -184,11 +165,12 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
 
   const reportState = deriveReportState(report)
 
-  // The only two write paths into saveSalesRepReportDraft this component
-  // ever uses: creating the very first draft row (report === null, 'not
-  // started') and editing an existing draft or rejected row. Both funnel
-  // through the same RPC — see repReportsService.ts — the distinction here
-  // is purely about what's already in local state.
+  // The write path into saveSalesRepReportDraft for a brand-new/still-draft
+  // report (report === null or status === 'draft'). Beta feedback
+  // (2026-11-16): the SAME RPC now also handles a content-only edit to an
+  // already-submitted report — see handleSaveChanges below, which calls it
+  // too; the server tells the two cases apart by the row's current status,
+  // never by anything this client sends.
   const handleSaveDraft = async (data: SalesRepReportSections): Promise<void> => {
     try {
       const updated = await saveSalesRepReportDraft(week.weekStartDate, data)
@@ -196,11 +178,8 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
     } catch (err) {
       // Re-thrown unconditionally so SalesRepReportForm's own useAutosave
       // (isLockedError/status handling) sees the failure too — this
-      // component is not the only place that needs to react to it. A
-      // REP_STATUS_REGRESSION_BLOCKED error is already turned into a
-      // friendly, persistent inline message by SalesRepReportForm itself;
-      // nothing further to surface here for that specific code.
-      if (err instanceof RepReportError && err.code !== 'REP_STATUS_REGRESSION_BLOCKED') {
+      // component is not the only place that needs to react to it.
+      if (err instanceof RepReportError && err.code !== 'EDIT_LOCKED') {
         console.error('Failed to save sales rep report draft:', err.message)
       }
       throw err
@@ -213,23 +192,17 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
     try {
       // Persist any final edits first (saveSalesRepReportDraft never changes
       // status/reviewStatus — see repReportsService.ts), THEN transition
-      // lifecycle state via the correct RPC for the CURRENT state: a fresh
-      // draft/not-started report submits via submitSalesRepReport, while a
-      // rejected report must go through resubmitRejectedSalesRepReport
-      // instead (submitSalesRepReport would reject it — draft -> submitted
-      // only, never rejected -> submitted).
+      // draft -> submitted via submitSalesRepReport.
       await saveSalesRepReportDraft(week.weekStartDate, data)
-      const updated =
-        reportState === 'rejected' ? await resubmitRejectedSalesRepReport(week.weekStartDate) : await submitSalesRepReport(week.weekStartDate)
+      const updated = await submitSalesRepReport(week.weekStartDate)
       setReport(updated)
-      setRejectionReason(null)
       setEditing(false)
       retryLoad()
     } catch (err) {
       if (err instanceof RepReportError) {
         if (err.code === 'SUBMISSION_DEADLINE_PASSED') {
           setSubmitFailureMessage('The deadline has passed. Contact your admin to request an exception.')
-        } else if (err.code === 'REP_STATUS_REGRESSION_BLOCKED') {
+        } else if (err.code === 'EDIT_LOCKED') {
           setSubmitFailureMessage('This report can no longer be edited.')
         } else {
           setSubmitFailureMessage(err.message)
@@ -239,6 +212,25 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
       }
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  // Beta feedback (2026-11-16): a content-only edit to an already-submitted
+  // report. Never calls submitSalesRepReport — the report is already
+  // submitted, and that RPC only transitions a 'draft' row, so calling it
+  // again here would just raise NOT_FOUND. saveSalesRepReportDraft itself
+  // preserves status/submitted_at/first_submitted_at/review_status when
+  // the existing row is already submitted (see its own updated comment in
+  // repReportsService.ts).
+  const handleSaveChanges = async (data: SalesRepReportSections): Promise<void> => {
+    try {
+      const updated = await saveSalesRepReportDraft(week.weekStartDate, data)
+      setReport(updated)
+    } catch (err) {
+      if (err instanceof RepReportError && err.code !== 'EDIT_LOCKED') {
+        console.error('Failed to save sales rep report changes:', err.message)
+      }
+      throw err
     }
   }
 
@@ -272,7 +264,8 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
     )
   }
 
-  if (editing && isEditableState(reportState)) {
+  if (editing) {
+    const isEditingSubmitted = reportState === 'submitted'
     return (
       <div className="sales-rep-dashboard-page">
         <SalesRepReportForm
@@ -280,11 +273,11 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
           weekLabel={week.label}
           deadlineLabel={week.deadlineLabel}
           isPastDeadline={isPastDeadline}
-          isRejectedCorrection={reportState === 'rejected'}
-          rejectionReason={rejectionReason}
+          isEditingSubmitted={isEditingSubmitted}
           onBack={backToSummary}
           onSaveDraft={handleSaveDraft}
           onSubmit={handleSubmit}
+          onSaveChanges={handleSaveChanges}
           isSubmitting={isSubmitting}
           submitFailureMessage={submitFailureMessage}
         />
@@ -292,7 +285,10 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
     )
   }
 
-  const actionLabel = reportState === 'not_started' ? 'Start This Week’s Report' : reportState === 'draft' ? 'Continue Draft' : 'Resume Correction'
+  // Beta feedback (2026-11-16): every state offers an edit action now — the
+  // only real gate is the shared deadline lock (isPastDeadline), not
+  // status. Mirrors Dashboard.tsx's Manager-side action-label pattern.
+  const actionLabel = reportState === 'not_started' ? 'Start This Week’s Report' : reportState === 'draft' ? 'Continue Draft' : 'Edit Report'
 
   return (
     <div className="sales-rep-dashboard-page">
@@ -338,41 +334,36 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
           {isPastDeadline && <span className="rep-hero-deadline-passed">Deadline passed</span>}
         </div>
 
-        {reportState === 'rejected' && (
-          <div className="rep-rejection-summary-banner" role="alert">
-            <p className="rep-rejection-summary-title">Your manager requested changes</p>
-            {rejectionReason && <p className="rep-rejection-summary-reason">{rejectionReason}</p>}
+        {feedbackEntries.length > 0 && (
+          <div className="rep-rejection-summary-banner" role="status">
+            <p className="rep-rejection-summary-title">Feedback from your manager</p>
+            {feedbackEntries.map((entry) => (
+              <p className="rep-rejection-summary-reason" key={entry.id}>
+                {entry.feedback}
+              </p>
+            ))}
           </div>
         )}
 
-        {isPastDeadline && isEditableState(reportState) && (
-          <p className="rep-deadline-notice">
-            The Friday 2:00 PM Eastern deadline has passed. You can still save a draft; submitting now requires an
-            admin-authorized exception.
-          </p>
-        )}
-
-        {isEditableState(reportState) ? (
+        {isPastDeadline ? (
+          <p className="rep-deadline-notice">Editing is closed for this reporting week.</p>
+        ) : (
           <div className="rep-hero-action">
             <button className="btn btn-primary btn-large" onClick={startEditing}>
               {actionLabel}
             </button>
           </div>
-        ) : reportState === 'pending' ? (
+        )}
+
+        {reportState === 'submitted' && (
           <p className="rep-hero-readonly-note">
-            Your report was submitted{report?.submittedAt ? ` on ${new Date(report.submittedAt).toLocaleDateString()}` : ''} and is
-            awaiting your manager&apos;s review.
-          </p>
-        ) : (
-          <p className="rep-hero-readonly-note">
-            Approved{report?.reviewedAt ? ` on ${new Date(report.reviewedAt).toLocaleDateString()}` : ''}. Nice work!
+            Submitted{report?.submittedAt ? ` on ${new Date(report.submittedAt).toLocaleDateString()}` : ''}. Feedback is optional and
+            never blocks you from editing it again before the deadline.
           </p>
         )}
       </div>
 
-      {(reportState === 'pending' || reportState === 'approved') && report && (
-        <ReadOnlyReportSummary content={report.content} />
-      )}
+      {reportState === 'submitted' && report && <ReadOnlyReportSummary content={report.content} />}
 
       <div className="rep-history-card">
         <h2>Report History</h2>
