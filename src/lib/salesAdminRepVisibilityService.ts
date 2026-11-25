@@ -15,13 +15,19 @@
 // shape closely, but swaps fetchAllCurrentAssignments() (which relies on
 // the is_admin()-only rep_manager_assignments_select_admin policy — would
 // silently return empty for sales_admin) for fetchSalesReps()'s own
-// currentManagerId field. fetchAllRepReportsForWeek() is reused completely
-// unchanged: it has no role check in code at all, so it already works for
-// sales_admin via the separate, pre-existing rep_reports_select_sales_admin
-// RLS policy (USING (is_sales_admin()), unconditional) — the same policy
-// SalesAdminReports.tsx already depends on today.
+// currentManagerId field.
+//
+// Reporting hierarchy & access phase (2026-11-24): fetchAllRepReportsForWeek
+// (full content) is now RLS-restricted to submitted-only for a Sales Admin
+// caller — a direct draft row is no longer visible at all (see
+// 20261124_sales_admin_completed_reports_only.sql). Bucket/status
+// computation below now uses fetchRepReportStatusForWeek() instead (the
+// metadata-only sales_admin_rep_report_status() RPC, whose own return
+// shape has no content column), so "In Progress"/"Missing"/completion-rate
+// stay fully accurate — including correctly distinguishing a draft from a
+// not-started report — without ever receiving a draft's narrative text.
 import { fetchActiveManagers, fetchSalesReps, type SalesRep } from './salesRepManagementService'
-import { fetchAllRepReportsForWeek, type RepReport } from './repReportsService'
+import { fetchRepReportStatusForWeek, type RepReportStatusOnly } from './repReportsService'
 import { deriveRepReportBucket, type RepReportBucket } from './repReportBucket'
 
 export interface SalesAdminManagerOverviewRow {
@@ -29,12 +35,11 @@ export interface SalesAdminManagerOverviewRow {
   managerName: string | null
   managerEmail: string
   assignedCount: number
-  // Total ever submitted this week — pending + approved + rejected, not an
-  // independent count. Mirrors AdminManagerRepOverview's own identity.
+  // Beta feedback (2026-11-16): collapsed from the old pending/approved/
+  // rejected breakdown to a plain submitted/draft/missing split — mirrors
+  // AdminManagerRepOverview's own identity.
   submittedCount: number
-  pendingCount: number
-  approvedCount: number
-  rejectedCount: number
+  draftCount: number
   missingCount: number
 }
 
@@ -51,7 +56,7 @@ export interface SalesAdminOverviewData {
   // from data already in memory — see deriveManagerDrillDown below — rather
   // than issuing a second round of network calls per Manager selected.
   reps: SalesRep[]
-  reportByRepId: Map<string, RepReport>
+  reportByRepId: Map<string, RepReportStatusOnly>
 }
 
 export type SalesAdminOverviewOutcome = { status: 'ok'; data: SalesAdminOverviewData } | { status: 'error'; message: string }
@@ -60,7 +65,7 @@ export type SalesAdminOverviewOutcome = { status: 'ok'; data: SalesAdminOverview
 // SalesRep's own doc comment) cannot have a rep_reports row at all; treated
 // as 'missing' here for the same reason deriveRepReportBucket treats a
 // draft/nonexistent report as 'missing' — "nothing submitted" either way.
-function bucketForRep(rep: SalesRep, reportByRepId: Map<string, RepReport>): RepReportBucket {
+function bucketForRep(rep: SalesRep, reportByRepId: Map<string, RepReportStatusOnly>): RepReportBucket {
   if (!rep.profileId) return 'missing'
   return deriveRepReportBucket(reportByRepId.get(rep.profileId) ?? null)
 }
@@ -69,7 +74,7 @@ export async function fetchSalesAdminOverview(weekStartDate: string): Promise<Sa
   const [managers, repsOutcome, reports] = await Promise.all([
     fetchActiveManagers(),
     fetchSalesReps(),
-    fetchAllRepReportsForWeek(weekStartDate),
+    fetchRepReportStatusForWeek(weekStartDate),
   ])
 
   if (repsOutcome.status !== 'ok') {
@@ -89,16 +94,14 @@ export async function fetchSalesAdminOverview(weekStartDate: string): Promise<Sa
 
   const overview: SalesAdminManagerOverviewRow[] = managers.map((manager) => {
     const managerReps = repsByManagerId.get(manager.id) ?? []
-    let pendingCount = 0
-    let approvedCount = 0
-    let rejectedCount = 0
+    let submittedCount = 0
+    let draftCount = 0
     let missingCount = 0
 
     for (const rep of managerReps) {
       const bucket = bucketForRep(rep, reportByRepId)
-      if (bucket === 'pending') pendingCount++
-      else if (bucket === 'approved') approvedCount++
-      else if (bucket === 'rejected') rejectedCount++
+      if (bucket === 'submitted') submittedCount++
+      else if (bucket === 'draft') draftCount++
       else missingCount++
     }
 
@@ -107,10 +110,8 @@ export async function fetchSalesAdminOverview(weekStartDate: string): Promise<Sa
       managerName: manager.fullName,
       managerEmail: manager.email,
       assignedCount: managerReps.length,
-      submittedCount: pendingCount + approvedCount + rejectedCount,
-      pendingCount,
-      approvedCount,
-      rejectedCount,
+      submittedCount,
+      draftCount,
       missingCount,
     }
   })
@@ -120,7 +121,7 @@ export async function fetchSalesAdminOverview(weekStartDate: string): Promise<Sa
 
 // Pure, synchronous, no network call — the drill-down is derived entirely
 // from data fetchSalesAdminOverview already loaded into memory.
-export function deriveManagerDrillDown(managerId: string, reps: SalesRep[], reportByRepId: Map<string, RepReport>): SalesAdminRepDrillDownRow[] {
+export function deriveManagerDrillDown(managerId: string, reps: SalesRep[], reportByRepId: Map<string, RepReportStatusOnly>): SalesAdminRepDrillDownRow[] {
   return reps
     .filter((rep) => rep.currentManagerId === managerId)
     .map((rep): SalesAdminRepDrillDownRow => ({

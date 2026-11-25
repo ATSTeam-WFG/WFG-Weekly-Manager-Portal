@@ -40,11 +40,17 @@ describe('SalesRepReportForm.tsx — wires useAutosave through the SAME persiste
     assert.match(formSrc, /import \{ RepReportError \} from '\.\.\/lib\/repReportsService'/)
   })
 
-  test('the autosave save() callback calls onSaveDraft — never a second write implementation, never onSubmit', () => {
+  // Beta feedback (2026-11-16): autosave now branches on isEditingSubmitted
+  // to call onSaveChanges (editing an already-submitted report) vs
+  // onSaveDraft (everything else) — mirrors ReportForm.tsx's own exact
+  // isEditingSubmitted/onSaveChanges split for the Manager side. Never
+  // onSubmit either way — that's still a separate, explicit user action.
+  test('the autosave save() callback branches on isEditingSubmitted between onSaveChanges and onSaveDraft — never onSubmit', () => {
     const autosaveMatch = formSrc.match(/const autosave = useAutosave<SalesRepReportSections>\(\{[\s\S]*?\n  \}\)/)
     assert.ok(autosaveMatch, 'could not locate the useAutosave call')
     const body = autosaveMatch[0]
-    assert.match(body, /isLockedError: \(err\) => err instanceof RepReportError && err\.code === 'REP_STATUS_REGRESSION_BLOCKED'/)
+    assert.match(body, /isLockedError: \(err\) => err instanceof RepReportError && \(err\.code === 'REP_STATUS_REGRESSION_BLOCKED' \|\| err\.code === 'EDIT_LOCKED'\)/)
+    assert.match(body, /if \(isEditingSubmitted\) \{\s*\n\s*await onSaveChanges\?\.\(toSave\)/)
     assert.match(body, /await onSaveDraft\(toSave\)/)
     assert.equal(body.includes('onSubmit'), false, 'autosave must never reference onSubmit')
   })
@@ -101,38 +107,54 @@ describe('SalesRepReportForm.tsx — Submit/Resubmit never races a background au
   })
 })
 
-describe('SalesRepReportForm.tsx — rejected-correction mode surfaces the reason and relabels the action', () => {
-  test('shows a rejection banner with the rejectionReason when isRejectedCorrection is true', () => {
-    assert.match(formSrc, /isRejectedCorrection && \(/)
-    assert.match(formSrc, /rejectionReason/)
+// Beta feedback (2026-11-16): the rejected/Resubmit correction flow is
+// replaced by a plain isEditingSubmitted mode — a "Submitted" badge, and
+// "Save Changes" instead of "Submit Report". resubmitRejectedSalesRepReport
+// itself is kept (legacy, unused by current UI — historical data stays
+// intact) but is no longer called from SalesRepDashboard.tsx at all.
+describe('SalesRepReportForm.tsx — isEditingSubmitted mode shows a Submitted badge and relabels the action', () => {
+  test('shows a "Submitted" badge when isEditingSubmitted is true, never the old rejected-correction banner', () => {
+    assert.match(formSrc, /isEditingSubmitted && <span className="submitted-badge">Submitted<\/span>/)
+    assert.doesNotMatch(formSrc, /isRejectedCorrection/)
+    assert.doesNotMatch(formSrc, /rejectionReason/)
   })
 
-  test('the submit button reads "Resubmit" in correction mode, not "Submit Report"', () => {
-    assert.match(formSrc, /const submitLabel = isRejectedCorrection \? 'Resubmit' : 'Submit Report'/)
+  test('the primary button reads "Save Changes" in isEditingSubmitted mode, "Submit Report" otherwise — never "Resubmit"', () => {
+    assert.match(formSrc, /Save Changes/)
+    assert.match(formSrc, /Submit Report/)
+    assert.doesNotMatch(formSrc, /Resubmit/)
   })
 })
 
-describe('SalesRepDashboard.tsx — calls the correct lifecycle RPC for the report\'s current state, never the wrong one', () => {
-  test('imports both submitSalesRepReport and resubmitRejectedSalesRepReport from repReportsService', () => {
-    assert.match(dashboardSrc, /submitSalesRepReport/)
-    assert.match(dashboardSrc, /resubmitRejectedSalesRepReport/)
+describe('SalesRepDashboard.tsx — handleSubmit only ever transitions draft -> submitted; editing an already-submitted report goes through handleSaveChanges instead', () => {
+  test('resubmitRejectedSalesRepReport is no longer imported or called — the legacy correction RPC stays in repReportsService.ts, unused here', () => {
+    assert.doesNotMatch(dashboardSrc, /resubmitRejectedSalesRepReport/)
+    assert.match(repReportsServiceSrc, /export async function resubmitRejectedSalesRepReport/)
   })
 
-  test('handleSubmit branches on whether the report is currently rejected: resubmitRejectedSalesRepReport for rejected, submitSalesRepReport otherwise (covers both not-started and draft)', () => {
+  test('handleSubmit always calls submitSalesRepReport — there is no other branch', () => {
     const handleSubmitMatch = dashboardSrc.match(/const handleSubmit = async \([\s\S]*?\): Promise<void> => \{[\s\S]*?\n  \}/)
     assert.ok(handleSubmitMatch, 'could not locate handleSubmit')
     const body = handleSubmitMatch[0]
-    assert.match(
-      body,
-      /reportState === 'rejected' \? await resubmitRejectedSalesRepReport\(week\.weekStartDate\) : await submitSalesRepReport\(week\.weekStartDate\)/,
-    )
+    assert.match(body, /const updated = await submitSalesRepReport\(week\.weekStartDate\)/)
   })
 
-  test('there is exactly one call site for each of submitSalesRepReport and resubmitRejectedSalesRepReport, both inside handleSubmit — no second, uncoordinated call path exists', () => {
+  test('handleSaveChanges calls saveSalesRepReportDraft only, never submitSalesRepReport — editing a submitted report never re-transitions its lifecycle', () => {
+    const handleSaveChangesMatch = dashboardSrc.match(/const handleSaveChanges = async \([\s\S]*?\): Promise<void> => \{[\s\S]*?\n  \}/)
+    assert.ok(handleSaveChangesMatch, 'could not locate handleSaveChanges')
+    const body = handleSaveChangesMatch[0]
+    assert.match(body, /await saveSalesRepReportDraft\(week\.weekStartDate, data\)/)
+    assert.doesNotMatch(body, /submitSalesRepReport/)
+  })
+
+  test('there is exactly one call site for submitSalesRepReport, inside handleSubmit — no second, uncoordinated call path exists', () => {
     const submitCalls = dashboardSrc.match(/\bsubmitSalesRepReport\(week\.weekStartDate\)/g) ?? []
-    const resubmitCalls = dashboardSrc.match(/\bresubmitRejectedSalesRepReport\(week\.weekStartDate\)/g) ?? []
     assert.equal(submitCalls.length, 1, 'submitSalesRepReport should be called from exactly one place')
-    assert.equal(resubmitCalls.length, 1, 'resubmitRejectedSalesRepReport should be called from exactly one place')
+  })
+
+  test('the edit form is passed isEditingSubmitted={reportState === \'submitted\'} and both onSubmit/onSaveChanges handlers', () => {
+    assert.match(dashboardSrc, /isEditingSubmitted=\{isEditingSubmitted\}/)
+    assert.match(dashboardSrc, /onSaveChanges=\{handleSaveChanges\}/)
   })
 })
 

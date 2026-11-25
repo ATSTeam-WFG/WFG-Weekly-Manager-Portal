@@ -3,11 +3,12 @@ import Dashboard from './Dashboard'
 import MyReps from './MyReps'
 import ManagerDashboardOverview from './ManagerDashboardOverview'
 import ManagerReportHistoryPage from './ManagerReportHistoryPage'
+import GlobalReportOverview from './GlobalReportOverview'
 import type { ManagerReportHistoryEntry } from '../lib/reportsService'
 import type { ReportStatus } from '../types'
 import './ManagerShell.css'
 
-type ManagerDestination = 'dashboard' | 'my-reports' | 'team-reports' | 'report-history'
+type ManagerDestination = 'dashboard' | 'my-reports' | 'team-reports' | 'report-history' | 'global-reports'
 
 // Same restrained icon style/viewBox conventions as AdminSidebar.tsx's own
 // icon set (reused here rather than inventing a new visual system) — a
@@ -56,7 +57,19 @@ function HistoryIcon() {
   )
 }
 
-const NAV_ITEMS: { key: ManagerDestination; label: string; icon: ReactNode }[] = [
+// Distinct from UsersIcon (Team Reports, which is scoped to THIS
+// Manager's own reps) — a globe reads clearly as "everyone, every team".
+function GlobeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18Z" />
+    </svg>
+  )
+}
+
+const BASE_NAV_ITEMS: { key: ManagerDestination; label: string; icon: ReactNode }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
   { key: 'my-reports', label: 'My Reports', icon: <DocumentIcon /> },
   { key: 'team-reports', label: 'Team Reports', icon: <UsersIcon /> },
@@ -74,6 +87,11 @@ interface ManagerShellProps {
   onContinue: () => void
   onEditSubmitted: () => void
   onViewHistoryEntry: (entry: ManagerReportHistoryEntry) => void
+  // Reporting hierarchy & access phase (2026-11-24) — true only for the
+  // handful of leadership accounts granted profiles.global_report_viewer.
+  // Adds one extra nav destination/view; everything else about this
+  // Manager's own existing dashboard is completely untouched.
+  showGlobalReports?: boolean
 }
 
 // A plain Manager's whole browsing experience (role === 'manager') — only
@@ -97,13 +115,17 @@ export default function ManagerShell({
   onContinue,
   onEditSubmitted,
   onViewHistoryEntry,
+  showGlobalReports,
 }: ManagerShellProps) {
   const [destination, setDestination] = useState<ManagerDestination>('dashboard')
+  const navItems = showGlobalReports
+    ? [...BASE_NAV_ITEMS, { key: 'global-reports' as const, label: 'All Sales Rep Reports', icon: <GlobeIcon /> }]
+    : BASE_NAV_ITEMS
 
   return (
     <div className="manager-shell">
       <nav className="manager-shell-nav" aria-label="Manager Dashboard">
-        {NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <button
             key={item.key}
             type="button"
@@ -145,6 +167,8 @@ export default function ManagerShell({
           />
         ) : destination === 'team-reports' ? (
           <MyReps managerId={managerId} onBack={() => setDestination('dashboard')} />
+        ) : destination === 'global-reports' ? (
+          <GlobalReportOverview />
         ) : (
           <ManagerReportHistoryPage managerId={managerId} onViewHistoryEntry={onViewHistoryEntry} />
         )}

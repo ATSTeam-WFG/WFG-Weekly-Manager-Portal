@@ -61,6 +61,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return sendError(res, 404, 'NOT_FOUND', 'No user was found for this email.')
       case 'forbidden':
         return sendError(res, 403, 'FORBIDDEN', 'A Sales Admin may only manage Sales Rep accounts.')
+      // The access-relevant write(s) already succeeded — see
+      // setManagedUserActive's own header comment — only a later, less
+      // critical step failed. Surfaced as its own status (never silently
+      // folded into 'ok') so the caller can tell the difference and retry.
+      case 'partial':
+        return res.status(207).json({ status: 'partial', isActive, message: outcome.detail })
       default:
         return sendError(res, 500, 'UPDATE_FAILED', 'Could not update this user.')
     }

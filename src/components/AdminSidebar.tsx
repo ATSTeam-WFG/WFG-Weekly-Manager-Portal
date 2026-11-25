@@ -138,22 +138,26 @@ export default function AdminSidebar({
   onNavigateVideoCreation,
   onNavigateSalesReps,
 }: AdminSidebarProps) {
-  // Approved grouping/order: Admin Dashboard — divider — Weekly Summary,
-  // Leadership Report, Video Creation — divider — User Management,
-  // Reports & Analytics. Groups, not a flat list, so a subtle divider can
-  // render between them without threading extra per-item flags through the
-  // existing single .map() below.
+  // Approved grouping/order (2026-11-18 refinement): Admin Dashboard —
+  // divider — Managers, Sales Reps, Reports & Analytics (the three primary
+  // management destinations, in this order) — divider — Present Week
+  // Summary, Leadership Report, Video Creation. "Managers" is a label-only
+  // rename of the 'user-management' destination — its key, routing, and
+  // permissions are unchanged (see App.tsx/UserManagement.tsx). Groups, not
+  // a flat list, so a subtle divider can render between them without
+  // threading extra per-item flags through the existing single .map()
+  // below.
   const groups: { key: AdminDestination; label: string; onClick: () => void; icon: ReactNode }[][] = [
     [{ key: 'dashboard', label: 'Admin Dashboard', onClick: onNavigateDashboard, icon: <DashboardIcon /> }],
+    [
+      { key: 'user-management', label: 'Managers', onClick: onNavigateUserManagement, icon: <UsersIcon /> },
+      { key: 'sales-reps', label: 'Sales Reps', onClick: onNavigateSalesReps, icon: <UsersIcon /> },
+      { key: 'reports-analytics', label: 'Reports & Analytics', onClick: onNavigateReportsAnalytics, icon: <ChartIcon /> },
+    ],
     [
       { key: 'weekly-summary', label: 'Present Week Summary', onClick: onNavigateWeeklySummary, icon: <DocumentIcon /> },
       { key: 'leadership-report', label: 'Leadership Report', onClick: onNavigateLeadershipReport, icon: <LeadershipReportIcon /> },
       { key: 'video-creation', label: 'Video Creation', onClick: onNavigateVideoCreation, icon: <VideoIcon /> },
-    ],
-    [
-      { key: 'user-management', label: 'User Management', onClick: onNavigateUserManagement, icon: <UsersIcon /> },
-      { key: 'reports-analytics', label: 'Reports & Analytics', onClick: onNavigateReportsAnalytics, icon: <ChartIcon /> },
-      { key: 'sales-reps', label: 'Sales Reps', onClick: onNavigateSalesReps, icon: <UsersIcon /> },
     ],
   ]
 

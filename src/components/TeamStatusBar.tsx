@@ -9,13 +9,16 @@ interface TeamStatusBarProps {
 // KPI row above already computed from real data (fetchManagerOverview). No
 // second calculation, no new query, nothing hardcoded: each segment's width
 // is literally that bucket's share of totalAssigned.
+//
+// Beta feedback (2026-11-16): collapsed from the old
+// approved/pending/rejected breakdown to a plain submitted/draft/missing
+// split — review_status no longer gates or labels anything.
 export default function TeamStatusBar({ counts }: TeamStatusBarProps) {
   const total = counts.totalAssigned
 
   const segments = [
-    { key: 'approved', label: 'Approved', value: counts.approved, className: 'tsb-segment-approved' },
-    { key: 'pending', label: 'Pending Review', value: counts.pending, className: 'tsb-segment-pending' },
-    { key: 'rejected', label: 'Needs Correction', value: counts.rejected, className: 'tsb-segment-rejected' },
+    { key: 'submitted', label: 'Submitted', value: counts.submitted, className: 'tsb-segment-approved' },
+    { key: 'draft', label: 'In Progress', value: counts.draft, className: 'tsb-segment-pending' },
     { key: 'missing', label: 'Missing', value: counts.missing, className: 'tsb-segment-missing' },
   ]
 
@@ -27,7 +30,7 @@ export default function TeamStatusBar({ counts }: TeamStatusBarProps) {
         <p className="tsb-empty">You have no reps currently assigned to you.</p>
       ) : (
         <>
-          <div className="tsb-bar" role="img" aria-label={`${counts.approved} approved, ${counts.pending} pending review, ${counts.rejected} needing correction, ${counts.missing} missing, out of ${total} assigned reps`}>
+          <div className="tsb-bar" role="img" aria-label={`${counts.submitted} submitted, ${counts.draft} in progress, ${counts.missing} missing, out of ${total} assigned reps`}>
             {segments
               .filter((s) => s.value > 0)
               .map((s) => (

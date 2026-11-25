@@ -42,8 +42,18 @@ describe('salesAdminRepVisibilityService.ts — reuses existing, already-authori
     assert.match(serviceSrc, /import \{ fetchActiveManagers, fetchSalesReps, type SalesRep \} from '\.\/salesRepManagementService'/)
   })
 
-  test('imports fetchAllRepReportsForWeek unchanged from repReportsService (Phase 2\'s own bulk fetch, already RLS-permitted for sales_admin via rep_reports_select_sales_admin)', () => {
-    assert.match(serviceSrc, /import \{ fetchAllRepReportsForWeek, type RepReport \} from '\.\/repReportsService'/)
+  // 2026-11-24: swapped for the metadata-only fetchRepReportStatusForWeek
+  // — rep_reports_select_sales_admin was tightened to submitted-only (see
+  // 20261124_sales_admin_completed_reports_only.sql), so the old bulk
+  // content fetch would silently lose draft/missing visibility; the
+  // replacement RPC's own return shape has no content column, so bucket
+  // computation stays accurate without ever touching a draft's content.
+  test('imports fetchRepReportStatusForWeek from repReportsService — the metadata-only status RPC, never the content-bearing bulk fetch', () => {
+    assert.match(serviceSrc, /import \{ fetchRepReportStatusForWeek, type RepReportStatusOnly \} from '\.\/repReportsService'/)
+    // Mentioning fetchAllRepReportsForWeek in an explanatory comment (why
+    // it was swapped out) is fine; actually importing or calling it is not.
+    assert.doesNotMatch(serviceSrc, /import \{[^}]*fetchAllRepReportsForWeek/)
+    assert.doesNotMatch(serviceSrc, /[^/]fetchAllRepReportsForWeek\(/)
   })
 
   test('reuses deriveRepReportBucket from Phase 2\'s repReportBucket.ts, never a second independent bucket calculation', () => {
@@ -99,25 +109,27 @@ describe('salesAdminRepVisibilityService.ts — bucket calculations', () => {
     assert.match(match[0], /if \(!rep\.profileId\) return 'missing'/)
   })
 
-  test('submittedCount is pending + approved + rejected, never an independent count (matches Phase 2\'s AdminManagerRepOverview identity)', () => {
-    assert.match(serviceSrc, /submittedCount: pendingCount \+ approvedCount \+ rejectedCount,/)
-  })
-
-  test('each rep contributes to exactly one of the 4 mutually exclusive buckets per Manager (pending/approved/rejected/missing), summed from the same bucketForRep call', () => {
+  // Beta feedback (2026-11-16): collapsed from the old
+  // pending/approved/rejected breakdown to a plain submitted/draft/missing
+  // split — review_status no longer gates or labels anything.
+  test('each rep contributes to exactly one of the 3 mutually exclusive buckets per Manager (submitted/draft/missing), summed from the same bucketForRep call', () => {
     const match = serviceSrc.match(/for \(const rep of managerReps\) \{[\s\S]*?\n {4}\}/)
     assert.ok(match, 'could not locate the per-Manager bucket-tallying loop')
     const body = match[0]
     assert.match(body, /const bucket = bucketForRep\(rep, reportByRepId\)/)
-    assert.match(body, /if \(bucket === 'pending'\) pendingCount\+\+/)
-    assert.match(body, /else if \(bucket === 'approved'\) approvedCount\+\+/)
-    assert.match(body, /else if \(bucket === 'rejected'\) rejectedCount\+\+/)
+    assert.match(body, /if \(bucket === 'submitted'\) submittedCount\+\+/)
+    assert.match(body, /else if \(bucket === 'draft'\) draftCount\+\+/)
     assert.match(body, /else missingCount\+\+/)
+    assert.doesNotMatch(serviceSrc, /pendingCount|approvedCount|rejectedCount/)
   })
 })
 
 describe('salesAdminRepVisibilityService.ts — drill-down is pure and synchronous, zero new network call', () => {
   test('deriveManagerDrillDown is a plain, non-async function', () => {
-    assert.match(serviceSrc, /export function deriveManagerDrillDown\(managerId: string, reps: SalesRep\[\], reportByRepId: Map<string, RepReport>\): SalesAdminRepDrillDownRow\[\] \{/)
+    assert.match(
+      serviceSrc,
+      /export function deriveManagerDrillDown\(managerId: string, reps: SalesRep\[\], reportByRepId: Map<string, RepReportStatusOnly>\): SalesAdminRepDrillDownRow\[\] \{/,
+    )
   })
 
   test('filters the already-fetched reps array by currentManagerId, never issuing a new fetch', () => {

@@ -84,23 +84,29 @@ describe('reminders.ts / auto-submit.ts — scheduler auth wiring, verified stru
 // parameters, correctly gated to the scheduler-bot path only, positioned
 // before any action-related work, with a safe 200 no-op response shape.
 describe('Step 6 — Eastern action-window gate wiring', () => {
-  test('reminders.ts gates on Friday 12:00–12:14 PM America/New_York', () => {
+  // Beta feedback (2026-11-16): the weekly deadline moved to Thursday
+  // 11:59 PM, so the reminder window moved from Friday noon to Thursday
+  // noon, and the auto-submit window moved from Friday 3:00 PM to Friday
+  // 12:00 AM (immediately after the Thursday deadline passes).
+  test('reminders.ts gates on Thursday 12:00–12:14 PM America/New_York', () => {
+    assert.match(remindersSrc, /REMINDER_WINDOW_WEEKDAY\s*=\s*'Thu'/)
     assert.match(remindersSrc, /REMINDER_WINDOW_HOUR\s*=\s*12/)
     assert.match(remindersSrc, /REMINDER_WINDOW_MINUTE\s*=\s*0\b/)
     assert.match(remindersSrc, /REMINDER_WINDOW_MINUTES\s*=\s*15/)
     assert.match(
       remindersSrc,
-      /isInEasternActionWindow\(REMINDER_WINDOW_HOUR,\s*REMINDER_WINDOW_MINUTE,\s*REMINDER_WINDOW_MINUTES\)/,
+      /isInEasternActionWindow\(REMINDER_WINDOW_WEEKDAY,\s*REMINDER_WINDOW_HOUR,\s*REMINDER_WINDOW_MINUTE,\s*REMINDER_WINDOW_MINUTES\)/,
     )
   })
 
-  test('auto-submit.ts gates on Friday 3:00–3:14 PM America/New_York', () => {
-    assert.match(autoSubmitSrc, /AUTO_SUBMIT_WINDOW_HOUR\s*=\s*15/)
+  test('auto-submit.ts gates on Friday 12:00–12:14 AM America/New_York', () => {
+    assert.match(autoSubmitSrc, /AUTO_SUBMIT_WINDOW_WEEKDAY\s*=\s*'Fri'/)
+    assert.match(autoSubmitSrc, /AUTO_SUBMIT_WINDOW_HOUR\s*=\s*0\b/)
     assert.match(autoSubmitSrc, /AUTO_SUBMIT_WINDOW_MINUTE\s*=\s*0\b/)
     assert.match(autoSubmitSrc, /AUTO_SUBMIT_WINDOW_MINUTES\s*=\s*15/)
     assert.match(
       autoSubmitSrc,
-      /isInEasternActionWindow\(AUTO_SUBMIT_WINDOW_HOUR,\s*AUTO_SUBMIT_WINDOW_MINUTE,\s*AUTO_SUBMIT_WINDOW_MINUTES\)/,
+      /isInEasternActionWindow\(AUTO_SUBMIT_WINDOW_WEEKDAY,\s*AUTO_SUBMIT_WINDOW_HOUR,\s*AUTO_SUBMIT_WINDOW_MINUTE,\s*AUTO_SUBMIT_WINDOW_MINUTES\)/,
     )
   })
 

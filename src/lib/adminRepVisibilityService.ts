@@ -19,16 +19,13 @@ export interface ManagerRepOverviewRow {
   managerName: string | null
   managerEmail: string
   assignedCount: number
-  // Total ever submitted this week — the sum of pending + approved +
-  // rejected, NOT a bucket mutually exclusive from them (a report keeps
-  // status='submitted' forever once first submitted, even after rejection
-  // — see rep_reports_submission_governance.sql). Reported as its own
-  // figure per the Phase 2 requirement, alongside the pending/approved/
-  // rejected breakdown of that same total.
+  // Beta feedback (2026-11-16): collapsed from the old pending/approved/
+  // rejected breakdown (review_status-based) to a plain submitted/draft/
+  // missing split (status-based only) — review_status no longer gates or
+  // labels anything now that Approve/Reject is replaced by optional,
+  // non-blocking feedback.
   submittedCount: number
-  pendingCount: number
-  approvedCount: number
-  rejectedCount: number
+  draftCount: number
   missingCount: number
 }
 
@@ -52,16 +49,14 @@ export async function fetchManagerRepOverview(weekStartDate: string): Promise<Ma
 
   return managers.map((manager): ManagerRepOverviewRow => {
     const repIds = repIdsByManagerId.get(manager.id) ?? []
-    let pendingCount = 0
-    let approvedCount = 0
-    let rejectedCount = 0
+    let submittedCount = 0
+    let draftCount = 0
     let missingCount = 0
 
     for (const repId of repIds) {
       const bucket = deriveRepReportBucket(reportByRepId.get(repId) ?? null)
-      if (bucket === 'pending') pendingCount++
-      else if (bucket === 'approved') approvedCount++
-      else if (bucket === 'rejected') rejectedCount++
+      if (bucket === 'submitted') submittedCount++
+      else if (bucket === 'draft') draftCount++
       else missingCount++
     }
 
@@ -70,10 +65,8 @@ export async function fetchManagerRepOverview(weekStartDate: string): Promise<Ma
       managerName: manager.fullName,
       managerEmail: manager.email,
       assignedCount: repIds.length,
-      submittedCount: pendingCount + approvedCount + rejectedCount,
-      pendingCount,
-      approvedCount,
-      rejectedCount,
+      submittedCount,
+      draftCount,
       missingCount,
     }
   })

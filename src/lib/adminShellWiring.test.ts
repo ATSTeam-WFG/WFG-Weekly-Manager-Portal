@@ -53,7 +53,7 @@ describe('AdminSidebar.tsx — exactly seven destinations, no more, no fewer', (
     assert.match(body, /key: 'weekly-summary', label: 'Present Week Summary'/)
     assert.match(body, /key: 'leadership-report', label: 'Leadership Report'/)
     assert.match(body, /key: 'video-creation', label: 'Video Creation'/)
-    assert.match(body, /key: 'user-management', label: 'User Management'/)
+    assert.match(body, /key: 'user-management', label: 'Managers'/)
     assert.match(body, /key: 'reports-analytics', label: 'Reports & Analytics'/)
     assert.match(body, /key: 'sales-reps', label: 'Sales Reps'/)
     // Exactly seven — no eighth entry (e.g. a manager-report or my-report item).

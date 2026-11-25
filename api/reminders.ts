@@ -8,9 +8,12 @@ import { claimReminderDelivery, resolveReminderDeliveryFailed, resolveReminderDe
 import { authenticateRequest } from './_lib/adminAuth.js'
 import { resolveDryRun } from './_lib/requestHelpers.js'
 
-// Friday 12:00 PM through 12:14 PM America/New_York — see
+// Beta feedback (2026-11-16): the weekly deadline moved from Friday to
+// Thursday 11:59 PM America/New_York, so the same-day "it's due today"
+// reminder moves from Friday noon to Thursday noon. See
 // src/utils/easternTime.ts for why this is DST-safe without any manual
 // UTC-offset math.
+const REMINDER_WINDOW_WEEKDAY = 'Thu' as const
 const REMINDER_WINDOW_HOUR = 12
 const REMINDER_WINDOW_MINUTE = 0
 const REMINDER_WINDOW_MINUTES = 15
@@ -71,11 +74,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // preview is still "action-related" for this purpose. Applies only to
     // the scheduler-bot path; a human Admin's own POST is never restricted
     // by this window, matching the existing dry-run-default behavior below.
-    if (scheduled && !isInEasternActionWindow(REMINDER_WINDOW_HOUR, REMINDER_WINDOW_MINUTE, REMINDER_WINDOW_MINUTES)) {
+    if (scheduled && !isInEasternActionWindow(REMINDER_WINDOW_WEEKDAY, REMINDER_WINDOW_HOUR, REMINDER_WINDOW_MINUTE, REMINDER_WINDOW_MINUTES)) {
       return res.status(200).json({
         skipped: true,
         reason: 'outside_action_window',
-        message: 'Scheduler invocation received outside the Friday 12:00–12:14 PM America/New_York reminder window; no action taken.',
+        message: 'Scheduler invocation received outside the Thursday 12:00–12:14 PM America/New_York reminder window; no action taken.',
       })
     }
 

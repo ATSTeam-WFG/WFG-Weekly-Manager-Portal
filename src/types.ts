@@ -21,6 +21,12 @@ export interface Profile {
   // Sales-Admin-dual-role case). See manager_reporting_enabled on
   // profiles/approved_employees and public.is_manager_capable().
   managerReportingEnabled: boolean
+  // True only for the handful of leadership accounts (e.g. Gene Rebadow,
+  // Joey Grampa) granted narrowly-scoped, read-only visibility into every
+  // Sales Rep's SUBMITTED report across every Manager — independent of
+  // role, never a promotion to Admin. See global_report_viewer on
+  // profiles and public.is_global_report_viewer().
+  globalReportViewerEnabled: boolean
 }
 
 export interface ReportSections {

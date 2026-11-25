@@ -276,6 +276,15 @@ export default function UserManagement({ onBack, currentUserEmail }: UserManagem
       loadUsers()
       return
     }
+    if (outcome.status === 'partial') {
+      // The access-relevant change already took effect (see
+      // setUserActive's own doc comment) — reload the list so the status
+      // column reflects that, but still surface the retry message rather
+      // than silently treating this as a full, clean success.
+      loadUsers()
+      setRowMessage({ email: user.email, text: outcome.message, isError: true })
+      return
+    }
     setRowMessage({ email: user.email, text: 'Could not update this user. Please try again.', isError: true })
   }
 
@@ -343,7 +352,7 @@ export default function UserManagement({ onBack, currentUserEmail }: UserManagem
 
       <div className="um-header">
         <div className="um-header-titles">
-          <h1>User Management</h1>
+          <h1>Managers</h1>
           <p className="um-header-subtitle">Manage employee access, roles, and weekly reporting permissions.</p>
         </div>
         <button type="button" className="btn btn-primary" onClick={handleOpenAddModal}>

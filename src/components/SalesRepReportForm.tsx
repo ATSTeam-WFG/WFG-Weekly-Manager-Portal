@@ -10,14 +10,19 @@ interface SalesRepReportFormProps {
   initialData: SalesRepReportSections
   // e.g. "Jan 5 – Jan 9, 2026" — from ReportingWeek.label
   weekLabel: string
-  // e.g. "Friday, January 9 at 3:00 PM ET" — from ReportingWeek.deadlineLabel
+  // e.g. "Thursday, January 8 at 11:59 PM ET" — from ReportingWeek.deadlineLabel
   deadlineLabel: string
   isPastDeadline: boolean
-  isRejectedCorrection: boolean
-  rejectionReason?: string | null
+  // Beta feedback (2026-11-16): true once a report has already been
+  // submitted at least once — the primary action becomes "Save Changes"
+  // (content-only, via onSaveChanges) rather than "Submit Report"
+  // (lifecycle transition, via onSubmit). Mirrors ReportForm.tsx's own
+  // isEditingSubmitted/onSaveChanges split for the Manager side exactly.
+  isEditingSubmitted: boolean
   onBack: () => void
   onSaveDraft: (data: SalesRepReportSections) => Promise<void>
   onSubmit: (data: SalesRepReportSections) => void
+  onSaveChanges?: (data: SalesRepReportSections) => Promise<void>
   isSubmitting?: boolean
   submitFailureMessage?: string | null
 }
@@ -82,11 +87,11 @@ export default function SalesRepReportForm({
   weekLabel,
   deadlineLabel,
   isPastDeadline,
-  isRejectedCorrection,
-  rejectionReason,
+  isEditingSubmitted,
   onBack,
   onSaveDraft,
   onSubmit,
+  onSaveChanges,
   isSubmitting = false,
   submitFailureMessage = null,
 }: SalesRepReportFormProps) {
@@ -103,13 +108,17 @@ export default function SalesRepReportForm({
   const autosave = useAutosave<SalesRepReportSections>({
     data,
     isEqual: areSalesRepSectionsEqual,
-    isLockedError: (err) => err instanceof RepReportError && err.code === 'REP_STATUS_REGRESSION_BLOCKED',
+    isLockedError: (err) => err instanceof RepReportError && (err.code === 'REP_STATUS_REGRESSION_BLOCKED' || err.code === 'EDIT_LOCKED'),
     save: async (toSave) => {
       try {
-        await onSaveDraft(toSave)
+        if (isEditingSubmitted) {
+          await onSaveChanges?.(toSave)
+        } else {
+          await onSaveDraft(toSave)
+        }
         setLockMessage(null)
       } catch (err) {
-        if (err instanceof RepReportError && err.code === 'REP_STATUS_REGRESSION_BLOCKED') {
+        if (err instanceof RepReportError && (err.code === 'REP_STATUS_REGRESSION_BLOCKED' || err.code === 'EDIT_LOCKED')) {
           setLockMessage('This report can no longer be edited.')
         }
         throw err
@@ -165,8 +174,6 @@ export default function SalesRepReportForm({
     }
   }
 
-  const submitLabel = isRejectedCorrection ? 'Resubmit' : 'Submit Report'
-
   return (
     <div className="report-form sales-rep-report-form">
       <button className="link-btn back-link" onClick={handleBackClick}>
@@ -174,29 +181,18 @@ export default function SalesRepReportForm({
       </button>
 
       <div className="report-form-heading">
-        {isRejectedCorrection && <span className="submitted-badge rejected-badge">Needs Correction</span>}
+        {isEditingSubmitted && <span className="submitted-badge">Submitted</span>}
         <h1>Weekly Sales Rep Report</h1>
         <p className="report-form-week">
           Week of {weekLabel} &middot; Due {deadlineLabel}
         </p>
       </div>
 
-      {isRejectedCorrection && (
-        <div className="rejection-banner" role="alert">
-          <p className="rejection-banner-title">Your manager requested changes</p>
-          <p className="rejection-banner-reason">
-            {rejectionReason || 'No reason was provided.'}
-          </p>
-          <p className="rejection-banner-helper">
-            Update your report below, then resubmit for review.
-          </p>
-        </div>
-      )}
-
       {isPastDeadline && (
         <p className="deadline-passed-notice">
-          The submission deadline for this week has passed. You can still save a draft, but submitting requires an
-          admin-authorized exception. If one has already been granted, go ahead and submit below.
+          {isEditingSubmitted
+            ? 'The deadline for this reporting week has passed, so this report can no longer be edited.'
+            : 'The submission deadline for this week has passed. You can still save a draft, but submitting requires an admin-authorized exception. If one has already been granted, go ahead and submit below.'}
         </p>
       )}
 
@@ -243,18 +239,26 @@ export default function SalesRepReportForm({
       {submitFailureMessage && <p className="voice-error-message report-lock-message">{submitFailureMessage}</p>}
 
       <div className="report-form-actions">
-        {savedMessage && <span className="saved-message">Draft saved</span>}
+        {savedMessage && <span className="saved-message">{isEditingSubmitted ? 'Changes saved' : 'Draft saved'}</span>}
         {!savedMessage && autosave.status === 'saving' && <span className="autosave-status">Saving&hellip;</span>}
         {!savedMessage && autosave.status === 'saved' && <span className="autosave-status autosave-status-saved">Saved</span>}
         {!savedMessage && autosave.status === 'error' && (
           <span className="autosave-status autosave-status-error">Couldn&apos;t save automatically — your changes are still here.</span>
         )}
-        <button className="btn btn-secondary" onClick={handleSave} disabled={isSubmitting}>
-          Save Draft
-        </button>
-        <button className="btn btn-primary" onClick={handleSubmitClick} disabled={isSubmitting}>
-          {isSubmitting ? 'Submitting…' : submitLabel}
-        </button>
+        {isEditingSubmitted ? (
+          <button className="btn btn-primary" onClick={handleSave} disabled={isSubmitting}>
+            Save Changes
+          </button>
+        ) : (
+          <>
+            <button className="btn btn-secondary" onClick={handleSave} disabled={isSubmitting}>
+              Save Draft
+            </button>
+            <button className="btn btn-primary" onClick={handleSubmitClick} disabled={isSubmitting}>
+              {isSubmitting ? 'Submitting…' : 'Submit Report'}
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

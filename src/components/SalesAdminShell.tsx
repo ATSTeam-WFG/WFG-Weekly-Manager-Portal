@@ -2,9 +2,10 @@ import { useState } from 'react'
 import SalesRepManagement from './SalesRepManagement'
 import SalesAdminReports from './SalesAdminReports'
 import SalesAdminManagerOverview from './SalesAdminManagerOverview'
+import GlobalReportOverview from './GlobalReportOverview'
 import './SalesAdminShell.css'
 
-type SalesAdminDestination = 'user-management' | 'report-status'
+type SalesAdminDestination = 'user-management' | 'report-status' | 'global-reports'
 
 interface SalesAdminShellProps {
   // Additive, optional — undefined for every Sales Admin except a
@@ -17,6 +18,12 @@ interface SalesAdminShellProps {
   // (the two existing destinations) completely untouched and still
   // unavailable to every other Sales Admin.
   onOpenManagerReporting?: () => void
+  // Reporting hierarchy & access phase (2026-11-24) — true only for the
+  // handful of leadership accounts granted profiles.global_report_viewer
+  // (e.g. a Sales-Admin-role Joey Grampa). Adds one extra, self-contained
+  // internal destination; User Management and Report Status are
+  // completely untouched and still unavailable to every other Sales Admin.
+  showGlobalReports?: boolean
 }
 
 // Sales Admin's entire experience — a small, dedicated shell, deliberately
@@ -43,7 +50,7 @@ interface SalesAdminShellProps {
 // .samo-page comment for the one real (CSS, not markup) difference this
 // reorganization required: that component's own page-level max-width/
 // margin/padding was removed since it's no longer ever a standalone page.
-export default function SalesAdminShell({ onOpenManagerReporting }: SalesAdminShellProps) {
+export default function SalesAdminShell({ onOpenManagerReporting, showGlobalReports }: SalesAdminShellProps) {
   const [destination, setDestination] = useState<SalesAdminDestination>('user-management')
 
   return (
@@ -63,6 +70,15 @@ export default function SalesAdminShell({ onOpenManagerReporting }: SalesAdminSh
         >
           Report Status
         </button>
+        {showGlobalReports && (
+          <button
+            type="button"
+            className={`sales-admin-shell-nav-item${destination === 'global-reports' ? ' sales-admin-shell-nav-item-active' : ''}`}
+            onClick={() => setDestination('global-reports')}
+          >
+            All Sales Rep Reports
+          </button>
+        )}
         {onOpenManagerReporting && (
           <button
             type="button"
@@ -76,6 +92,8 @@ export default function SalesAdminShell({ onOpenManagerReporting }: SalesAdminSh
 
       {destination === 'user-management' ? (
         <SalesRepManagement onBack={() => setDestination('report-status')} restricted />
+      ) : destination === 'global-reports' ? (
+        <GlobalReportOverview />
       ) : (
         <>
           <SalesAdminReports />

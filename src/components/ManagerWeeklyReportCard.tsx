@@ -1,7 +1,7 @@
 import StatusBadge from './StatusBadge'
 import { getCurrentReportingWeek, getDaysUntilDeadline } from '../utils/week'
 import { getManagerWriteLockReason, MANAGER_WRITE_LOCK_MESSAGES } from '../lib/managerEditLock'
-import { isPastEasternCutoff } from '../utils/easternTime'
+import { isPastEasternCutoff, WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE } from '../utils/easternTime'
 import type { ReportStatus } from '../types'
 import './ManagerWeeklyReportCard.css'
 
@@ -32,7 +32,7 @@ export default function ManagerWeeklyReportCard({
 }: ManagerWeeklyReportCardProps) {
   const week = getCurrentReportingWeek()
   const daysLeft = getDaysUntilDeadline(week.fridayDate)
-  const isPastDeadline = isPastEasternCutoff(15, 0)
+  const isPastDeadline = isPastEasternCutoff(WEEKLY_DEADLINE_WEEKDAY, WEEKLY_DEADLINE_HOUR, WEEKLY_DEADLINE_MINUTE)
   const isDueToday = !isPastDeadline && daysLeft <= 0
 
   const isNewReport = status === 'not_started'

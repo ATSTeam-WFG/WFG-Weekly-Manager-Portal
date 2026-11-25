@@ -733,7 +733,7 @@ function App() {
   // designated as also completing their own Weekly Manager Report. See
   // src/types.ts and public.is_manager_capable().
   const hasManagerReporting = profile?.managerReportingEnabled === true
-  const displayName = profile?.fullName || userEmail || 'Manager'
+  const displayName = profile?.fullName || userEmail || 'User'
   const roleLabel = isAdmin ? 'Admin' : isSalesAdmin ? 'Sales Admin' : isSalesRep ? 'Sales Rep' : 'Manager'
   const adminWeek = getReportingWeekByOffset(adminWeekOffset)
   const weeklySummaryWeek = getReportingWeekByOffset(weeklySummaryWeekOffset)
@@ -901,7 +901,10 @@ function App() {
       {isSalesRep ? (
         <SalesRepDashboard repId={managerId ?? ''} />
       ) : isSalesAdmin && !managerReportingViewOpen ? (
-        <SalesAdminShell onOpenManagerReporting={hasManagerReporting ? () => setManagerReportingViewOpen(true) : undefined} />
+        <SalesAdminShell
+          onOpenManagerReporting={hasManagerReporting ? () => setManagerReportingViewOpen(true) : undefined}
+          showGlobalReports={profile?.globalReportViewerEnabled === true}
+        />
       ) : isAdmin && !myReportOpen ? (
         selectedManager ? (
           <ManagerReportView
@@ -1002,6 +1005,7 @@ function App() {
               onContinue={() => setView('form')}
               onEditSubmitted={() => setView('edit-submitted')}
               onViewHistoryEntry={handleViewHistoryEntry}
+              showGlobalReports={profile?.globalReportViewerEnabled === true}
             />
           ) : (
             <>
