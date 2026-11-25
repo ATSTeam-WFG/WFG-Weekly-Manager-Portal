@@ -64,11 +64,16 @@ describe('SalesAdminReports.tsx — reuses AdminDashboard.tsx\'s own classes dir
     assert.doesNotMatch(src, /manager-remind-btn|setReminderTarget|getReminderTargets|ReminderPanel|Prepare Reminders/)
   })
 
+  // 2026-11-24: bucketOf now takes the metadata-only RepReportStatusOnly
+  // (status/submittedAt, no content field at all) rather than a full
+  // RepReport — the draft-content restriction's own point is that this
+  // screen's status/bucket computation never again touches a draft's
+  // content, even its own type signature reflects that.
   test('bucketOf derives its three-way split from the report\'s real status fields only — never a hardcoded or random count', () => {
-    const match = src.match(/function bucketOf\(report: RepReport \| null\): StatusBucket \{[\s\S]*?\n\}/)
+    const match = src.match(/function bucketOf\(status: RepReportStatusOnly \| null\): StatusBucket \{[\s\S]*?\n\}/)
     assert.ok(match, 'could not locate bucketOf')
-    assert.match(match[0], /if \(!report\) return 'not_started'/)
-    assert.match(match[0], /if \(report\.status === 'draft'\) return 'draft'/)
+    assert.match(match[0], /if \(!status\) return 'not_started'/)
+    assert.match(match[0], /if \(status\.status === 'draft'\) return 'draft'/)
     assert.match(match[0], /return 'submitted'/)
   })
 
@@ -92,10 +97,15 @@ describe('SalesAdminReports.tsx — reuses AdminDashboard.tsx\'s own classes dir
     assert.doesNotMatch(src, /manager-remind-btn|setReminderTarget|prepare.*reminder/i)
   })
 
-  test('the View Report action reuses .adp-view-link\'s exact text styling (a small CSS-only button reset, not a new visual treatment), right-aligned as the table\'s last column, and is unavailable (a dash) when no report exists yet for that rep', () => {
+  // 2026-11-24: gated on bucket === 'submitted' now, not merely "a report
+  // exists" — a draft's row-level visibility itself is gone under the new
+  // RLS policy, but the button's own condition is intentionally explicit
+  // about WHY, rather than relying on a draft coincidentally fetching
+  // null.
+  test('the View Report action reuses .adp-view-link\'s exact text styling (a small CSS-only button reset, not a new visual treatment), right-aligned as the table\'s last column, and is unavailable (a dash) unless the rep\'s status is submitted', () => {
     assert.match(src, /className="adp-view-link-btn"/)
     assert.match(src, /View Report/)
-    assert.match(src, /\{report \? \(/)
+    assert.match(src, /\{bucket === 'submitted' \? \(/)
     assert.match(src, /<span className="adp-dash">—<\/span>/)
   })
 })
@@ -116,7 +126,13 @@ describe('SalesAdminReportViewModal — read-only report content viewer, with ev
     }
   })
 
-  test('the modal only ever renders when viewingRow.report is present', () => {
-    assert.match(src, /\{viewingRow\?\.report && \(/)
+  // 2026-11-24: content is now fetched lazily (on "View Report" click, via
+  // openReport) rather than eagerly for every row — the modal renders
+  // whenever a viewing request is in flight or resolved (viewingReport
+  // itself, which carries its own loading/error state), not specifically
+  // whenever content already happens to be loaded.
+  test('the modal only ever renders while a report is being viewed (viewingReport state), fetched lazily via openReport rather than eagerly for every row', () => {
+    assert.match(src, /\{viewingReport && \(/)
+    assert.match(src, /function openReport\(rep: SalesRep\)/)
   })
 })

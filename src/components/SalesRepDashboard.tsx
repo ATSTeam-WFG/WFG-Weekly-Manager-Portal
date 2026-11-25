@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import SalesRepReportForm from './SalesRepReportForm'
+import SalesRepTeamReports from './SalesRepTeamReports'
 import {
   fetchRepReport,
   fetchRepReportHistory,
@@ -69,6 +70,13 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
   // the edit form (via the form's own Back link) to the summary card
   // without losing track of the underlying status.
   const [editing, setEditing] = useState(false)
+
+  // Reporting hierarchy & access phase (2026-11-24) — a simple two-tab nav
+  // (no sidebar shell needed, this dashboard has always been a single
+  // scrolling page). Switching tabs never interrupts an in-progress edit:
+  // the "Team Reports" tab is only offered from the main summary view,
+  // the same place "editing" itself can only be entered from.
+  const [view, setView] = useState<'my-report' | 'team-reports'>('my-report')
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitFailureMessage, setSubmitFailureMessage] = useState<string | null>(null)
@@ -307,6 +315,31 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
         </div>
       </div>
 
+      <div className="rep-tabs" role="tablist" aria-label="Sales Rep sections">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'my-report'}
+          className={`rep-tab ${view === 'my-report' ? 'rep-tab-active' : ''}`}
+          onClick={() => setView('my-report')}
+        >
+          My Weekly Report
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'team-reports'}
+          className={`rep-tab ${view === 'team-reports' ? 'rep-tab-active' : ''}`}
+          onClick={() => setView('team-reports')}
+        >
+          Team Reports
+        </button>
+      </div>
+
+      {view === 'team-reports' ? (
+        <SalesRepTeamReports repId={repId} weekStartDate={week.weekStartDate} weekLabel={week.label} />
+      ) : (
+        <>
       <div className="rep-manager-card">
         <span className="rep-manager-card-label">Your Manager</span>
         {managerLoading ? (
@@ -397,6 +430,8 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
           </ul>
         )}
       </div>
+        </>
+      )}
     </div>
   )
 }
@@ -404,7 +439,10 @@ export default function SalesRepDashboard({ repId, onSignOut }: SalesRepDashboar
 // Read-only rendering for a Pending/Approved report — no editing controls,
 // just the content as last saved/submitted. Deliberately simple (plain
 // lists/paragraphs, no BulletListInput) since nothing here is ever edited.
-function ReadOnlyReportSummary({ content }: { content: SalesRepReportSections }) {
+// Exported for reuse by SalesRepTeamReports.tsx (viewing a teammate's
+// submitted report needs the identical read-only rendering, never a
+// second implementation that could drift).
+export function ReadOnlyReportSummary({ content }: { content: SalesRepReportSections }) {
   const sections: { title: string; bullets: string[] }[] = [
     { title: 'Accomplishments', bullets: content.accomplishments },
     { title: 'Sales Metrics', bullets: content.salesMetrics },

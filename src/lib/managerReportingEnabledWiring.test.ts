@@ -33,7 +33,10 @@ describe('managerReportingEnabled — Profile type and fetch wiring', () => {
   })
 
   test('fetchProfile selects and maps manager_reporting_enabled, same pattern as submits_weekly_report', () => {
-    assert.match(profileServiceSrc, /\.select\('id, full_name, role, is_active, submits_weekly_report, manager_reporting_enabled'\)/)
+    assert.match(
+      profileServiceSrc,
+      /\.select\('id, full_name, role, is_active, submits_weekly_report, manager_reporting_enabled, global_report_viewer'\)/,
+    )
     assert.match(profileServiceSrc, /managerReportingEnabled: data\.manager_reporting_enabled,/)
   })
 })
@@ -78,7 +81,7 @@ describe('App.tsx — hasManagerReporting is additive, never inferred from role,
     assert.match(appSrc, /isSalesAdmin && !managerReportingViewOpen \? \(/)
     assert.match(
       appSrc,
-      /<SalesAdminShell onOpenManagerReporting=\{hasManagerReporting \? \(\) => setManagerReportingViewOpen\(true\) : undefined\} \/>/,
+      /<SalesAdminShell\s*\n\s*onOpenManagerReporting=\{hasManagerReporting \? \(\) => setManagerReportingViewOpen\(true\) : undefined\}/,
     )
   })
 

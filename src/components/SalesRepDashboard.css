@@ -414,3 +414,35 @@
     gap: 8px;
   }
 }
+
+/* Reporting hierarchy & access phase (2026-11-24) — "Team Reports" tab.
+   Plain, underline-style tabs (no sidebar needed for a two-destination,
+   single-scrolling-page dashboard like this one). */
+.rep-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--soft-sand);
+  margin: 16px 0 0;
+}
+
+.rep-tab {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted-gray);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 4px;
+  margin-right: 20px;
+  cursor: pointer;
+}
+
+.rep-tab:hover {
+  color: var(--terracotta);
+}
+
+.rep-tab-active {
+  color: var(--terracotta);
+  border-bottom-color: var(--terracotta);
+}

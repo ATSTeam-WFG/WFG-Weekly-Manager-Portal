@@ -1026,6 +1026,15 @@ export type SetManagedUserActiveOutcome =
   | { status: 'not_found' }
   | { status: 'forbidden' }
   | { status: 'error' }
+  // Reporting hierarchy & access phase (2026-11-24) — every write below
+  // that actually blocks access (profiles.is_active, then the GoTrue ban)
+  // already succeeded; only the LAST, least-critical write
+  // (approved_employees — a roster/UI-visibility table, never itself an
+  // RLS gate) failed. Distinguished from 'error' so the caller can tell
+  // "already fully safe, just needs a retry for roster-list accuracy"
+  // apart from "may not have blocked anything yet, investigate/retry
+  // everything."
+  | { status: 'partial'; detail: string }
 
 // Deactivate/reactivate — from api/admin/users/set-active.ts, callable by
 // Admin (unrestricted) or Sales Admin (restricted, via restrictToPortalRole).
@@ -1044,6 +1053,37 @@ export type SetManagedUserActiveOutcome =
 // Admin account through this endpoint. Full Admin always calls this with
 // the restriction omitted, preserving its existing unrestricted behavior
 // exactly.
+// Reporting hierarchy & access phase (2026-11-24) — write ORDER matters
+// here, specifically to fail safe under a partial failure (the auth and
+// database operations below are two separate systems/network calls, never
+// one atomic transaction):
+//   1. profiles.is_active — the REAL access gate. Every sensitive RLS
+//      policy/RPC re-checks this, nothing else. Written FIRST: if this
+//      fails, we abort immediately, before touching anything else, so
+//      approved_employees is never left claiming "deactivated" while the
+//      person can still actually access everything (the dangerous
+//      direction — a false sense of security).
+//   2. The GoTrue ban (banned_until) — blocks future login/refresh. Tried
+//      once, then retried once on failure (the realistic failure mode is
+//      a transient network hiccup to the Admin Auth API, not a
+//      structural one). If it still fails after the retry, step 1 has
+//      ALREADY blocked all data access — this is a narrower, safe-by-
+//      construction gap (a worthless session could still be created/
+//      refreshed, but it can do nothing), surfaced as 'partial' rather
+//      than silently claimed as full success.
+//   3. approved_employees.is_active — last, deliberately: it is a roster/
+//      UI-visibility table only, read by no RLS policy anywhere. If this
+//      one write fails after 1 and 2 already succeeded, the person is
+//      ALREADY fully blocked; only the Admin's own employee list would
+//      show a stale status until retried — reported as 'partial', not
+//      'error', since nothing unsafe resulted.
+// Reactivation runs the exact same order for the same reason: restoring
+// is_active before the ban is lifted leaves someone who still can't log
+// in at all (safe); lifting the ban before is_active is restored leaves
+// someone who CAN log in but is immediately shown "Access Disabled" by
+// the app layer (also safe) — this function never grants real,
+// end-to-end access until every step has been attempted, and reports
+// 'partial' rather than 'ok' the moment any one of them doesn't confirm.
 export async function setManagedUserActive(
   email: string,
   isActive: boolean,
@@ -1067,19 +1107,12 @@ export async function setManagedUserActive(
     return { status: 'forbidden' }
   }
 
-  const { error: rosterUpdateError } = await client
-    .from('approved_employees')
-    .update({ is_active: isActive })
-    .eq('email_normalized', emailNormalized)
-
-  if (rosterUpdateError) {
-    console.error('supabaseServiceClient: setManagedUserActive roster update failed:', rosterUpdateError.message)
-    return { status: 'error' }
-  }
-
   const profileLookup = await findProfileByEmail(emailNormalized)
   if (profileLookup.status === 'error') return { status: 'error' }
+
   if (profileLookup.status === 'found') {
+    // Step 1 — the real gate. Abort entirely on failure: nothing else
+    // below has run yet, so there is no partial state to reconcile.
     const { error: profileUpdateError } = await client
       .from('profiles')
       .update({ is_active: isActive })
@@ -1089,6 +1122,37 @@ export async function setManagedUserActive(
       console.error('supabaseServiceClient: setManagedUserActive profile update failed:', profileUpdateError.message)
       return { status: 'error' }
     }
+
+    // Step 2 — the GoTrue ban, with one retry on transient failure. See
+    // this function's own header comment for why ban_duration (not a
+    // separate session-deletion call) is sufficient on its own to block
+    // both a fresh login and a refresh of an already-issued session.
+    const banDuration = isActive ? 'none' : '876000h' // ~100 years
+    let banError = (await client.auth.admin.updateUserById(profileLookup.profile.id, { ban_duration: banDuration })).error
+    if (banError) {
+      console.error('supabaseServiceClient: setManagedUserActive ban_duration update failed, retrying once:', banError.message)
+      banError = (await client.auth.admin.updateUserById(profileLookup.profile.id, { ban_duration: banDuration })).error
+    }
+    if (banError) {
+      console.error('supabaseServiceClient: setManagedUserActive ban_duration update failed after retry:', banError.message)
+      return {
+        status: 'partial',
+        detail: isActive
+          ? 'Profile reactivated, but the account is still banned from signing in — retry this action.'
+          : 'Profile deactivated (all data access is already blocked), but the sign-in ban could not be applied — retry this action to fully block login.',
+      }
+    }
+  }
+
+  // Step 3 — last, least-critical (see header comment).
+  const { error: rosterUpdateError } = await client
+    .from('approved_employees')
+    .update({ is_active: isActive })
+    .eq('email_normalized', emailNormalized)
+
+  if (rosterUpdateError) {
+    console.error('supabaseServiceClient: setManagedUserActive roster update failed:', rosterUpdateError.message)
+    return { status: 'partial', detail: 'Access was updated, but the employee roster entry could not be refreshed — retry this action.' }
   }
 
   return { status: 'ok' }

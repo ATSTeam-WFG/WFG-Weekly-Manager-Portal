@@ -42,8 +42,18 @@ describe('salesAdminRepVisibilityService.ts — reuses existing, already-authori
     assert.match(serviceSrc, /import \{ fetchActiveManagers, fetchSalesReps, type SalesRep \} from '\.\/salesRepManagementService'/)
   })
 
-  test('imports fetchAllRepReportsForWeek unchanged from repReportsService (Phase 2\'s own bulk fetch, already RLS-permitted for sales_admin via rep_reports_select_sales_admin)', () => {
-    assert.match(serviceSrc, /import \{ fetchAllRepReportsForWeek, type RepReport \} from '\.\/repReportsService'/)
+  // 2026-11-24: swapped for the metadata-only fetchRepReportStatusForWeek
+  // — rep_reports_select_sales_admin was tightened to submitted-only (see
+  // 20261124_sales_admin_completed_reports_only.sql), so the old bulk
+  // content fetch would silently lose draft/missing visibility; the
+  // replacement RPC's own return shape has no content column, so bucket
+  // computation stays accurate without ever touching a draft's content.
+  test('imports fetchRepReportStatusForWeek from repReportsService — the metadata-only status RPC, never the content-bearing bulk fetch', () => {
+    assert.match(serviceSrc, /import \{ fetchRepReportStatusForWeek, type RepReportStatusOnly \} from '\.\/repReportsService'/)
+    // Mentioning fetchAllRepReportsForWeek in an explanatory comment (why
+    // it was swapped out) is fine; actually importing or calling it is not.
+    assert.doesNotMatch(serviceSrc, /import \{[^}]*fetchAllRepReportsForWeek/)
+    assert.doesNotMatch(serviceSrc, /[^/]fetchAllRepReportsForWeek\(/)
   })
 
   test('reuses deriveRepReportBucket from Phase 2\'s repReportBucket.ts, never a second independent bucket calculation', () => {
@@ -116,7 +126,10 @@ describe('salesAdminRepVisibilityService.ts — bucket calculations', () => {
 
 describe('salesAdminRepVisibilityService.ts — drill-down is pure and synchronous, zero new network call', () => {
   test('deriveManagerDrillDown is a plain, non-async function', () => {
-    assert.match(serviceSrc, /export function deriveManagerDrillDown\(managerId: string, reps: SalesRep\[\], reportByRepId: Map<string, RepReport>\): SalesAdminRepDrillDownRow\[\] \{/)
+    assert.match(
+      serviceSrc,
+      /export function deriveManagerDrillDown\(managerId: string, reps: SalesRep\[\], reportByRepId: Map<string, RepReportStatusOnly>\): SalesAdminRepDrillDownRow\[\] \{/,
+    )
   })
 
   test('filters the already-fetched reps array by currentManagerId, never issuing a new fetch', () => {

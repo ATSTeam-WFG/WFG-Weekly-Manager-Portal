@@ -901,7 +901,10 @@ function App() {
       {isSalesRep ? (
         <SalesRepDashboard repId={managerId ?? ''} />
       ) : isSalesAdmin && !managerReportingViewOpen ? (
-        <SalesAdminShell onOpenManagerReporting={hasManagerReporting ? () => setManagerReportingViewOpen(true) : undefined} />
+        <SalesAdminShell
+          onOpenManagerReporting={hasManagerReporting ? () => setManagerReportingViewOpen(true) : undefined}
+          showGlobalReports={profile?.globalReportViewerEnabled === true}
+        />
       ) : isAdmin && !myReportOpen ? (
         selectedManager ? (
           <ManagerReportView
@@ -1002,6 +1005,7 @@ function App() {
               onContinue={() => setView('form')}
               onEditSubmitted={() => setView('edit-submitted')}
               onViewHistoryEntry={handleViewHistoryEntry}
+              showGlobalReports={profile?.globalReportViewerEnabled === true}
             />
           ) : (
             <>

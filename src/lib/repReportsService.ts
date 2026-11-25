@@ -527,6 +527,31 @@ export async function fetchMyCurrentReps(managerId: string): Promise<RepManagerA
   return (data ?? []).map((row) => assignmentFromRow(row as RepManagerAssignmentRow))
 }
 
+// Reporting hierarchy & access phase (2026-11-24) — "Team Reports" for
+// Sales Reps. Every OTHER rep currently assigned to the SAME manager as
+// myRepId, excluding myRepId itself. Relies entirely on the new
+// rep_manager_assignments_select_teammate RLS policy (via
+// shares_current_manager_with()) — a plain, unfiltered-by-role query, the
+// same shape as fetchMyCurrentReps above, just scoped by manager_id
+// instead of filtered by it being the caller's own id. If the RLS policy
+// were ever missing or disabled, this would simply return zero rows
+// (default-deny), never leak someone else's team.
+export async function fetchMyTeammateAssignments(myManagerId: string, myRepId: string): Promise<RepManagerAssignment[]> {
+  const { data, error } = await supabase
+    .from('rep_manager_assignments')
+    .select('id, rep_id, manager_id, assigned_at, assigned_by, unassigned_at, unassigned_by')
+    .eq('manager_id', myManagerId)
+    .is('unassigned_at', null)
+    .neq('rep_id', myRepId)
+    .order('assigned_at', { ascending: true })
+
+  if (error) {
+    console.error('Failed to fetch teammate assignments:', error.message)
+    return []
+  }
+  return (data ?? []).map((row) => assignmentFromRow(row as RepManagerAssignmentRow))
+}
+
 // Read-only, RLS-scoped: the mirror image of fetchMyCurrentReps, for the
 // Sales Rep Dashboard's own "who is my Manager" lookup. A rep has at most
 // one current assignment (unassigned_at is null), never a list — see
@@ -592,4 +617,36 @@ export async function fetchAllRepReportsForWeek(weekStartDate: string): Promise<
     return []
   }
   return (data ?? []).map((row) => fromRow(row as RepReportRow))
+}
+
+export interface RepReportStatusOnly {
+  repId: string
+  status: RepReportStatus
+  submittedAt: string | null
+}
+
+// Reporting hierarchy & access phase (2026-11-24) — the metadata-only
+// counterpart to fetchAllRepReportsForWeek, for callers (Sales Admin,
+// Admin) that need every rep's status/bucket for the week — including a
+// draft's status — WITHOUT ever being able to receive a draft's content.
+// Calls sales_admin_rep_report_status(), whose own RETURNS TABLE shape
+// has no content column at all: it is structurally impossible for this
+// function to leak report content, regardless of what RLS does or
+// doesn't allow on the underlying table. fetchAllRepReportsForWeek itself
+// is now RLS-restricted to submitted-only for a Sales Admin caller (see
+// 20261124_sales_admin_completed_reports_only.sql) — it remains the right
+// choice whenever actual CONTENT is needed (a submitted report), never
+// for computing a status/bucket.
+export async function fetchRepReportStatusForWeek(weekStartDate: string): Promise<RepReportStatusOnly[]> {
+  const { data, error } = await supabase.rpc('sales_admin_rep_report_status', { p_week_start_date: weekStartDate })
+
+  if (error) {
+    console.error('Failed to fetch rep report status for week:', error.message)
+    return []
+  }
+  return (data ?? []).map((row: { rep_id: string; status: RepReportStatus; submitted_at: string | null }) => ({
+    repId: row.rep_id,
+    status: row.status,
+    submittedAt: row.submitted_at,
+  }))
 }

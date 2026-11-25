@@ -243,7 +243,17 @@ export async function updateManagedEmployee(
   return { status: 'error' }
 }
 
-export type SetUserActiveOutcome = { status: 'ok'; isActive: boolean } | { status: 'error' }
+// Reporting hierarchy & access phase (2026-11-24): a 'partial' outcome
+// means the access-relevant change already took effect (set-active.ts
+// returns HTTP 207 for this, which fetch()'s own `response.ok` treats as
+// success like any other 2xx — the body's own `status` field, checked
+// explicitly below, is what actually distinguishes it) but a later,
+// less-critical step failed and should be retried — see
+// setManagedUserActive's own header comment in supabaseServiceClient.ts.
+export type SetUserActiveOutcome =
+  | { status: 'ok'; isActive: boolean }
+  | { status: 'partial'; isActive: boolean; message: string }
+  | { status: 'error' }
 
 export async function setUserActive(email: string, isActive: boolean): Promise<SetUserActiveOutcome> {
   let accessToken: string
@@ -267,5 +277,8 @@ export async function setUserActive(email: string, isActive: boolean): Promise<S
   if (!response.ok) return { status: 'error' }
   const body = await response.json().catch(() => null)
   if (!body || typeof body.isActive !== 'boolean') return { status: 'error' }
+  if (body.status === 'partial') {
+    return { status: 'partial', isActive: body.isActive, message: typeof body.message === 'string' ? body.message : 'Please retry this action.' }
+  }
   return { status: 'ok', isActive: body.isActive }
 }

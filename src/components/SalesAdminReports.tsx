@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchSalesReps, type SalesRep } from '../lib/salesRepManagementService'
-import { fetchRepReport, type RepReport } from '../lib/repReportsService'
+import { fetchRepReport, fetchRepReportStatusForWeek, type RepReport, type RepReportStatusOnly } from '../lib/repReportsService'
 import { getCurrentReportingWeek } from '../utils/week'
 import { getInitials } from '../utils/initials'
 import type { SalesRepReportSections } from '../types'
@@ -20,9 +20,17 @@ import './SalesAdminReports.css'
 // capability for their own direct reports, not a Sales Admin one.
 //
 // Reuses fetchSalesReps() (the same Admin/Sales-Admin-shared
-// list-sales-reps.ts endpoint SalesRepManagement.tsx already uses) and
-// fetchRepReport() (the same RLS-scoped read Manager's My Reps uses) rather
-// than introducing a new endpoint or table shape.
+// list-sales-reps.ts endpoint SalesRepManagement.tsx already uses).
+//
+// Reporting hierarchy & access phase (2026-11-24): status/bucket for every
+// row now comes from fetchRepReportStatusForWeek() (one call, metadata
+// only — see repReportsService.ts's own doc comment) instead of an eager
+// per-rep fetchRepReport() call. Full CONTENT is now fetched lazily, only
+// when "View Report" is actually clicked, and only ever requested for a
+// row this screen's own status metadata already says is submitted — the
+// underlying RLS policy independently enforces the same thing regardless
+// (a draft is no longer selectable at all for a Sales Admin caller), so
+// this is belt-and-suspenders, not the actual security boundary.
 //
 // Visually, this screen reuses AdminDashboard.tsx's own classes directly
 // (.adp-kpi-row/.adp-kpi-card, .adp-filter-row/.adp-filter-btn,
@@ -40,6 +48,12 @@ import './SalesAdminReports.css'
 // the draft, not an admin observing someone else's).
 interface ReportRow {
   rep: SalesRep
+  status: RepReportStatusOnly | null
+}
+
+interface ViewingReport {
+  repName: string
+  loadState: 'loading' | 'error' | 'ready'
   report: RepReport | null
 }
 
@@ -63,9 +77,9 @@ const STATUS_BADGE_LABEL: Record<StatusBucket, string> = {
 // feedback (2026-11-16): review_status no longer gates or labels anything
 // anywhere in this app, so there is no longer a secondary review-outcome
 // line to show under a submitted row's timestamp either.
-function bucketOf(report: RepReport | null): StatusBucket {
-  if (!report) return 'not_started'
-  if (report.status === 'draft') return 'draft'
+function bucketOf(status: RepReportStatusOnly | null): StatusBucket {
+  if (!status) return 'not_started'
+  if (status.status === 'draft') return 'draft'
   return 'submitted'
 }
 
@@ -93,7 +107,7 @@ export default function SalesAdminReports() {
   const [rows, setRows] = useState<ReportRow[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [filter, setFilter] = useState<StatusFilter>('all')
-  const [viewingRow, setViewingRow] = useState<ReportRow | null>(null)
+  const [viewingReport, setViewingReport] = useState<ViewingReport | null>(null)
   const week = getCurrentReportingWeek()
 
   useEffect(() => {
@@ -101,19 +115,17 @@ export default function SalesAdminReports() {
     setRows(null)
     setLoadError(null)
     ;(async () => {
-      const outcome = await fetchSalesReps()
+      const [outcome, statuses] = await Promise.all([fetchSalesReps(), fetchRepReportStatusForWeek(week.weekStartDate)])
       if (!active) return
       if (outcome.status !== 'ok') {
         setLoadError(outcome.message)
         return
       }
-      const nextRows = await Promise.all(
-        outcome.reps.map(async (rep) => {
-          const report = rep.profileId ? await fetchRepReport(rep.profileId, week.weekStartDate) : null
-          return { rep, report }
-        }),
-      )
-      if (!active) return
+      const statusByRepId = new Map(statuses.map((s) => [s.repId, s]))
+      const nextRows = outcome.reps.map((rep) => ({
+        rep,
+        status: rep.profileId ? (statusByRepId.get(rep.profileId) ?? null) : null,
+      }))
       setRows(nextRows)
     })()
     return () => {
@@ -122,16 +134,27 @@ export default function SalesAdminReports() {
   }, [week.weekStartDate])
 
   const total = (rows ?? []).length
-  const submitted = (rows ?? []).filter((r) => bucketOf(r.report) === 'submitted').length
-  const draft = (rows ?? []).filter((r) => bucketOf(r.report) === 'draft').length
-  const notStarted = (rows ?? []).filter((r) => bucketOf(r.report) === 'not_started').length
+  const submitted = (rows ?? []).filter((r) => bucketOf(r.status) === 'submitted').length
+  const draft = (rows ?? []).filter((r) => bucketOf(r.status) === 'draft').length
+  const notStarted = (rows ?? []).filter((r) => bucketOf(r.status) === 'not_started').length
   const completionPct = total > 0 ? Math.round((submitted / total) * 100) : 0
 
   const filterCounts: Record<StatusFilter, number> = { all: total, submitted, draft, not_started: notStarted }
 
   const filteredRows = useMemo(() => {
-    return (rows ?? []).filter((row) => filter === 'all' || bucketOf(row.report) === filter)
+    return (rows ?? []).filter((row) => filter === 'all' || bucketOf(row.status) === filter)
   }, [rows, filter])
+
+  function openReport(rep: SalesRep) {
+    setViewingReport({ repName: rep.fullName, loadState: 'loading', report: null })
+    if (!rep.profileId) {
+      setViewingReport({ repName: rep.fullName, loadState: 'error', report: null })
+      return
+    }
+    fetchRepReport(rep.profileId, week.weekStartDate)
+      .then((report) => setViewingReport({ repName: rep.fullName, loadState: report ? 'ready' : 'error', report }))
+      .catch(() => setViewingReport({ repName: rep.fullName, loadState: 'error', report: null }))
+  }
 
   return (
     <div className="sales-admin-reports">
@@ -227,8 +250,8 @@ export default function SalesAdminReports() {
                 <span role="columnheader">Submitted</span>
                 <span role="columnheader">Report</span>
               </div>
-              {filteredRows.map(({ rep, report }) => {
-                const bucket = bucketOf(report)
+              {filteredRows.map(({ rep, status }) => {
+                const bucket = bucketOf(status)
                 return (
                   <div className="adp-row" role="row" key={rep.id}>
                     <div className="adp-cell adp-cell-manager" role="cell">
@@ -245,15 +268,15 @@ export default function SalesAdminReports() {
                       <span>{rep.currentManagerName ?? 'Unassigned'}</span>
                     </div>
                     <div className="adp-cell adp-cell-submitted" role="cell">
-                      {report?.submittedAt ? (
-                        <span className="adp-submitted-at">{formatSubmittedAt(report.submittedAt)}</span>
+                      {status?.submittedAt ? (
+                        <span className="adp-submitted-at">{formatSubmittedAt(status.submittedAt)}</span>
                       ) : (
                         <span className="adp-dash">—</span>
                       )}
                     </div>
                     <div className="adp-cell" role="cell">
-                      {report ? (
-                        <button type="button" className="adp-view-link-btn" onClick={() => setViewingRow({ rep, report })}>
+                      {bucket === 'submitted' ? (
+                        <button type="button" className="adp-view-link-btn" onClick={() => openReport(rep)}>
                           View Report &rarr;
                         </button>
                       ) : (
@@ -268,8 +291,13 @@ export default function SalesAdminReports() {
         </div>
       )}
 
-      {viewingRow?.report && (
-        <SalesAdminReportViewModal repName={viewingRow.rep.fullName} content={viewingRow.report.content} onClose={() => setViewingRow(null)} />
+      {viewingReport && (
+        <SalesAdminReportViewModal
+          repName={viewingReport.repName}
+          loadState={viewingReport.loadState}
+          content={viewingReport.report?.content ?? null}
+          onClose={() => setViewingReport(null)}
+        />
       )}
     </div>
   )
@@ -282,11 +310,13 @@ export default function SalesAdminReports() {
 // this only ever displays what the rep wrote.
 function SalesAdminReportViewModal({
   repName,
+  loadState,
   content,
   onClose,
 }: {
   repName: string
-  content: SalesRepReportSections
+  loadState: 'loading' | 'error' | 'ready'
+  content: SalesRepReportSections | null
   onClose: () => void
 }) {
   return (
@@ -300,25 +330,33 @@ function SalesAdminReportViewModal({
         </div>
 
         <div className="myreps-panel-body">
-          {SECTION_LIST_FIELDS.map(({ key, label }) => (
-            <div className="myreps-section" key={key}>
-              <h3>{label}</h3>
-              {content[key].length === 0 ? (
-                <p className="myreps-section-empty">No items provided.</p>
-              ) : (
-                <ul>
-                  {content[key].map((item, i) => (
-                    <li key={i}>{item}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
+          {loadState === 'loading' ? (
+            <p className="myreps-section-empty">Loading…</p>
+          ) : loadState === 'error' || !content ? (
+            <p className="myreps-section-empty">Could not load this report.</p>
+          ) : (
+            <>
+              {SECTION_LIST_FIELDS.map(({ key, label }) => (
+                <div className="myreps-section" key={key}>
+                  <h3>{label}</h3>
+                  {content[key].length === 0 ? (
+                    <p className="myreps-section-empty">No items provided.</p>
+                  ) : (
+                    <ul>
+                      {content[key].map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
 
-          <div className="myreps-section">
-            <h3>Manager Support Needed</h3>
-            <p className="myreps-support-text">{content.managerSupportNeeded || 'No items provided.'}</p>
-          </div>
+              <div className="myreps-section">
+                <h3>Manager Support Needed</h3>
+                <p className="myreps-support-text">{content.managerSupportNeeded || 'No items provided.'}</p>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

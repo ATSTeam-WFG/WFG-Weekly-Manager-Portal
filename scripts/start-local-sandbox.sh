@@ -50,7 +50,19 @@ echo "OK — ${ENV_FILE} points at ${SUPABASE_URL}"
 echo "== 2. Checking for a conflicting process on port ${PORT} =="
 EXISTING_PID=$(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true)
 if [ -n "$EXISTING_PID" ]; then
-  echo "Port ${PORT} is currently held by PID ${EXISTING_PID} — stopping it before starting a fresh instance."
+  # Only ever auto-kill what's on OUR port, and only when it actually
+  # looks like a prior instance of this same dev server (its command line
+  # mentions "vite") — never an arbitrary unrelated process that merely
+  # happens to be bound to 5180. If it's something else, stop and let a
+  # human decide; this script must never silently kill an unrelated app.
+  EXISTING_CMD=$(ps -p "$EXISTING_PID" -o command= 2>/dev/null || true)
+  if ! echo "$EXISTING_CMD" | grep -qi "vite"; then
+    echo "ERROR: port ${PORT} is held by PID ${EXISTING_PID}, whose command does not look like a prior Vite instance:" >&2
+    echo "  ${EXISTING_CMD}" >&2
+    echo "Refusing to kill it automatically — free the port yourself (or confirm it's safe to stop) and re-run this script." >&2
+    exit 1
+  fi
+  echo "Port ${PORT} is currently held by PID ${EXISTING_PID} (a prior Vite instance: ${EXISTING_CMD}) — stopping it before starting a fresh instance."
   kill -9 $EXISTING_PID 2>/dev/null || true
   sleep 1
   if lsof -tiTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then

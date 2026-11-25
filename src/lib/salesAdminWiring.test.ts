@@ -101,8 +101,13 @@ describe('SalesAdminReports.tsx — read-only, no review/approve/reject action e
     assert.equal(salesAdminReportsSrc.includes('grantLateSubmissionException'), false)
   })
 
+  // 2026-11-24: now imported alongside fetchRepReportStatusForWeek (the
+  // metadata-only status RPC — see salesAdminRepVisibilityWiring.test.ts)
+  // in the same statement; fetchRepReport itself is unchanged and still
+  // the only path used to fetch actual report CONTENT, still from this
+  // same shared, RLS-scoped module.
   test('fetches reports via the same RLS-scoped fetchRepReport every other screen uses, not a new privileged path', () => {
-    assert.match(salesAdminReportsSrc, /import \{ fetchRepReport(, type RepReport)? \} from '\.\.\/lib\/repReportsService'/)
+    assert.match(salesAdminReportsSrc, /import \{[^}]*\bfetchRepReport\b[^}]*\} from '\.\.\/lib\/repReportsService'/)
   })
 })
 
